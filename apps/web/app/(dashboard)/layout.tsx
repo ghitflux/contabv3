@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { Button, Link, Avatar, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem } from '@/heroui';
 import { NotificationCenter } from '@/components/shared/NotificationCenter';
 import { ThemeSwitcher } from '@/components/shared/ThemeSwitcher';
@@ -13,6 +14,8 @@ import {
   BarChartIcon as ChartIcon,
   ClockIcon,
   MenuIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from '@/lib/icons';
 
 export default function DashboardLayout({
@@ -20,7 +23,9 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const pathname = usePathname();
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
@@ -33,32 +38,69 @@ export default function DashboardLayout({
   ];
 
   return (
-    <div className="flex h-screen bg-background">
+     <div className="flex h-screen bg-background">
+      {isMobileSidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm md:hidden"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
+      )}
       {/* Sidebar */}
       <aside
-        className={`${
-          sidebarOpen ? 'w-64' : 'w-0'
-        } flex flex-col border-r border-divider transition-all duration-300 md:w-64`}
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-divider bg-background transition-all duration-300 md:static md:translate-x-0 ${
+          isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        } ${isCollapsed ? 'md:w-20' : 'md:w-64'}`}
       >
-        <div className="flex h-16 items-center justify-between border-b border-divider px-6">
-          <h2 className="text-xl font-bold">SaaS Contábil</h2>
+        <div
+          className={`flex h-16 items-center justify-between border-b border-divider ${
+            isCollapsed ? 'px-4' : 'px-6'
+          }`}
+        >
+          {(!isCollapsed || isMobileSidebarOpen) ? (
+            <h2 className="text-xl font-bold">SaaS Contábil</h2>
+          ) : (
+            <div className="text-lg font-bold">SC</div>
+          )}
+          <Button
+            isIconOnly
+            size="sm"
+            variant="light"
+            onPress={() => setIsCollapsed((prev) => !prev)}
+            className="hidden md:inline-flex"
+          >
+            {isCollapsed ? <ChevronRightIcon className="h-4 w-4" /> : <ChevronLeftIcon className="h-4 w-4" />}
+          </Button>
         </div>
-        <nav className="flex-1 space-y-1 px-3 py-4">
+        <nav className={`flex-1 space-y-1 py-4 ${isCollapsed ? 'px-2' : 'px-3'}`}>
           {navigation.map((item) => {
             const Icon = item.icon;
+            const isActive = pathname?.startsWith(item.href);
+            const showLabels = !isCollapsed || isMobileSidebarOpen;
+
             return (
               <Link
                 key={item.name}
                 href={item.href}
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-default-600 transition-colors hover:bg-default-100 hover:text-default-900"
+                className={`group flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  isCollapsed && !isMobileSidebarOpen ? 'justify-center gap-0' : 'gap-3'
+                } ${
+                  isActive
+                    ? 'bg-primary/10 text-primary-600 dark:text-primary-300'
+                    : 'text-default-600 hover:bg-default-100 hover:text-default-900'
+                }`}
+                onClick={() => setIsMobileSidebarOpen(false)}
               >
-                <Icon className="h-5 w-5" />
-                {item.name}
+                <Icon
+                  className={`h-5 w-5 transition-colors ${
+                    isActive ? 'text-primary-600 dark:text-primary-300' : 'text-default-400 group-hover:text-default-700'
+                  }`}
+                />
+                {showLabels && <span className="truncate">{item.name}</span>}
               </Link>
             );
           })}
         </nav>
-        <div className="border-t border-divider p-4">
+        <div className={`border-t border-divider ${isCollapsed ? 'px-4' : 'px-6'} py-4`}>
           <p className="text-xs text-default-400">Marco 1 - Em Desenvolvimento</p>
         </div>
       </aside>
@@ -70,7 +112,7 @@ export default function DashboardLayout({
           <Button
             isIconOnly
             variant="light"
-            onPress={() => setSidebarOpen(!sidebarOpen)}
+            onPress={() => setIsMobileSidebarOpen((prev) => !prev)}
             className="md:hidden"
           >
             <MenuIcon className="h-6 w-6" />

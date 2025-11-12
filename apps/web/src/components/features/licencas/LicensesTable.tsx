@@ -14,11 +14,14 @@ import {
 } from '@/heroui';
 import type { License } from '@/types/license';
 import {
+  LicenseStatus,
   LICENSE_STATUS_LABELS,
   LICENSE_TYPE_LABELS,
   formatExpirationStatus,
   getExpirationBadgeColor,
   getLicenseStatusColor,
+  normalizeLicenseStatus,
+  normalizeLicenseType,
 } from '@/types/license';
 
 interface LicensesTableProps {
@@ -86,7 +89,9 @@ export function LicensesTable({
               </div>
             </TableCell>
             <TableCell>
-              <p className="font-medium">{LICENSE_TYPE_LABELS[license.license_type]}</p>
+              <p className="font-medium">
+                {LICENSE_TYPE_LABELS[normalizeLicenseType(license.license_type)]}
+              </p>
             </TableCell>
             <TableCell>
               <p className="font-mono text-sm">{license.registration_number}</p>
@@ -114,8 +119,12 @@ export function LicensesTable({
             </TableCell>
             <TableCell>
               <div className="flex flex-col gap-1">
-                <Chip color={getLicenseStatusColor(license.status) as any} size="sm" variant="flat">
-                  {LICENSE_STATUS_LABELS[license.status]}
+                <Chip
+                  color={getLicenseStatusColor(license.status) as any}
+                  size="sm"
+                  variant="flat"
+                >
+                  {LICENSE_STATUS_LABELS[normalizeLicenseStatus(license.status)]}
                 </Chip>
                 {license.is_expiring_soon && !license.is_expired && (
                   <Chip color={getExpirationBadgeColor(license) as any} size="sm" variant="flat">
@@ -143,7 +152,7 @@ export function LicensesTable({
                     </Button>
                   </Tooltip>
                 )}
-                {onRenew && license.status !== 'cancelada' && (
+                {onRenew && normalizeLicenseStatus(license.status) !== LicenseStatus.CANCELLED && (
                   <Tooltip content="Renovar">
                     <Button
                       isIconOnly
@@ -156,7 +165,7 @@ export function LicensesTable({
                     </Button>
                   </Tooltip>
                 )}
-                {onEdit && license.status !== 'cancelada' && (
+                {onEdit && normalizeLicenseStatus(license.status) !== LicenseStatus.CANCELLED && (
                   <Tooltip content="Editar">
                     <Button
                       isIconOnly

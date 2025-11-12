@@ -1,10 +1,15 @@
 "use client";
 
-import { Select, SelectItem, Button, Input } from "@/heroui";
 import { useState } from "react";
-import type { LicenseType, LicenseStatus } from "@/types/license";
-import { LICENSE_TYPE_LABELS, LicenseType as LicenseTypeEnum } from "@/types/license";
-import { LICENSE_STATUS_LABELS, LicenseStatus as LicenseStatusEnum } from "@/types/license";
+import { Select, SelectItem, Button, Input } from "@/heroui";
+import {
+  LicenseType,
+  LicenseStatus,
+  LICENSE_TYPE_LABELS,
+  LICENSE_STATUS_LABELS,
+  SUMMARY_LICENSE_TYPES,
+  SUMMARY_LICENSE_STATUSES,
+} from "@/types/license";
 
 interface LicenseFiltersProps {
   onFilterChange?: (filters: {
@@ -29,7 +34,9 @@ export function LicenseFilters({
 
   const licenseTypeItems = [
     { key: "all", label: "Todos" },
-    ...Object.values(LicenseTypeEnum).map((type) => ({
+    ...Array.from(
+      new Set([...SUMMARY_LICENSE_TYPES, LicenseType.INSCRICAO_MUNICIPAL, LicenseType.CERTIFICADO_DIGITAL])
+    ).map((type) => ({
       key: type,
       label: LICENSE_TYPE_LABELS[type],
     })),
@@ -37,7 +44,7 @@ export function LicenseFilters({
 
   const statusItems = [
     { key: "all", label: "Todos" },
-    ...Object.values(LicenseStatusEnum).map((stat) => ({
+    ...Array.from(new Set([...SUMMARY_LICENSE_STATUSES, LicenseStatus.SUSPENDED])).map((stat) => ({
       key: stat,
       label: LICENSE_STATUS_LABELS[stat],
     })),

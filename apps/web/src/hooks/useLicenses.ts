@@ -2,7 +2,7 @@
  * Hook for managing licenses state and operations.
  */
 
-import { licensesApi } from "@/lib/api/endpoints/licenses";
+import { licensesApi } from "@/lib/api/licenses";
 import type { License, LicenseCreate, LicenseFilters, LicenseListResponse, LicenseRenewal, LicenseUpdate, LicenseEvent } from "@/types/license";
 import { useCallback, useState } from "react";
 

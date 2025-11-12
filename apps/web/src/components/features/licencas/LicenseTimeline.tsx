@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardBody, Spinner } from "@/heroui";
 import type { LicenseEvent } from "@/types/license";
-import { licensesApi } from "@/lib/api/endpoints/licenses";
+import { licensesApi } from "@/lib/api/licenses";
 import { LICENSE_EVENT_TYPE_LABELS, LicenseEventType } from "@/types/license";
 
 interface LicenseTimelineProps {

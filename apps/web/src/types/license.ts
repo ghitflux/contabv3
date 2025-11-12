@@ -1,27 +1,67 @@
 /**
- * License types and interfaces
+ * License related types, enums and helpers.
  */
 
-// Enums
+// -----------------------------
+// Enums & label dictionaries
+// -----------------------------
+
 export enum LicenseType {
-  ALVARA_FUNCIONAMENTO = "alvara_funcionamento",
+  ALVARA_FUNC = "alvara_funcionamento",
+  LIC_SANITARIA = "licenca_sanitaria",
+  AVCB_BOMBEIROS = "licenca_bombeiros",
+  LIC_AMBIENTAL = "licenca_ambiental",
+  IE_ICMS = "inscricao_estadual",
+  OUTRA = "outros",
   INSCRICAO_MUNICIPAL = "inscricao_municipal",
-  INSCRICAO_ESTADUAL = "inscricao_estadual",
   CERTIFICADO_DIGITAL = "certificado_digital",
-  LICENCA_AMBIENTAL = "licenca_ambiental",
-  LICENCA_SANITARIA = "licenca_sanitaria",
-  LICENCA_BOMBEIROS = "licenca_bombeiros",
-  OUTROS = "outros",
 }
 
+export const LICENSE_TYPE_LABELS: Record<LicenseType, string> = {
+  [LicenseType.ALVARA_FUNC]: "Alvará de Funcionamento",
+  [LicenseType.LIC_SANITARIA]: "Licença Sanitária",
+  [LicenseType.AVCB_BOMBEIROS]: "AVCB/CLCB",
+  [LicenseType.LIC_AMBIENTAL]: "Licença Ambiental",
+  [LicenseType.IE_ICMS]: "Inscrição Estadual",
+  [LicenseType.OUTRA]: "Outras",
+  [LicenseType.INSCRICAO_MUNICIPAL]: "Inscrição Municipal",
+  [LicenseType.CERTIFICADO_DIGITAL]: "Certificado Digital",
+};
+
+export const SUMMARY_LICENSE_TYPES: LicenseType[] = [
+  LicenseType.ALVARA_FUNC,
+  LicenseType.LIC_SANITARIA,
+  LicenseType.AVCB_BOMBEIROS,
+  LicenseType.LIC_AMBIENTAL,
+  LicenseType.IE_ICMS,
+  LicenseType.OUTRA,
+];
+
 export enum LicenseStatus {
-  ATIVA = "ativa",
-  VENCIDA = "vencida",
-  PENDENTE_RENOVACAO = "pendente_renovacao",
-  EM_PROCESSO = "em_processo",
-  CANCELADA = "cancelada",
-  SUSPENSA = "suspensa",
+  ACTIVE = "ativa",
+  EXPIRED = "vencida",
+  PENDING = "pendente_renovacao",
+  RENEWING = "em_processo",
+  CANCELLED = "cancelada",
+  SUSPENDED = "suspensa",
 }
+
+export const LICENSE_STATUS_LABELS: Record<LicenseStatus, string> = {
+  [LicenseStatus.ACTIVE]: "Ativa",
+  [LicenseStatus.EXPIRED]: "Vencida",
+  [LicenseStatus.PENDING]: "Pendente",
+  [LicenseStatus.RENEWING]: "Em Renovação",
+  [LicenseStatus.CANCELLED]: "Cancelada",
+  [LicenseStatus.SUSPENDED]: "Suspensa",
+};
+
+export const SUMMARY_LICENSE_STATUSES: LicenseStatus[] = [
+  LicenseStatus.ACTIVE,
+  LicenseStatus.EXPIRED,
+  LicenseStatus.RENEWING,
+  LicenseStatus.PENDING,
+  LicenseStatus.CANCELLED,
+];
 
 export enum LicenseEventType {
   CREATED = "created",
@@ -35,27 +75,6 @@ export enum LicenseEventType {
   DOCUMENT_UPLOADED = "document_uploaded",
 }
 
-// License Type Labels
-export const LICENSE_TYPE_LABELS: Record<LicenseType, string> = {
-  [LicenseType.ALVARA_FUNCIONAMENTO]: "Alvará de Funcionamento",
-  [LicenseType.INSCRICAO_MUNICIPAL]: "Inscrição Municipal",
-  [LicenseType.INSCRICAO_ESTADUAL]: "Inscrição Estadual",
-  [LicenseType.CERTIFICADO_DIGITAL]: "Certificado Digital",
-  [LicenseType.LICENCA_AMBIENTAL]: "Licença Ambiental",
-  [LicenseType.LICENCA_SANITARIA]: "Licença Sanitária",
-  [LicenseType.LICENCA_BOMBEIROS]: "Licença de Bombeiros",
-  [LicenseType.OUTROS]: "Outros",
-};
-
-export const LICENSE_STATUS_LABELS: Record<LicenseStatus, string> = {
-  [LicenseStatus.ATIVA]: "Ativa",
-  [LicenseStatus.VENCIDA]: "Vencida",
-  [LicenseStatus.PENDENTE_RENOVACAO]: "Pendente Renovação",
-  [LicenseStatus.EM_PROCESSO]: "Em Processo",
-  [LicenseStatus.CANCELADA]: "Cancelada",
-  [LicenseStatus.SUSPENSA]: "Suspensa",
-};
-
 export const LICENSE_EVENT_TYPE_LABELS: Record<LicenseEventType, string> = {
   [LicenseEventType.CREATED]: "Criada",
   [LicenseEventType.ISSUED]: "Emitida",
@@ -68,30 +87,105 @@ export const LICENSE_EVENT_TYPE_LABELS: Record<LicenseEventType, string> = {
   [LicenseEventType.DOCUMENT_UPLOADED]: "Documento Anexado",
 };
 
+// -----------------------------
+// Normalisation helpers
+// -----------------------------
+
+const LICENSE_TYPE_ALIASES: Record<string, LicenseType> = {
+  alvara_func: LicenseType.ALVARA_FUNC,
+  alvara_funcionamento: LicenseType.ALVARA_FUNC,
+  lic_sanitaria: LicenseType.LIC_SANITARIA,
+  licenca_sanitaria: LicenseType.LIC_SANITARIA,
+  avcb_bombeiros: LicenseType.AVCB_BOMBEIROS,
+  avcb_clcb: LicenseType.AVCB_BOMBEIROS,
+  licenca_bombeiros: LicenseType.AVCB_BOMBEIROS,
+  lic_ambiental: LicenseType.LIC_AMBIENTAL,
+  licenca_ambiental: LicenseType.LIC_AMBIENTAL,
+  inscricao_estadual: LicenseType.IE_ICMS,
+  ie_icms: LicenseType.IE_ICMS,
+  outra: LicenseType.OUTRA,
+  outras: LicenseType.OUTRA,
+  outros: LicenseType.OUTRA,
+  inscricao_municipal: LicenseType.INSCRICAO_MUNICIPAL,
+  certificado_digital: LicenseType.CERTIFICADO_DIGITAL,
+};
+
+export function normalizeLicenseType(value: string | LicenseType | null | undefined): LicenseType {
+  if (!value) return LicenseType.OUTRA;
+  if (Object.values(LicenseType).includes(value as LicenseType)) {
+    return value as LicenseType;
+  }
+  const parsed = LICENSE_TYPE_ALIASES[value.toString().toLowerCase()];
+  return parsed ?? LicenseType.OUTRA;
+}
+
+const LICENSE_STATUS_ALIASES: Record<string, LicenseStatus> = {
+  active: LicenseStatus.ACTIVE,
+  ativa: LicenseStatus.ACTIVE,
+  expired: LicenseStatus.EXPIRED,
+  vencida: LicenseStatus.EXPIRED,
+  pending: LicenseStatus.PENDING,
+  pendente: LicenseStatus.PENDING,
+  pendente_renovacao: LicenseStatus.PENDING,
+  renewing: LicenseStatus.RENEWING,
+  em_processo: LicenseStatus.RENEWING,
+  em_renovacao: LicenseStatus.RENEWING,
+  cancelled: LicenseStatus.CANCELLED,
+  cancelada: LicenseStatus.CANCELLED,
+  cancelled_out: LicenseStatus.CANCELLED,
+  suspended: LicenseStatus.SUSPENDED,
+  suspensa: LicenseStatus.SUSPENDED,
+};
+
+export function normalizeLicenseStatus(value: string | LicenseStatus | null | undefined): LicenseStatus {
+  if (!value) return LicenseStatus.CANCELLED;
+  if (Object.values(LicenseStatus).includes(value as LicenseStatus)) {
+    return value as LicenseStatus;
+  }
+  const parsed = LICENSE_STATUS_ALIASES[value.toString().toLowerCase()];
+  return parsed ?? LicenseStatus.CANCELLED;
+}
+
+export function mapLicenseTypeToSummary(value: string | LicenseType | null | undefined): LicenseType {
+  const normalized = normalizeLicenseType(value);
+  if (SUMMARY_LICENSE_TYPES.includes(normalized)) {
+    return normalized;
+  }
+  return LicenseType.OUTRA;
+}
+
+// -----------------------------
 // Base interfaces
+// -----------------------------
+
 export interface LicenseBase {
   client_id: string;
-  license_type: LicenseType;
+  license_type: LicenseType | string;
   registration_number: string;
   issuing_authority: string;
   issue_date: string; // ISO date string
-  expiration_date: string | null; // ISO date string
-  notes: string | null;
+  expiration_date: string | null;
+  notes?: string | null;
+  fee?: number | null;
+  fee_paid?: boolean;
 }
 
 export interface LicenseCreate extends LicenseBase {
+  status?: LicenseStatus;
   document_id?: string | null;
 }
 
 export interface LicenseUpdate {
-  license_type?: LicenseType;
+  license_type?: LicenseType | string;
   registration_number?: string;
   issuing_authority?: string;
   issue_date?: string;
   expiration_date?: string | null;
-  status?: LicenseStatus;
+  status?: LicenseStatus | string;
   notes?: string | null;
   document_id?: string | null;
+  fee?: number | null;
+  fee_paid?: boolean;
 }
 
 export interface LicenseRenewal {
@@ -104,22 +198,21 @@ export interface LicenseRenewal {
 
 export interface License extends LicenseBase {
   id: string;
-  status: LicenseStatus;
-  document_id: string | null;
-  created_at: string;
-  updated_at: string;
-
-  // Computed fields
-  days_until_expiration: number | null;
-  is_expired: boolean;
-  is_expiring_soon: boolean;
-
-  // Related data
+  status: LicenseStatus | string;
+  document_id?: string | null;
+  document_url?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  days_until_expiration?: number | null;
+  is_expired?: boolean;
+  is_expiring_soon?: boolean;
   client_name?: string;
-  document_url?: string;
 }
 
-// License Event
+// -----------------------------
+// Events
+// -----------------------------
+
 export interface LicenseEventBase {
   event_type: LicenseEventType;
   description: string;
@@ -137,10 +230,12 @@ export interface LicenseEvent extends LicenseEventBase {
   user_name?: string;
 }
 
-// Alias for API response
 export type LicenseEventResponse = LicenseEvent;
 
-// List response
+// -----------------------------
+// API response helpers
+// -----------------------------
+
 export interface LicenseListResponse {
   items: License[];
   total: number;
@@ -149,7 +244,6 @@ export interface LicenseListResponse {
   pages: number;
 }
 
-// Statistics
 export interface LicenseStatistics {
   total_licenses: number;
   active_licenses: number;
@@ -160,29 +254,33 @@ export interface LicenseStatistics {
   by_status: Record<string, number>;
 }
 
-// Filters
 export interface LicenseFilters {
   client_id?: string;
-  license_type?: LicenseType;
-  status?: LicenseStatus;
-  search?: string; // Search in registration_number, issuing_authority
-  expiring_soon?: boolean; // Filter licenses expiring within 30 days
-  expired?: boolean; // Filter expired licenses
+  license_type?: LicenseType | string;
+  status?: LicenseStatus | string;
+  search?: string;
+  expiring_soon?: boolean;
+  expired?: boolean;
   page?: number;
   size?: number;
 }
 
+// -----------------------------
 // Helper functions
-export function getLicenseStatusColor(status: LicenseStatus): "success" | "warning" | "danger" | "default" {
-  switch (status) {
-    case LicenseStatus.ATIVA:
+// -----------------------------
+
+export function getLicenseStatusColor(
+  status: LicenseStatus | string | null | undefined
+): "success" | "warning" | "danger" | "default" {
+  switch (normalizeLicenseStatus(status)) {
+    case LicenseStatus.ACTIVE:
       return "success";
-    case LicenseStatus.PENDENTE_RENOVACAO:
-    case LicenseStatus.EM_PROCESSO:
+    case LicenseStatus.RENEWING:
+    case LicenseStatus.PENDING:
       return "warning";
-    case LicenseStatus.VENCIDA:
-    case LicenseStatus.CANCELADA:
-    case LicenseStatus.SUSPENSA:
+    case LicenseStatus.EXPIRED:
+    case LicenseStatus.CANCELLED:
+    case LicenseStatus.SUSPENDED:
       return "danger";
     default:
       return "default";
@@ -203,7 +301,7 @@ export function formatExpirationStatus(license: License): string {
   if (license.is_expired) {
     return `Vencida há ${Math.abs(license.days_until_expiration || 0)} dias`;
   }
-  if (license.is_expiring_soon && license.days_until_expiration !== null) {
+  if (license.is_expiring_soon && license.days_until_expiration !== null && license.days_until_expiration !== undefined) {
     return `Vence em ${license.days_until_expiration} dias`;
   }
   return "Vigente";
