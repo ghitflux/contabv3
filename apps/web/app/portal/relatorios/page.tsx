@@ -14,6 +14,7 @@ import { format } from "date-fns";
 import { getReportTypeLabel } from "@/types/report";
 import { ReportPreviewRenderer } from "@/components/features/relatorios/ReportPreviewRenderer";
 import { EyeIcon, DownloadIcon, FileTextIcon, CalendarIcon } from "@/lib/icons";
+import { DatePickerField } from "@/components/ui/DatePickerField";
 
 export default function PortalRelatoriosPage() {
   const { reportTypes, fetchReportTypes, loading } = useReports();
@@ -112,25 +113,17 @@ export default function PortalRelatoriosPage() {
         <CardBody>
           <div className="flex gap-4 items-end">
             <div className="flex-1">
-              <label className="text-sm text-default-500 mb-2 block">
-                Data Inicial
-              </label>
-              <input
-                type="date"
+              <DatePickerField
+                label="Data Inicial"
                 value={periodStart}
-                onChange={(e) => setPeriodStart(e.target.value)}
-                className="w-full px-3 py-2 border border-divider rounded-lg"
+                onChange={setPeriodStart}
               />
             </div>
             <div className="flex-1">
-              <label className="text-sm text-default-500 mb-2 block">
-                Data Final
-              </label>
-              <input
-                type="date"
+              <DatePickerField
+                label="Data Final"
                 value={periodEnd}
-                onChange={(e) => setPeriodEnd(e.target.value)}
-                className="w-full px-3 py-2 border border-divider rounded-lg"
+                onChange={setPeriodEnd}
               />
             </div>
           </div>

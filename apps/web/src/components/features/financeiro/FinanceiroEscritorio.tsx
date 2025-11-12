@@ -26,6 +26,7 @@ import {
 import { DollarSign, Download, Plus, Repeat, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 import { FinanceiroGraficos } from "./FinanceiroGraficos";
 import { FinanceiroKPIs, type FinanceiroKpi } from "./FinanceiroKPIs";
+import { DatePickerField } from "@/components/ui/DatePickerField";
 
 type TransactionType = "Entrada" | "Saída";
 
@@ -250,23 +251,11 @@ export function FinanceiroEscritorio() {
       <div className="flex flex-col md:flex-row md:items-end gap-4">
         <div className="space-y-2">
           <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Início</label>
-          <Input
-            type="date"
-            value={startDate}
-            onValueChange={setStartDate}
-            className="w-[180px]"
-            aria-label="Data inicial"
-          />
+          <DatePickerField value={startDate} onChange={setStartDate} size="sm" className="w-[180px]" aria-label="Data inicial" />
         </div>
         <div className="space-y-2">
           <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Fim</label>
-          <Input
-            type="date"
-            value={endDate}
-            onValueChange={setEndDate}
-            className="w-[180px]"
-            aria-label="Data final"
-          />
+          <DatePickerField value={endDate} onChange={setEndDate} size="sm" className="w-[180px]" aria-label="Data final" />
         </div>
         <div className="md:ml-auto flex gap-2">
           <Button variant="bordered">Mês atual</Button>
@@ -324,11 +313,10 @@ export function FinanceiroEscritorio() {
         </CardHeader>
         <CardBody className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-            <Input
-              type="date"
+            <DatePickerField
               label="Data"
               value={newTransaction.date}
-              onValueChange={(value) => setNewTransaction((prev) => ({ ...prev, date: value }))}
+              onChange={(value) => setNewTransaction((prev) => ({ ...prev, date: value }))}
             />
             <Select
               label="Tipo"

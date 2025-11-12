@@ -31,6 +31,7 @@ import {
   LICENSE_TYPE_LABELS,
   LICENSE_STATUS_LABELS,
 } from "@/types/license";
+import { DatePickerField } from "@/components/ui/DatePickerField";
 
 export default function LicencasPage() {
   const [selectedClientId, setSelectedClientId] = useState<string>("");
@@ -434,25 +435,21 @@ export default function LicencasPage() {
                 isRequired
               />
               <div className="grid grid-cols-2 gap-4">
-                <Input
-                  type="date"
+                <DatePickerField
                   label="Data de Emissão"
                   value={formData.issue_date}
-                  onChange={(e) =>
-                    setFormData({ ...formData, issue_date: e.target.value })
-                  }
-                  isRequired
+                  onChange={(value) => setFormData({ ...formData, issue_date: value })}
                 />
-                <Input
-                  type="date"
+                <DatePickerField
                   label="Data de Vencimento (opcional)"
-                  value={formData.expiration_date || ""}
-                  onChange={(e) =>
+                  value={formData.expiration_date}
+                  onChange={(value) =>
                     setFormData({
                       ...formData,
-                      expiration_date: e.target.value || null,
+                      expiration_date: value || null,
                     })
                   }
+                  isClearable
                 />
               </div>
               <Textarea
@@ -522,25 +519,21 @@ export default function LicencasPage() {
                 isRequired
               />
               <div className="grid grid-cols-2 gap-4">
-                <Input
-                  type="date"
+                <DatePickerField
                   label="Data de Emissão"
                   value={formData.issue_date}
-                  onChange={(e) =>
-                    setFormData({ ...formData, issue_date: e.target.value })
-                  }
-                  isRequired
+                  onChange={(value) => setFormData({ ...formData, issue_date: value })}
                 />
-                <Input
-                  type="date"
+                <DatePickerField
                   label="Data de Vencimento (opcional)"
-                  value={formData.expiration_date || ""}
-                  onChange={(e) =>
+                  value={formData.expiration_date}
+                  onChange={(value) =>
                     setFormData({
                       ...formData,
-                      expiration_date: e.target.value || null,
+                      expiration_date: value || null,
                     })
                   }
+                  isClearable
                 />
               </div>
               <Textarea
@@ -575,25 +568,23 @@ export default function LicencasPage() {
           <ModalHeader>Renovar Licença</ModalHeader>
           <ModalBody>
             <div className="space-y-4">
-              <Input
-                type="date"
+              <DatePickerField
                 label="Nova Data de Emissão"
                 value={renewalData.new_issue_date}
-                onChange={(e) =>
-                  setRenewalData({ ...renewalData, new_issue_date: e.target.value })
+                onChange={(value) =>
+                  setRenewalData({ ...renewalData, new_issue_date: value })
                 }
-                isRequired
               />
-              <Input
-                type="date"
+              <DatePickerField
                 label="Nova Data de Vencimento (opcional)"
-                value={renewalData.new_expiration_date || ""}
-                onChange={(e) =>
+                value={renewalData.new_expiration_date}
+                onChange={(value) =>
                   setRenewalData({
                     ...renewalData,
-                    new_expiration_date: e.target.value || null,
+                    new_expiration_date: value || null,
                   })
                 }
+                isClearable
               />
               <Input
                 label="Novo Número de Registro (opcional)"

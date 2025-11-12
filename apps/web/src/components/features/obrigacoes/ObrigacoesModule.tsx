@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Button, Card, CardBody, Input, Progress } from "@/heroui";
 import { CheckCircleIcon, DownloadIcon, RefreshIcon, SearchIcon } from "@/lib/icons";
+import { MonthYearPicker } from "@/components/ui/MonthYearPicker";
 
 type ObligationKey =
   | "DCTFWeb"
@@ -222,13 +223,11 @@ export function ObrigacoesModule() {
         <CardBody className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center gap-4">
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-default-600">Competência</label>
-              <Input
-                type="month"
-                size="sm"
+              <MonthYearPicker
+                label="Competência"
                 value={competency}
-                onValueChange={setCompetency}
-                className="w-full md:w-48"
+                onChange={setCompetency}
+                size="sm"
               />
             </div>
             <div className="flex-1">

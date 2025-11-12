@@ -36,7 +36,12 @@ class Notification(Base):
 
     # Notification details
     type = Column(
-        Enum(NotificationType),
+        Enum(
+            NotificationType,
+            name="notificationtype",
+            values_callable=lambda enum: [member.value for member in enum],
+            validate_strings=True,
+        ),
         nullable=False,
         index=True,
         comment="Tipo de notificação",

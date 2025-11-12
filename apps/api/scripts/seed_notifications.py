@@ -1,7 +1,7 @@
 "\"\"\"Seed script to create sample notifications for demo/testing.\"\"\""
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import sys
 from pathlib import Path
 
@@ -106,7 +106,7 @@ async def seed_notifications() -> None:
                 skipped_count += 1
                 continue
 
-            created_at = datetime.utcnow()
+            created_at = datetime.now(timezone.utc)
             if "hours_ago" in entry:
                 created_at -= timedelta(hours=entry["hours_ago"])
             if "days_ago" in entry:
@@ -114,7 +114,7 @@ async def seed_notifications() -> None:
 
             notification = Notification(
                 user_id=user.id,
-                type=entry["type"],
+                type=entry["type"].value if isinstance(entry["type"], NotificationType) else entry["type"],
                 title=entry["title"],
                 message=entry["message"],
                 link=entry.get("link"),

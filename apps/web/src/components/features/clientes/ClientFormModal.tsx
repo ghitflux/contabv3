@@ -32,6 +32,7 @@ import {
   getServicoContratadoLabel,
   getLicencaNecessariaLabel,
 } from "@/types/client";
+import { DatePickerField } from "@/components/ui/DatePickerField";
 
 // Zod schema for validation
 const clientFormSchema = z.object({
@@ -442,11 +443,11 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
                       name="data_abertura"
                       control={control}
                       render={({ field }) => (
-                        <Input
-                          {...field}
-                          value={field.value || ""}
-                          type="date"
+                        <DatePickerField
                           label="Data de Abertura"
+                          value={field.value}
+                          onChange={(value) => field.onChange(value || null)}
+                          isClearable
                         />
                       )}
                     />
@@ -454,12 +455,11 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
                       name="inicio_escritorio"
                       control={control}
                       render={({ field }) => (
-                        <Input
-                          {...field}
-                          value={field.value || ""}
-                          type="date"
+                        <DatePickerField
                           label="Início no Escritório"
-                          isRequired
+                          value={field.value}
+                          onChange={(value) => field.onChange(value || null)}
+                          isClearable
                         />
                       )}
                     />

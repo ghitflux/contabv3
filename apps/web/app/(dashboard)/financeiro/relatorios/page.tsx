@@ -16,6 +16,7 @@ import type {
   RevenueByPeriodReport,
 } from "@/types/finance";
 import { formatCurrency } from "@/types/finance";
+import { MonthYearPicker } from "@/components/ui/MonthYearPicker";
 
 export default function RelatoriosPage() {
   const [loading, setLoading] = useState(false);
@@ -366,25 +367,17 @@ export default function RelatoriosPage() {
               <CardBody>
                 <div className="flex gap-4 items-end">
                   <div className="flex-1">
-                    <label className="text-sm text-default-500 mb-2 block">
-                      Mês Inicial
-                    </label>
-                    <input
-                      type="month"
+                    <MonthYearPicker
+                      label="Mês Inicial"
                       value={startMonth}
-                      onChange={(e) => setStartMonth(e.target.value)}
-                      className="w-full px-3 py-2 border border-divider rounded-lg"
+                      onChange={setStartMonth}
                     />
                   </div>
                   <div className="flex-1">
-                    <label className="text-sm text-default-500 mb-2 block">
-                      Mês Final
-                    </label>
-                    <input
-                      type="month"
+                    <MonthYearPicker
+                      label="Mês Final"
                       value={endMonth}
-                      onChange={(e) => setEndMonth(e.target.value)}
-                      className="w-full px-3 py-2 border border-divider rounded-lg"
+                      onChange={setEndMonth}
                     />
                   </div>
                   <Button color="primary" onPress={loadRevenueReport}>
