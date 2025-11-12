@@ -3,16 +3,81 @@
 import {
   Badge,
   Button,
-  Dropdown,
-  DropdownTrigger,
-  DropdownMenu,
-  DropdownItem,
-  DropdownSection,
-  Chip,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  ScrollShadow,
 } from "@/heroui";
 import { useNotifications, Notification } from "@/hooks/websocket/useNotifications";
 import { BellIcon } from "@/lib/icons";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+
+type NotificationVisual = {
+  border: string;
+  badge: string;
+  dot: string;
+  text: string;
+};
+
+const notificationVisuals: Record<string, NotificationVisual> = {
+  warning: {
+    border: "border-amber-200 bg-amber-50",
+    badge: "bg-amber-100 text-amber-700",
+    dot: "bg-amber-500",
+    text: "text-amber-700",
+  },
+  success: {
+    border: "border-emerald-200 bg-emerald-50",
+    badge: "bg-emerald-100 text-emerald-700",
+    dot: "bg-emerald-500",
+    text: "text-emerald-700",
+  },
+  info: {
+    border: "border-sky-200 bg-sky-50",
+    badge: "bg-sky-100 text-sky-700",
+    dot: "bg-sky-500",
+    text: "text-sky-700",
+  },
+  danger: {
+    border: "border-rose-200 bg-rose-50",
+    badge: "bg-rose-100 text-rose-700",
+    dot: "bg-rose-500",
+    text: "text-rose-700",
+  },
+  default: {
+    border: "border-default-200 bg-default-50",
+    badge: "bg-default-200 text-default-600",
+    dot: "bg-default-400",
+    text: "text-default-700",
+  },
+};
+
+const formatRelativeTime = (dateString: string) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diffMs < minute) return "há instantes";
+  if (diffMs < hour) {
+    const minutes = Math.floor(diffMs / minute);
+    return minutes === 1 ? "há 1 minuto" : `há cerca de ${minutes} minutos`;
+  }
+  if (diffMs < day) {
+    const hours = Math.floor(diffMs / hour);
+    return hours === 1 ? "há 1 hora" : `há cerca de ${hours} horas`;
+  }
+  const days = Math.floor(diffMs / day);
+  if (days === 1) return "há 1 dia";
+  if (days <= 7) return `há cerca de ${days} dias`;
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "long",
+  }).format(date);
+};
 
 export function NotificationCenter() {
   const {
@@ -23,57 +88,22 @@ export function NotificationCenter() {
     clearNotification,
     clearAll,
   } = useNotifications();
-
   const [isOpen, setIsOpen] = useState(false);
 
-  const getNotificationColor = (type: string) => {
-    switch (type) {
-      case "danger":
-        return "danger";
-      case "warning":
-        return "warning";
-      case "success":
-        return "success";
-      case "obligation":
-        return "primary";
-      default:
-        return "default";
-    }
+  const visualByType = (type: string): NotificationVisual => {
+    return notificationVisuals[type] || notificationVisuals.default;
   };
 
-  const getNotificationIcon = (type: string) => {
-    switch (type) {
-      case "danger":
-        return "🚨";
-      case "warning":
-        return "⚠️";
-      case "success":
-        return "✅";
-      case "obligation":
-        return "📋";
-      default:
-        return "🔔";
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return "Agora";
-    if (diffMins < 60) return `${diffMins}m atrás`;
-    if (diffHours < 24) return `${diffHours}h atrás`;
-    if (diffDays < 7) return `${diffDays}d atrás`;
-
-    return new Intl.DateTimeFormat("pt-BR", {
-      day: "2-digit",
-      month: "short",
-    }).format(date);
-  };
+  const sortedNotifications = useMemo(
+    () =>
+      [...notifications].sort((a, b) => {
+        if (a.read === b.read) {
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        }
+        return a.read ? 1 : -1;
+      }),
+    [notifications],
+  );
 
   const handleNotificationClick = (notification: Notification) => {
     if (!notification.read) {
@@ -81,21 +111,21 @@ export function NotificationCenter() {
     }
     setIsOpen(false);
 
-    // Navigate to relevant page based on notification data
     if (notification.data?.obligation_id) {
       window.location.href = `/obrigacoes?id=${notification.data.obligation_id}`;
     }
   };
 
   return (
-    <Dropdown isOpen={isOpen} onOpenChange={setIsOpen} placement="bottom-end">
-      <DropdownTrigger>
-        <Button
-          isIconOnly
-          variant="light"
-          className="relative"
-          aria-label="Notificações"
-        >
+    <Popover
+      isOpen={isOpen}
+      onOpenChange={setIsOpen}
+      placement="bottom-end"
+      offset={12}
+      backdrop="blur"
+    >
+      <PopoverTrigger>
+        <Button isIconOnly variant="light" className="relative" aria-label="Notificações">
           {unreadCount > 0 ? (
             <Badge content={unreadCount} color="danger" size="sm">
               <BellIcon className="h-5 w-5" />
@@ -104,132 +134,97 @@ export function NotificationCenter() {
             <BellIcon className="h-5 w-5" />
           )}
         </Button>
-      </DropdownTrigger>
-
-      <DropdownMenu
-        aria-label="Notificações"
-        className="w-80 max-h-96 overflow-y-auto"
-        classNames={{
-          base: "p-0",
-          list: "p-0",
-        }}
-      >
-        {/* Header */}
-        <DropdownSection showDivider>
-          <DropdownItem
-            key="header"
-            isReadOnly
-            className="cursor-default hover:bg-transparent"
-            textValue="Header"
-          >
-            <div className="flex justify-between items-center px-2 py-2">
-              <h3 className="text-lg font-semibold">Notificações</h3>
-              {notifications.length > 0 && (
-                <div className="flex gap-2">
-                  {unreadCount > 0 && (
-                    <Button
-                      size="sm"
-                      variant="light"
-                      onPress={markAllAsRead}
-                    >
-                      Marcar todas como lidas
-                    </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="light"
-                    color="danger"
-                    onPress={clearAll}
+      </PopoverTrigger>
+      <PopoverContent className="p-0 w-[22rem]">
+        <div className="p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-foreground">Notificações</h3>
+              <p className="text-xs text-default-500">Acompanhe eventos importantes em tempo real</p>
+            </div>
+            {notifications.length > 0 && (
+              <div className="flex flex-col items-end gap-1">
+                {unreadCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={markAllAsRead}
+                    className="text-xs font-medium text-primary hover:underline"
                   >
-                    Limpar
-                  </Button>
-                </div>
-              )}
+                    Marcar todas como lidas
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={clearAll}
+                  className="text-xs text-default-400 hover:text-danger font-medium"
+                >
+                  Limpar
+                </button>
+              </div>
+            )}
+          </div>
+
+          {notifications.length === 0 ? (
+            <div className="py-12 text-center text-default-400 text-sm">
+              Nenhuma notificação no momento.
             </div>
-          </DropdownItem>
-        </DropdownSection>
-
-        {/* Notifications list */}
-        {notifications.length === 0 ? (
-          <DropdownItem
-            key="empty"
-            isReadOnly
-            className="cursor-default hover:bg-transparent"
-            textValue="Nenhuma notificação"
-          >
-            <div className="text-center py-8 text-default-400">
-              <p className="text-4xl mb-2">📭</p>
-              <p>Nenhuma notificação</p>
-            </div>
-          </DropdownItem>
-        ) : (
-          <>
-            {notifications.map((notification) => (
-              <DropdownItem
-                key={notification.id}
-                textValue={notification.title}
-                className={`cursor-pointer ${
-                  !notification.read ? "bg-primary-50/50" : ""
-                }`}
-                onPress={() => handleNotificationClick(notification)}
-              >
-                <div className="flex gap-3 py-2">
-                  {/* Icon */}
-                  <div className="flex-shrink-0 text-2xl">
-                    {getNotificationIcon(notification.type)}
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="font-semibold text-sm truncate">
-                        {notification.title}
-                      </p>
-                      {!notification.read && (
-                        <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
-                      )}
-                    </div>
-                    <p className="text-xs text-default-500 line-clamp-2">
-                      {notification.message}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Chip
-                        size="sm"
-                        color={getNotificationColor(notification.type) as any}
-                        variant="flat"
-                        classNames={{
-                          base: "h-5",
-                          content: "text-xs",
-                        }}
-                      >
-                        {notification.type}
-                      </Chip>
-                      <span className="text-xs text-default-400">
-                        {formatDate(notification.created_at)}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex-shrink-0">
-                    <Button
-                      isIconOnly
-                      size="sm"
-                      variant="light"
-                      onPress={() => {
-                        clearNotification(notification.id);
-                      }}
-                      aria-label="Remover notificação"
+          ) : (
+            <ScrollShadow className="max-h-[22rem] pr-1 space-y-3">
+              {sortedNotifications.map((notification) => {
+                const visual = visualByType(notification.type);
+                return (
+                  <div
+                    key={notification.id}
+                    className={`rounded-xl border px-4 py-3 transition-colors ${visual.border} ${
+                      !notification.read ? "shadow-sm" : ""
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleNotificationClick(notification)}
+                      className="w-full text-left"
                     >
-                      ✕
-                    </Button>
+                      <div className="flex items-start gap-3">
+                        <span
+                          aria-hidden
+                          className={`mt-1 h-2.5 w-2.5 rounded-full ${visual.dot}`}
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-semibold text-foreground">
+                              {notification.title}
+                            </p>
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${visual.badge}`}
+                            >
+                              {notification.type}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-default-600">
+                            {notification.message}
+                          </p>
+                          <p className="mt-2 text-[11px] text-default-400">
+                            {formatRelativeTime(notification.created_at)}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                    <div className="mt-3 flex items-center justify-end">
+                      <button
+                        type="button"
+                        onClick={() => clearNotification(notification.id)}
+                        className="text-xs font-medium text-default-400 hover:text-danger transition-colors"
+                      >
+                        Remover
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </DropdownItem>
-            ))}
-          </>
-        )}
-      </DropdownMenu>
-    </Dropdown>
+                );
+              })}
+            </ScrollShadow>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

@@ -35,6 +35,12 @@ sys.modules["seed_licenses"] = seed_licenses_mod
 spec.loader.exec_module(seed_licenses_mod)
 seed_licenses = seed_licenses_mod.seed_licenses
 
+spec = importlib.util.spec_from_file_location("seed_notifications", scripts_dir / "seed_notifications.py")
+seed_notifications_mod = importlib.util.module_from_spec(spec)
+sys.modules["seed_notifications"] = seed_notifications_mod
+spec.loader.exec_module(seed_notifications_mod)
+seed_notifications = seed_notifications_mod.seed_notifications
+
 
 async def seed_all():
     """Run all seeds in order."""
@@ -43,20 +49,24 @@ async def seed_all():
     print("=" * 60)
 
     # 1. Seed obligation types first (required for obligations)
-    print("\n[1/4] Seeding obligation types...")
+    print("\n[1/5] Seeding obligation types...")
     await seed_obligation_types()
 
     # 2. Seed clients
-    print("\n[2/4] Seeding clients...")
+    print("\n[2/5] Seeding clients...")
     await seed_clients()
 
     # 3. Seed obligations (requires clients and obligation types)
-    print("\n[3/4] Seeding obligations...")
+    print("\n[3/5] Seeding obligations...")
     await seed_obligations()
 
     # 4. Seed licenses (requires clients)
-    print("\n[4/4] Seeding licenses...")
+    print("\n[4/5] Seeding licenses...")
     await seed_licenses()
+
+    # 5. Seed notifications (requires users and optionally clients/obligations)
+    print("\n[5/5] Seeding notifications...")
+    await seed_notifications()
 
     print("\n" + "=" * 60)
     print("All seeds completed successfully!")
