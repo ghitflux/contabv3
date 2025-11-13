@@ -33,6 +33,8 @@ export {
   ArrowRight as ArrowRightIcon,
   Menu as MenuIcon,
   Home as HomeIcon,
+  PanelRightClose as PanelRightCloseIcon,
+  PanelRightOpen as PanelRightOpenIcon,
 
   // Status
   AlertCircle as AlertCircleIcon,

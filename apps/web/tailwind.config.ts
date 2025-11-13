@@ -20,6 +20,10 @@ const config: Config = {
       themes: {
         dark: {
           colors: {
+            background: '#262624',
+            default: {
+              DEFAULT: '#262624',
+            },
             primary: {
               50: '#fef9e7',
               100: '#fef3cf',

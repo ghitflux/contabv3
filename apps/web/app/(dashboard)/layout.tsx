@@ -13,14 +13,14 @@ import {
 } from '@/heroui';
 import {
   BarChartIcon as ChartIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   ClockIcon,
   DollarSignIcon as CurrencyIcon,
   FileTextIcon as DocumentIcon,
   HomeIcon,
   MenuIcon,
   LicenseIcon as ShieldIcon,
+  PanelRightCloseIcon,
+  PanelRightOpenIcon,
   UsersIcon,
 } from '@/lib/icons';
 import { usePathname } from 'next/navigation';
@@ -56,15 +56,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         } ${isCollapsed ? 'md:w-20' : 'md:w-64'}`}
       >
         <div
-          className={`flex h-16 items-center justify-between border-b border-divider ${
-            isCollapsed ? 'px-4' : 'px-6'
+          className={`flex h-16 items-center border-b border-divider ${
+            isCollapsed && !isMobileSidebarOpen
+              ? 'justify-center px-0'
+              : 'justify-between px-6'
           }`}
         >
           {!isCollapsed || isMobileSidebarOpen ? (
-            <h2 className="text-xl font-bold">SaaS Contábil</h2>
-          ) : (
-            <div className="text-lg font-bold">SC</div>
-          )}
+            <h2 className="text-xl font-bold">CIC Gestão</h2>
+          ) : null}
           <Button
             isIconOnly
             size="sm"
@@ -73,9 +73,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             className="hidden md:inline-flex"
           >
             {isCollapsed ? (
-              <ChevronRightIcon className="h-4 w-4" />
+              <PanelRightOpenIcon className="h-4 w-4" />
             ) : (
-              <ChevronLeftIcon className="h-4 w-4" />
+              <PanelRightCloseIcon className="h-4 w-4" />
             )}
           </Button>
         </div>
@@ -94,7 +94,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 } ${
                   isActive
                     ? 'bg-primary/15 dark:bg-primary/20 text-primary-600 dark:text-primary-300 border-l-2 border-primary dark:border-primary-300'
-                    : 'text-default-600 dark:text-slate-300 hover:bg-default-100 dark:hover:bg-slate-800/50 hover:text-default-900 dark:hover:text-white'
+                    : 'text-default-600 dark:text-slate-300 hover:bg-default-100 dark:hover:bg-white/5 hover:text-default-900 dark:hover:text-white'
                 }`}
                 onClick={() => setIsMobileSidebarOpen(false)}
               >

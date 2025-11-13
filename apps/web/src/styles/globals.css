@@ -9,7 +9,7 @@
 }
 
 .dark {
-  --background: 222.2 84% 10%;
+  --background: 0 3% 14.5%;
   --foreground: 210 40% 98%;
 }
 
@@ -88,4 +88,25 @@ a {
 [data-slot='calendar-cell'][data-hover='true'] {
   background-color: #E9B63B !important;
   color: #000000 !important;
+}
+
+/* Tab active text color - dark text on primary background */
+[data-slot='tab'][data-selected='true'],
+[data-slot='tab'][data-selected='true'] *,
+[data-slot='tab'][data-selected='true'] span,
+[data-slot='tab'][data-selected='true'] div,
+button[data-slot='tab'][data-selected='true'],
+button[data-slot='tab'][data-selected='true'] * {
+  color: #000000 !important;
+}
+
+/* Tab active indicator/underline */
+[data-slot='tabList'] [data-selected='true']::after,
+[data-slot='tabList'] [data-selected='true']::before {
+  background-color: #E9B63B !important;
+}
+
+/* Sidebar dark mode background */
+.dark aside {
+  background-color: #1F1E1D !important;
 }
