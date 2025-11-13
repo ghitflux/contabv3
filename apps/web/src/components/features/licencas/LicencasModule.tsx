@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
+import { pageTransition, fadeIn } from "@/lib/animations";
 import {
   Button,
   Card,
@@ -468,9 +470,15 @@ export function LicencasModule() {
   };
 
   return (
-    <div className="space-y-6">
+    <motion.div
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      variants={pageTransition}
+      className="space-y-6"
+    >
       <div>
-        <h1 className="text-3xl font-bold">Licenças e Certificações</h1>
+        <h1 className="text-3xl font-bold text-foreground">Licenças e Certificações</h1>
         <p className="text-default-500 mt-1">Gerencie licenças, alvarás e certificações dos clientes</p>
       </div>
 
@@ -516,10 +524,26 @@ export function LicencasModule() {
 
           <Tabs selectedKey={activeTab} onSelectionChange={(key) => setActiveTab(key as TabKey)} color="primary">
             <Tab key="clients" title={`Licenças de Clientes (${filteredClientLicenses.length})`}>
-              <LicenseCardGrid licenses={filteredClientLicenses} />
+              <motion.div
+                key="clients"
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                variants={fadeIn}
+              >
+                <LicenseCardGrid licenses={filteredClientLicenses} />
+              </motion.div>
             </Tab>
             <Tab key="office" title={`Licenças do Escritório (${filteredOfficeLicenses.length})`}>
-              <LicenseCardGrid licenses={filteredOfficeLicenses} />
+              <motion.div
+                key="office"
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                variants={fadeIn}
+              >
+                <LicenseCardGrid licenses={filteredOfficeLicenses} />
+              </motion.div>
             </Tab>
           </Tabs>
         </CardBody>
@@ -814,7 +838,7 @@ export function LicencasModule() {
           </ModalFooter>
         </ModalContent>
       </Modal>
-    </div>
+    </motion.div>
   );
 }
 

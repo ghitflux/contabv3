@@ -1,6 +1,8 @@
 'use client';
 
+import { motion } from "framer-motion";
 import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
+import { pageTransition } from "@/lib/animations";
 import { Button, Card, CardBody, Input, Progress } from '@/heroui';
 import { CheckCircleIcon, DownloadIcon, RefreshIcon, SearchIcon } from '@/lib/icons';
 import { useMemo, useState } from 'react';
@@ -211,7 +213,13 @@ export function ObrigacoesModule() {
   };
 
   return (
-    <div className="space-y-6">
+    <motion.div
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      variants={pageTransition}
+      className="space-y-6"
+    >
       <div>
         <h1 className="text-3xl font-bold text-foreground">Baixa de Obrigações</h1>
         <p className="text-default-500 mt-1">
@@ -317,6 +325,6 @@ export function ObrigacoesModule() {
           )}
         </CardBody>
       </Card>
-    </div>
+    </motion.div>
   );
 }

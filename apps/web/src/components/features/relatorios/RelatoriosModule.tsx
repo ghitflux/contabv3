@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { Button, Card, CardBody, CardHeader, Tabs, Tab } from "@/heroui";
+import { pageTransition, fadeIn } from "@/lib/animations";
 import {
   PlusIcon,
   FileTextIcon,
@@ -107,7 +109,13 @@ export function RelatoriosModule() {
   };
 
   return (
-    <div className="space-y-6">
+    <motion.div
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      variants={pageTransition}
+      className="space-y-6"
+    >
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Relatórios</h1>
@@ -126,7 +134,14 @@ export function RelatoriosModule() {
       </div>
 
       {showBuilder ? (
-        <ReportBuilder onClose={() => setShowBuilder(false)} />
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          variants={fadeIn}
+        >
+          <ReportBuilder onClose={() => setShowBuilder(false)} />
+        </motion.div>
       ) : (
         <Tabs
           selectedKey={activeTab}
@@ -142,7 +157,14 @@ export function RelatoriosModule() {
               </div>
             }
           >
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+            <motion.div
+              key="essenciais"
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              variants={fadeIn}
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-6"
+            >
               {financialReports.map((report) => {
                 const Icon = report.icon;
                 const bgClasses = getColorClasses(report.color);
@@ -178,10 +200,17 @@ export function RelatoriosModule() {
                   </Card>
                 );
               })}
-            </div>
+            </motion.div>
 
             {/* Informações sobre os relatórios */}
-            <Card className="mt-6">
+            <motion.div
+              key="essenciais-info"
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              variants={fadeIn}
+            >
+              <Card className="mt-6">
               <CardHeader>
                 <h3 className="text-lg font-semibold">
                   Sobre os Relatórios Financeiros
@@ -251,6 +280,7 @@ export function RelatoriosModule() {
                 </div>
               </CardBody>
             </Card>
+            </motion.div>
           </Tab>
 
           <Tab
@@ -262,13 +292,20 @@ export function RelatoriosModule() {
               </div>
             }
           >
-            <div className="mt-6">
+            <motion.div
+              key="saved"
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              variants={fadeIn}
+              className="mt-6"
+            >
               <SavedReports onEdit={() => setShowBuilder(true)} />
-            </div>
+            </motion.div>
           </Tab>
         </Tabs>
       )}
-    </div>
+    </motion.div>
   );
 }
 

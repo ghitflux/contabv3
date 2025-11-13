@@ -1,6 +1,8 @@
 'use client';
 
+import { motion } from "framer-motion";
 import { Button, Card, CardBody, CardHeader, Chip, Divider, Pagination, Spinner, Table, TableBody, TableCell, TableColumn, TableHeader, TableRow, useDisclosure } from '@/heroui';
+import { pageTransition } from "@/lib/animations";
 import { useClients } from '@/hooks/useClients';
 import type { ClientListItem, ClientStatus, ClientCreate, RegimeTributario } from '@/types/client';
 import { formatCNPJ, getRegimeLabel, getStatusLabel } from '@/types/client';
@@ -108,7 +110,13 @@ export default function ClientesPage() {
   }) || [];
 
   return (
-    <div className="space-y-6">
+    <motion.div
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      variants={pageTransition}
+      className="space-y-6"
+    >
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Clientes</h1>
@@ -348,6 +356,6 @@ export default function ClientesPage() {
         isOpen={isDetailsOpen}
         onClose={handleCloseDetails}
       />
-    </div>
+    </motion.div>
   );
 }
