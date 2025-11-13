@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useMemo, useState } from "react";
+import { DatePickerField } from '@/components/ui/DatePickerField';
 import {
   Button,
   Card,
@@ -22,13 +22,12 @@ import {
   TableHeader,
   TableRow,
   Textarea,
-} from "@/heroui";
-import { DollarSign, Download, Plus, Repeat, Trash2, TrendingDown, TrendingUp } from "lucide-react";
-import { FinanceiroGraficos } from "./FinanceiroGraficos";
-import { FinanceiroKPIs, type FinanceiroKpi } from "./FinanceiroKPIs";
-import { DatePickerField } from "@/components/ui/DatePickerField";
+} from '@/heroui';
+import { DollarSign, Download, Plus, Repeat, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { FinanceiroKPIs, type FinanceiroKpi } from './FinanceiroKPIs';
 
-type TransactionType = "Entrada" | "Saída";
+type TransactionType = 'Entrada' | 'Saída';
 
 type Transaction = {
   id: string;
@@ -54,7 +53,7 @@ type StandardHistory = {
   id: string;
   description: string;
   accountingAccount?: string;
-  type: "income" | "expense";
+  type: 'income' | 'expense';
 };
 
 type NewTransactionState = {
@@ -69,43 +68,61 @@ type NewTransactionState = {
 };
 
 const initialBanks: Bank[] = [
-  { id: "1", name: "Banco do Brasil", accountNumber: "1234-7", balance: 12500.5, accountingAccount: "1.1.1.01" },
-  { id: "2", name: "Caixa Econômica", accountNumber: "5678-9", balance: 6800.25, accountingAccount: "1.1.1.02" },
-  { id: "3", name: "Pagamento PIX", accountNumber: "0001-2", balance: 9800.0, accountingAccount: "1.1.1.03" },
+  {
+    id: '1',
+    name: 'Banco do Brasil',
+    accountNumber: '1234-7',
+    balance: 12500.5,
+    accountingAccount: '1.1.1.01',
+  },
+  {
+    id: '2',
+    name: 'Caixa Econômica',
+    accountNumber: '5678-9',
+    balance: 6800.25,
+    accountingAccount: '1.1.1.02',
+  },
+  {
+    id: '3',
+    name: 'Pagamento PIX',
+    accountNumber: '0001-2',
+    balance: 9800.0,
+    accountingAccount: '1.1.1.03',
+  },
 ];
 
 const initialHistories: StandardHistory[] = [
-  { id: "1", description: "Honorários do mês", accountingAccount: "3.1.1.01", type: "income" },
-  { id: "2", description: "Serviço extra", accountingAccount: "3.1.1.02", type: "income" },
-  { id: "3", description: "Aluguel", accountingAccount: "2.1.1.01", type: "expense" },
-  { id: "4", description: "Internet", accountingAccount: "2.1.1.02", type: "expense" },
+  { id: '1', description: 'Honorários do mês', accountingAccount: '3.1.1.01', type: 'income' },
+  { id: '2', description: 'Serviço extra', accountingAccount: '3.1.1.02', type: 'income' },
+  { id: '3', description: 'Aluguel', accountingAccount: '2.1.1.01', type: 'expense' },
+  { id: '4', description: 'Internet', accountingAccount: '2.1.1.02', type: 'expense' },
 ];
 
 const initialTransactions: Transaction[] = [
   {
-    id: "1",
-    date: "2025-10-27",
-    type: "Entrada",
-    bank: "1",
-    history: "Honorários do mês",
+    id: '1',
+    date: '2025-10-27',
+    type: 'Entrada',
+    bank: '1',
+    history: 'Honorários do mês',
     value: 3500.0,
   },
   {
-    id: "2",
-    date: "2025-10-27",
-    type: "Saída",
-    bank: "1",
-    history: "Aluguel",
+    id: '2',
+    date: '2025-10-27',
+    type: 'Saída',
+    bank: '1',
+    history: 'Aluguel',
     value: 1800.0,
     isRecurring: true,
     recurringDay: 27,
   },
   {
-    id: "3",
-    date: "2025-10-27",
-    type: "Saída",
-    bank: "2",
-    history: "Internet",
+    id: '3',
+    date: '2025-10-27',
+    type: 'Saída',
+    bank: '2',
+    history: 'Internet',
     value: 120.0,
     isRecurring: true,
     recurringDay: 27,
@@ -113,80 +130,80 @@ const initialTransactions: Transaction[] = [
 ];
 
 const defaultNewTransaction: NewTransactionState = {
-  date: "2025-10-27",
-  type: "Entrada",
-  bank: "1",
-  history: "",
-  observation: "",
-  value: "",
+  date: '2025-10-27',
+  type: 'Entrada',
+  bank: '1',
+  history: '',
+  observation: '',
+  value: '',
   isRecurring: false,
   recurringDay: 1,
 };
 
 const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
+  new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
   }).format(value);
 
 export function FinanceiroEscritorio() {
-  const [startDate, setStartDate] = useState("2025-10-01");
-  const [endDate, setEndDate] = useState("2025-10-31");
+  const [startDate, setStartDate] = useState('2025-10-01');
+  const [endDate, setEndDate] = useState('2025-10-31');
   const [banks, setBanks] = useState<Bank[]>(initialBanks);
   const [standardHistories, setStandardHistories] = useState<StandardHistory[]>(initialHistories);
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [newBank, setNewBank] = useState({
-    name: "",
-    accountNumber: "",
-    balance: "",
-    accountingAccount: "",
+    name: '',
+    accountNumber: '',
+    balance: '',
+    accountingAccount: '',
   });
   const [newHistory, setNewHistory] = useState({
-    description: "",
-    accountingAccount: "",
-    type: "income" as "income" | "expense",
+    description: '',
+    accountingAccount: '',
+    type: 'income' as 'income' | 'expense',
   });
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
   const [newTransaction, setNewTransaction] = useState<NewTransactionState>(defaultNewTransaction);
 
   const receita = useMemo(
-    () => transactions.filter((t) => t.type === "Entrada").reduce((sum, t) => sum + t.value, 0),
-    [transactions],
+    () => transactions.filter((t) => t.type === 'Entrada').reduce((sum, t) => sum + t.value, 0),
+    [transactions]
   );
   const despesa = useMemo(
-    () => transactions.filter((t) => t.type === "Saída").reduce((sum, t) => sum + t.value, 0),
-    [transactions],
+    () => transactions.filter((t) => t.type === 'Saída').reduce((sum, t) => sum + t.value, 0),
+    [transactions]
   );
   const lucro = receita - despesa;
 
   const kpis: FinanceiroKpi[] = [
     {
-      title: "Receita do Período",
+      title: 'Receita do Período',
       value: formatCurrency(receita),
-      change: "+4,2% vs mês anterior",
-      trend: "up",
+      change: '+4,2% vs mês anterior',
+      trend: 'up',
       icon: DollarSign,
-      colorClass: "text-green-600",
-      backgroundClass: "bg-green-50 dark:bg-green-900/20",
+      colorClass: 'text-green-600',
+      backgroundClass: 'bg-green-50 dark:bg-green-900/20',
     },
     {
-      title: "Despesas",
+      title: 'Despesas',
       value: formatCurrency(despesa),
-      change: "+1,8% vs mês anterior",
-      trend: "up",
+      change: '+1,8% vs mês anterior',
+      trend: 'up',
       icon: TrendingDown,
-      colorClass: "text-amber-600",
-      backgroundClass: "bg-amber-50 dark:bg-amber-900/20",
+      colorClass: 'text-amber-600',
+      backgroundClass: 'bg-amber-50 dark:bg-amber-900/20',
     },
     {
-      title: "Lucro",
+      title: 'Lucro',
       value: formatCurrency(lucro),
-      change: "+6,5% vs mês anterior",
-      trend: "up",
+      change: '+6,5% vs mês anterior',
+      trend: 'up',
       icon: TrendingUp,
-      colorClass: "text-teal-600",
-      backgroundClass: "bg-teal-50 dark:bg-teal-900/20",
+      colorClass: 'text-teal-600',
+      backgroundClass: 'bg-teal-50 dark:bg-teal-900/20',
     },
   ];
 
@@ -228,7 +245,7 @@ export function FinanceiroEscritorio() {
 
     setBanks((prev) => [...prev, bank]);
     setIsBankModalOpen(false);
-    setNewBank({ name: "", accountNumber: "", balance: "", accountingAccount: "" });
+    setNewBank({ name: '', accountNumber: '', balance: '', accountingAccount: '' });
   };
 
   const handleAddHistory = () => {
@@ -243,7 +260,7 @@ export function FinanceiroEscritorio() {
 
     setStandardHistories((prev) => [...prev, history]);
     setIsHistoryModalOpen(false);
-    setNewHistory({ description: "", accountingAccount: "", type: "income" });
+    setNewHistory({ description: '', accountingAccount: '', type: 'income' });
   };
 
   return (
@@ -251,11 +268,23 @@ export function FinanceiroEscritorio() {
       <div className="flex flex-col md:flex-row md:items-end gap-4">
         <div className="space-y-2">
           <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Início</label>
-          <DatePickerField value={startDate} onChange={setStartDate} size="sm" className="w-[180px]" aria-label="Data inicial" />
+          <DatePickerField
+            value={startDate}
+            onChange={setStartDate}
+            size="sm"
+            className="w-[180px]"
+            aria-label="Data inicial"
+          />
         </div>
         <div className="space-y-2">
           <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Fim</label>
-          <DatePickerField value={endDate} onChange={setEndDate} size="sm" className="w-[180px]" aria-label="Data final" />
+          <DatePickerField
+            value={endDate}
+            onChange={setEndDate}
+            size="sm"
+            className="w-[180px]"
+            aria-label="Data final"
+          />
         </div>
         <div className="md:ml-auto flex gap-2">
           <Button variant="bordered">Mês atual</Button>
@@ -267,11 +296,12 @@ export function FinanceiroEscritorio() {
       </div>
 
       <FinanceiroKPIs kpis={kpis} />
-      <FinanceiroGraficos />
 
       <Card className="border border-default-200/50 dark:border-default-100/20">
         <CardHeader className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Saldo de Bancos e Caixa</h3>
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+            Saldo de Bancos e Caixa
+          </h3>
           <Button
             variant="bordered"
             size="sm"
@@ -287,10 +317,16 @@ export function FinanceiroEscritorio() {
               <Card key={bank.id} className="bg-slate-50 dark:bg-slate-900/20">
                 <CardBody className="space-y-1">
                   <p className="text-sm text-slate-600 dark:text-slate-400">{bank.name}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-500">Conta: {bank.accountNumber}</p>
-                  <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{formatCurrency(bank.balance)}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-500">
+                    Conta: {bank.accountNumber}
+                  </p>
+                  <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                    {formatCurrency(bank.balance)}
+                  </p>
                   {bank.accountingAccount && (
-                    <p className="text-xs text-slate-500 dark:text-slate-500">Conta contábil: {bank.accountingAccount}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-500">
+                      Conta contábil: {bank.accountingAccount}
+                    </p>
                   )}
                 </CardBody>
               </Card>
@@ -301,7 +337,9 @@ export function FinanceiroEscritorio() {
 
       <Card className="border border-default-200/50 dark:border-default-100/20">
         <CardHeader className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Novo lançamento</h3>
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+            Novo lançamento
+          </h3>
           <Button
             variant="bordered"
             size="sm"
@@ -324,7 +362,7 @@ export function FinanceiroEscritorio() {
               onSelectionChange={(keys) => {
                 const value = Array.from(keys)[0] as TransactionType | undefined;
                 if (value) {
-                  setNewTransaction((prev) => ({ ...prev, type: value, history: "" }));
+                  setNewTransaction((prev) => ({ ...prev, type: value, history: '' }));
                 }
               }}
             >
@@ -350,16 +388,20 @@ export function FinanceiroEscritorio() {
               selectedKeys={newTransaction.history ? [newTransaction.history] : []}
               onSelectionChange={(keys) => {
                 const value = Array.from(keys)[0] as string | undefined;
-                setNewTransaction((prev) => ({ ...prev, history: value ?? "" }));
+                setNewTransaction((prev) => ({ ...prev, history: value ?? '' }));
               }}
               placeholder="Selecione..."
             >
               {standardHistories
-                .filter((history) => (newTransaction.type === "Entrada" ? history.type === "income" : history.type === "expense"))
+                .filter((history) =>
+                  newTransaction.type === 'Entrada'
+                    ? history.type === 'income'
+                    : history.type === 'expense'
+                )
                 .map((history) => (
                   <SelectItem key={history.description}>
                     {history.description}
-                    {history.accountingAccount ? ` (${history.accountingAccount})` : ""}
+                    {history.accountingAccount ? ` (${history.accountingAccount})` : ''}
                   </SelectItem>
                 ))}
             </Select>
@@ -374,7 +416,11 @@ export function FinanceiroEscritorio() {
               <Checkbox
                 isSelected={newTransaction.isRecurring}
                 onValueChange={(checked) =>
-                  setNewTransaction((prev) => ({ ...prev, isRecurring: checked, recurringDay: checked ? prev.recurringDay : 1 }))
+                  setNewTransaction((prev) => ({
+                    ...prev,
+                    isRecurring: checked,
+                    recurringDay: checked ? prev.recurringDay : 1,
+                  }))
                 }
               >
                 Recorrente
@@ -386,7 +432,9 @@ export function FinanceiroEscritorio() {
             label="Observação (opcional)"
             placeholder="Adicione observações sobre este lançamento..."
             value={newTransaction.observation}
-            onValueChange={(value) => setNewTransaction((prev) => ({ ...prev, observation: value }))}
+            onValueChange={(value) =>
+              setNewTransaction((prev) => ({ ...prev, observation: value }))
+            }
             minRows={2}
           />
 
@@ -400,7 +448,7 @@ export function FinanceiroEscritorio() {
               onValueChange={(value) =>
                 setNewTransaction((prev) => ({
                   ...prev,
-                  recurringDay: Number.parseInt(value || "1", 10),
+                  recurringDay: Number.parseInt(value || '1', 10),
                 }))
               }
               className="w-32"
@@ -430,21 +478,25 @@ export function FinanceiroEscritorio() {
             <TableBody emptyContent="Nenhum lançamento cadastrado">
               {transactions.map((transaction) => (
                 <TableRow key={transaction.id}>
-                  <TableCell>{new Date(transaction.date).toLocaleDateString("pt-BR")}</TableCell>
+                  <TableCell>{new Date(transaction.date).toLocaleDateString('pt-BR')}</TableCell>
                   <TableCell>{transaction.type}</TableCell>
-                  <TableCell>{banks.find((bank) => bank.id === transaction.bank)?.name ?? "-"}</TableCell>
+                  <TableCell>
+                    {banks.find((bank) => bank.id === transaction.bank)?.name ?? '-'}
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       {transaction.history}
                       {transaction.isRecurring && (
-                        <Repeat className="h-4 w-4 text-blue-600" title="Lançamento recorrente" />
+                        <Repeat className="h-4 w-4 text-primary-600" title="Lançamento recorrente" />
                       )}
                     </div>
                   </TableCell>
                   <TableCell className="text-sm text-slate-600 dark:text-slate-400">
-                    {transaction.observation ?? "-"}
+                    {transaction.observation ?? '-'}
                   </TableCell>
-                  <TableCell className="text-right font-semibold">{formatCurrency(transaction.value)}</TableCell>
+                  <TableCell className="text-right font-semibold">
+                    {formatCurrency(transaction.value)}
+                  </TableCell>
                   <TableCell className="text-right">
                     <Button
                       size="sm"
@@ -479,7 +531,9 @@ export function FinanceiroEscritorio() {
                   label="Número da Conta *"
                   placeholder="Ex: 12345-6"
                   value={newBank.accountNumber}
-                  onValueChange={(value) => setNewBank((prev) => ({ ...prev, accountNumber: value }))}
+                  onValueChange={(value) =>
+                    setNewBank((prev) => ({ ...prev, accountNumber: value }))
+                  }
                 />
                 <Input
                   label="Saldo Inicial"
@@ -492,7 +546,9 @@ export function FinanceiroEscritorio() {
                   label="Conta Contábil"
                   placeholder="Ex: 1.1.1.01"
                   value={newBank.accountingAccount}
-                  onValueChange={(value) => setNewBank((prev) => ({ ...prev, accountingAccount: value }))}
+                  onValueChange={(value) =>
+                    setNewBank((prev) => ({ ...prev, accountingAccount: value }))
+                  }
                 />
               </ModalBody>
               <ModalFooter>
@@ -518,14 +574,16 @@ export function FinanceiroEscritorio() {
                   label="Descrição *"
                   placeholder="Ex: Comissão de vendas"
                   value={newHistory.description}
-                  onValueChange={(value) => setNewHistory((prev) => ({ ...prev, description: value }))}
+                  onValueChange={(value) =>
+                    setNewHistory((prev) => ({ ...prev, description: value }))
+                  }
                 />
                 <Select
                   label="Tipo *"
                   selectedKeys={[newHistory.type]}
                   onSelectionChange={(keys) => {
-                    const value = Array.from(keys)[0] as "income" | "expense" | undefined;
-                    setNewHistory((prev) => ({ ...prev, type: value ?? "income" }));
+                    const value = Array.from(keys)[0] as 'income' | 'expense' | undefined;
+                    setNewHistory((prev) => ({ ...prev, type: value ?? 'income' }));
                   }}
                 >
                   <SelectItem key="income">Receita</SelectItem>
@@ -535,7 +593,9 @@ export function FinanceiroEscritorio() {
                   label="Conta Contábil"
                   placeholder="Ex: 3.1.1.01"
                   value={newHistory.accountingAccount}
-                  onValueChange={(value) => setNewHistory((prev) => ({ ...prev, accountingAccount: value }))}
+                  onValueChange={(value) =>
+                    setNewHistory((prev) => ({ ...prev, accountingAccount: value }))
+                  }
                 />
               </ModalBody>
               <ModalFooter>
@@ -553,4 +613,3 @@ export function FinanceiroEscritorio() {
     </div>
   );
 }
-

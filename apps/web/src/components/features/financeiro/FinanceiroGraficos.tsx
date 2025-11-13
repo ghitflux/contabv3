@@ -48,7 +48,7 @@ const defaultCategoriasDespesas: CategoriaEntry[] = [
   { name: "Despesas Fixas", value: 35000, color: "#ef4444" },
   { name: "Despesas Operacionais", value: 28000, color: "#f59e0b" },
   { name: "Impostos", value: 18450, color: "#8b5cf6" },
-  { name: "Folha de Pagamento", value: 8000, color: "#3b82f6" },
+  { name: "Folha de Pagamento", value: 8000, color: "#E9B63B" },
 ];
 
 const defaultCategoriasReceitas: CategoriaEntry[] = [

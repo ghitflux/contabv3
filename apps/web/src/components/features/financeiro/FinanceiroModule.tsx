@@ -20,7 +20,6 @@ export function FinanceiroModule() {
         selectedKey={activeTab}
         onSelectionChange={(key) => setActiveTab(key as string)}
         color="primary"
-        variant="underlined"
       >
         <Tab key="escritorio" title="Escritório">
           <div className="mt-6">

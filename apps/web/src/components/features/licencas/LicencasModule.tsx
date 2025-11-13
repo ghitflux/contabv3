@@ -514,7 +514,7 @@ export function LicencasModule() {
             </Select>
           </div>
 
-          <Tabs selectedKey={activeTab} onSelectionChange={(key) => setActiveTab(key as TabKey)}>
+          <Tabs selectedKey={activeTab} onSelectionChange={(key) => setActiveTab(key as TabKey)} color="primary">
             <Tab key="clients" title={`Licenças de Clientes (${filteredClientLicenses.length})`}>
               <LicenseCardGrid licenses={filteredClientLicenses} />
             </Tab>

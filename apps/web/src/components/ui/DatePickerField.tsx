@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { Button, Calendar, Popover, PopoverContent, PopoverTrigger } from "@/heroui";
-import { CalendarIcon, XIcon } from "@/lib/icons";
-import { CalendarDate } from "@internationalized/date";
-import { useMemo, useState } from "react";
+import { Button, Calendar, Popover, PopoverContent, PopoverTrigger } from '@/heroui';
+import { CalendarIcon, XIcon } from '@/lib/icons';
+import { CalendarDate } from '@internationalized/date';
+import { useMemo, useState } from 'react';
 
 interface DatePickerFieldProps {
   value?: string | null;
@@ -11,21 +11,21 @@ interface DatePickerFieldProps {
   label?: string;
   placeholder?: string;
   className?: string;
-  size?: "sm" | "md" | "lg";
+  size?: 'sm' | 'md' | 'lg';
   isClearable?: boolean;
-  "aria-label"?: string;
+  'aria-label'?: string;
 }
 
 const formatDisplayValue = (value?: string | null) => {
-  if (!value) return "";
+  if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("pt-BR").format(date);
+  return new Intl.DateTimeFormat('pt-BR').format(date);
 };
 
 const parseCalendarDate = (value?: string | null) => {
   if (!value) return null;
-  const [year, month, day] = value.split("-").map((part) => Number.parseInt(part, 10));
+  const [year, month, day] = value.split('-').map((part) => Number.parseInt(part, 10));
   if (!year || !month || !day) return null;
   try {
     return new CalendarDate(year, month, day);
@@ -35,9 +35,9 @@ const parseCalendarDate = (value?: string | null) => {
 };
 
 const formatToValue = (date: CalendarDate) => {
-  const year = date.year.toString().padStart(4, "0");
-  const month = date.month.toString().padStart(2, "0");
-  const day = date.day.toString().padStart(2, "0");
+  const year = date.year.toString().padStart(4, '0');
+  const month = date.month.toString().padStart(2, '0');
+  const day = date.day.toString().padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
 
@@ -45,11 +45,11 @@ export function DatePickerField({
   value,
   onChange,
   label,
-  placeholder = "Selecionar data",
+  placeholder = 'Selecionar data',
   className,
-  size = "sm",
+  size = 'sm',
   isClearable = false,
-  "aria-label": ariaLabel,
+  'aria-label': ariaLabel,
 }: DatePickerFieldProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -59,7 +59,10 @@ export function DatePickerField({
   return (
     <div className={className}>
       {label && (
-        <label className="text-sm font-medium text-default-600 mb-1 block" htmlFor={ariaLabel ?? label}>
+        <label
+          className="text-sm font-medium text-default-600 mb-1 block"
+          htmlFor={ariaLabel ?? label}
+        >
           {label}
         </label>
       )}
@@ -70,9 +73,9 @@ export function DatePickerField({
             variant="bordered"
             size={size}
             className={`w-full justify-between text-left font-normal ${
-              value ? "text-foreground" : "text-default-400"
+              value ? 'text-foreground' : 'text-default-400'
             }`}
-            aria-label={ariaLabel || label || "Selecionar data"}
+            aria-label={ariaLabel || label || 'Selecionar data'}
           >
             <div className="flex-1 flex items-center gap-2 overflow-hidden">
               <CalendarIcon className="h-4 w-4 text-default-400" />
@@ -86,11 +89,11 @@ export function DatePickerField({
                 radius="sm"
                 onPress={(event) => {
                   event.stopPropagation();
-                  onChange("");
+                  onChange('');
                 }}
                 aria-label="Limpar data selecionada"
               >
-                <XIcon className="h-3 w-3" />
+                <XIcon className="h-4 w-4" />
               </Button>
             ) : null}
           </Button>
@@ -104,7 +107,7 @@ export function DatePickerField({
                 setIsOpen(false);
               }
             }}
-            aria-label={ariaLabel || label || "Calendário"}
+            aria-label={ariaLabel || label || 'Calendário'}
             calendarWidth={320}
           />
         </PopoverContent>
@@ -112,4 +115,3 @@ export function DatePickerField({
     </div>
   );
 }
-

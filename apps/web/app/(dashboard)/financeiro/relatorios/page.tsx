@@ -109,7 +109,6 @@ export default function RelatoriosPage() {
         onSelectionChange={(key) => setSelectedTab(key as string)}
         aria-label="Report tabs"
         color="primary"
-        variant="underlined"
       >
         <Tab key="aging" title="Aging de Recebíveis">
           {loading ? (

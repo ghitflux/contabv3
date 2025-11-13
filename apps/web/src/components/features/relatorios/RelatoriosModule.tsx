@@ -81,7 +81,8 @@ export function RelatoriosModule() {
   const getColorClasses = (color: string) => {
     const colorMap: Record<string, string> = {
       teal: "bg-teal-50 dark:bg-teal-950/20 border-teal-200 dark:border-teal-900",
-      blue: "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900",
+      blue: "bg-primary-50 dark:bg-primary-950/20 border-primary-200 dark:border-primary-900",
+      primary: "bg-primary-50 dark:bg-primary-950/20 border-primary-200 dark:border-primary-900",
       slate: "bg-slate-50 dark:bg-slate-950/20 border-slate-200 dark:border-slate-900",
       green: "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900",
       amber: "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900",
@@ -94,7 +95,8 @@ export function RelatoriosModule() {
   const getTextColorClasses = (color: string) => {
     const colorMap: Record<string, string> = {
       teal: "text-teal-700 dark:text-teal-400",
-      blue: "text-blue-700 dark:text-blue-400",
+      blue: "text-primary-700 dark:text-primary-400",
+      primary: "text-primary-700 dark:text-primary-400",
       slate: "text-slate-700 dark:text-slate-400",
       green: "text-green-700 dark:text-green-400",
       amber: "text-amber-700 dark:text-amber-400",
@@ -130,7 +132,6 @@ export function RelatoriosModule() {
           selectedKey={activeTab}
           onSelectionChange={(key) => setActiveTab(key as string)}
           color="primary"
-          variant="underlined"
         >
           <Tab
             key="essenciais"

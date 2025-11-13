@@ -1,5 +1,5 @@
-import type { Config } from 'tailwindcss';
 import { heroui } from '@heroui/theme';
+import type { Config } from 'tailwindcss';
 
 const config: Config = {
   content: [
@@ -21,19 +21,39 @@ const config: Config = {
         dark: {
           colors: {
             primary: {
-              DEFAULT: '#3b82f6',
+              50: '#fef9e7',
+              100: '#fef3cf',
+              200: '#fde79f',
+              300: '#fcdb6f',
+              400: '#fbcf3f',
+              500: '#E9B63B',
+              600: '#d4a335',
+              700: '#bf902f',
+              800: '#aa7d29',
+              900: '#956a23',
+              DEFAULT: '#E9B63B',
               foreground: '#ffffff',
             },
-            focus: '#3b82f6',
+            focus: '#E9B63B',
           },
         },
         light: {
           colors: {
             primary: {
-              DEFAULT: '#3b82f6',
+              50: '#fef9e7',
+              100: '#fef3cf',
+              200: '#fde79f',
+              300: '#fcdb6f',
+              400: '#fbcf3f',
+              500: '#E9B63B',
+              600: '#d4a335',
+              700: '#bf902f',
+              800: '#aa7d29',
+              900: '#956a23',
+              DEFAULT: '#E9B63B',
               foreground: '#ffffff',
             },
-            focus: '#3b82f6',
+            focus: '#E9B63B',
           },
         },
       },

@@ -1,19 +1,19 @@
-"use client";
+'use client';
 
-import { Button, Calendar, Popover, PopoverContent, PopoverTrigger } from "@/heroui";
-import { CalendarIcon, XIcon } from "@/lib/icons";
-import { CalendarDate } from "@internationalized/date";
-import { useMemo, useState } from "react";
+import { Button, Calendar, Popover, PopoverContent, PopoverTrigger } from '@/heroui';
+import { CalendarIcon, XIcon } from '@/lib/icons';
+import { CalendarDate } from '@internationalized/date';
+import { useMemo, useState } from 'react';
 
 interface MonthYearPickerProps {
   value?: string | null;
   onChange: (value: string) => void;
   label?: string;
   className?: string;
-  size?: "sm" | "md" | "lg";
+  size?: 'sm' | 'md' | 'lg';
   placeholder?: string;
   isClearable?: boolean;
-  "aria-label"?: string;
+  'aria-label'?: string;
 }
 
 export function MonthYearPicker({
@@ -21,10 +21,10 @@ export function MonthYearPicker({
   onChange,
   label,
   className,
-  size = "sm",
-  placeholder = "Selecionar mês e ano",
+  size = 'sm',
+  placeholder = 'Selecionar mês e ano',
   isClearable = false,
-  "aria-label": ariaLabel,
+  'aria-label': ariaLabel,
 }: MonthYearPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -75,7 +75,14 @@ export function MonthYearPicker({
 
   return (
     <div className={className}>
-      {label && <label className="text-sm font-medium text-default-600 mb-1 block" htmlFor={ariaLabel ?? label}>{label}</label>}
+      {label && (
+        <label
+          className="text-sm font-medium text-default-600 mb-1 block"
+          htmlFor={ariaLabel ?? label}
+        >
+          {label}
+        </label>
+      )}
       <Popover isOpen={isOpen} onOpenChange={setIsOpen} placement="bottom-start">
         <PopoverTrigger>
           <Button
@@ -83,9 +90,9 @@ export function MonthYearPicker({
             variant="bordered"
             size={size}
             className={`w-full justify-between text-left font-normal ${
-              value ? "text-foreground" : "text-default-400"
+              value ? 'text-foreground' : 'text-default-400'
             }`}
-            aria-label={ariaLabel || label || "Selecionar mês e ano"}
+            aria-label={ariaLabel || label || 'Selecionar mês e ano'}
           >
             <CalendarIcon className="h-4 w-4 text-default-400 mr-2" />
             <span className="truncate">{displayValue || placeholder}</span>
@@ -97,11 +104,11 @@ export function MonthYearPicker({
                 radius="sm"
                 onPress={(event) => {
                   event.stopPropagation();
-                  onChange("");
+                  onChange('');
                 }}
                 aria-label="Limpar mês selecionado"
               >
-                <XIcon className="h-3 w-3" />
+                <XIcon className="h-4 w-4" />
               </Button>
             ) : null}
           </Button>
@@ -119,4 +126,3 @@ export function MonthYearPicker({
     </div>
   );
 }
-

@@ -1,28 +1,32 @@
 'use client';
 
-import { useState } from 'react';
-import { usePathname } from 'next/navigation';
-import { Button, Link, Avatar, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem } from '@/heroui';
 import { NotificationCenter } from '@/components/shared/NotificationCenter';
 import { ThemeSwitcher } from '@/components/shared/ThemeSwitcher';
 import {
-  HomeIcon,
-  UsersIcon,
-  FileTextIcon as DocumentIcon,
-  DollarSignIcon as CurrencyIcon,
-  LicenseIcon as ShieldIcon,
+  Avatar,
+  Button,
+  Dropdown,
+  DropdownItem,
+  DropdownMenu,
+  DropdownTrigger,
+  Link,
+} from '@/heroui';
+import {
   BarChartIcon as ChartIcon,
-  ClockIcon,
-  MenuIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  ClockIcon,
+  DollarSignIcon as CurrencyIcon,
+  FileTextIcon as DocumentIcon,
+  HomeIcon,
+  MenuIcon,
+  LicenseIcon as ShieldIcon,
+  UsersIcon,
 } from '@/lib/icons';
+import { usePathname } from 'next/navigation';
+import { useState } from 'react';
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const pathname = usePathname();
@@ -38,7 +42,7 @@ export default function DashboardLayout({
   ];
 
   return (
-     <div className="flex h-screen bg-background">
+    <div className="flex h-screen bg-background">
       {isMobileSidebarOpen && (
         <div
           className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm md:hidden"
@@ -56,7 +60,7 @@ export default function DashboardLayout({
             isCollapsed ? 'px-4' : 'px-6'
           }`}
         >
-          {(!isCollapsed || isMobileSidebarOpen) ? (
+          {!isCollapsed || isMobileSidebarOpen ? (
             <h2 className="text-xl font-bold">SaaS Contábil</h2>
           ) : (
             <div className="text-lg font-bold">SC</div>
@@ -68,7 +72,11 @@ export default function DashboardLayout({
             onPress={() => setIsCollapsed((prev) => !prev)}
             className="hidden md:inline-flex"
           >
-            {isCollapsed ? <ChevronRightIcon className="h-4 w-4" /> : <ChevronLeftIcon className="h-4 w-4" />}
+            {isCollapsed ? (
+              <ChevronRightIcon className="h-4 w-4" />
+            ) : (
+              <ChevronLeftIcon className="h-4 w-4" />
+            )}
           </Button>
         </div>
         <nav className={`flex-1 space-y-1 py-4 ${isCollapsed ? 'px-2' : 'px-3'}`}>
@@ -85,14 +93,16 @@ export default function DashboardLayout({
                   isCollapsed && !isMobileSidebarOpen ? 'justify-center gap-0' : 'gap-3'
                 } ${
                   isActive
-                    ? 'bg-primary/10 text-primary-600 dark:text-primary-300'
-                    : 'text-default-600 hover:bg-default-100 hover:text-default-900'
+                    ? 'bg-primary/15 dark:bg-primary/20 text-primary-600 dark:text-primary-300 border-l-2 border-primary dark:border-primary-300'
+                    : 'text-default-600 dark:text-slate-300 hover:bg-default-100 dark:hover:bg-slate-800/50 hover:text-default-900 dark:hover:text-white'
                 }`}
                 onClick={() => setIsMobileSidebarOpen(false)}
               >
                 <Icon
                   className={`h-5 w-5 transition-colors ${
-                    isActive ? 'text-primary-600 dark:text-primary-300' : 'text-default-400 group-hover:text-default-700'
+                    isActive
+                      ? 'text-primary-600 dark:text-primary-300'
+                      : 'text-default-400 dark:text-slate-400 group-hover:text-default-700 dark:group-hover:text-white'
                   }`}
                 />
                 {showLabels && <span className="truncate">{item.name}</span>}
@@ -130,12 +140,7 @@ export default function DashboardLayout({
             {/* User Menu */}
             <Dropdown placement="bottom-end">
               <DropdownTrigger>
-                <Avatar
-                  as="button"
-                  className="cursor-pointer"
-                  name="Admin"
-                  size="sm"
-                />
+                <Avatar as="button" className="cursor-pointer" name="Admin" size="sm" />
               </DropdownTrigger>
               <DropdownMenu aria-label="Profile Actions">
                 <DropdownItem key="profile" className="gap-2">

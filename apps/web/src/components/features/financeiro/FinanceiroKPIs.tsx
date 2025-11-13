@@ -1,10 +1,17 @@
-"use client";
+'use client';
 
-import { Card, CardBody, CardHeader } from "@/heroui";
-import type { LucideIcon } from "lucide-react";
-import { DollarSign, TrendingUp, TrendingDown, Calendar, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Card, CardBody, CardHeader } from '@/heroui';
+import type { LucideIcon } from 'lucide-react';
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  Calendar,
+  DollarSign,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react';
 
-export type FinanceiroKpiTrend = "up" | "down" | "neutral";
+export type FinanceiroKpiTrend = 'up' | 'down' | 'neutral';
 
 export interface FinanceiroKpi {
   title: string;
@@ -18,58 +25,58 @@ export interface FinanceiroKpi {
 
 const defaultKpis: FinanceiroKpi[] = [
   {
-    title: "Receita Total",
-    value: "R$ 245.890,00",
-    change: "+12,5%",
-    trend: "up",
+    title: 'Receita Total',
+    value: 'R$ 245.890,00',
+    change: '+12,5%',
+    trend: 'up',
     icon: DollarSign,
-    colorClass: "text-green-600",
-    backgroundClass: "bg-green-50 dark:bg-green-900/20",
+    colorClass: 'text-green-600',
+    backgroundClass: 'bg-green-50 dark:bg-green-900/20',
   },
   {
-    title: "Despesas",
-    value: "R$ 89.450,00",
-    change: "+5,2%",
-    trend: "up",
+    title: 'Despesas',
+    value: 'R$ 89.450,00',
+    change: '+5,2%',
+    trend: 'up',
     icon: TrendingDown,
-    colorClass: "text-red-600",
-    backgroundClass: "bg-red-50 dark:bg-red-900/20",
+    colorClass: 'text-red-600',
+    backgroundClass: 'bg-red-50 dark:bg-red-900/20',
   },
   {
-    title: "Lucro Líquido",
-    value: "R$ 156.440,00",
-    change: "+18,3%",
-    trend: "up",
+    title: 'Lucro Líquido',
+    value: 'R$ 156.440,00',
+    change: '+18,3%',
+    trend: 'up',
     icon: TrendingUp,
-    colorClass: "text-teal-600",
-    backgroundClass: "bg-teal-50 dark:bg-teal-900/20",
+    colorClass: 'text-teal-600',
+    backgroundClass: 'bg-teal-50 dark:bg-teal-900/20',
   },
   {
-    title: "A Receber",
-    value: "R$ 45.230,00",
-    change: "15 faturas",
-    trend: "neutral",
+    title: 'A Receber',
+    value: 'R$ 45.230,00',
+    change: '15 faturas',
+    trend: 'neutral',
     icon: ArrowUpRight,
-    colorClass: "text-blue-600",
-    backgroundClass: "bg-blue-50 dark:bg-blue-900/20",
+    colorClass: 'text-primary-600',
+    backgroundClass: 'bg-primary-50 dark:bg-primary-900/20',
   },
   {
-    title: "A Pagar",
-    value: "R$ 23.890,00",
-    change: "8 contas",
-    trend: "neutral",
+    title: 'A Pagar',
+    value: 'R$ 23.890,00',
+    change: '8 contas',
+    trend: 'neutral',
     icon: ArrowDownRight,
-    colorClass: "text-amber-600",
-    backgroundClass: "bg-amber-50 dark:bg-amber-900/20",
+    colorClass: 'text-amber-600',
+    backgroundClass: 'bg-amber-50 dark:bg-amber-900/20',
   },
   {
-    title: "Saldo do Mês",
-    value: "R$ 66.550,00",
-    change: "+22,1%",
-    trend: "up",
+    title: 'Saldo do Mês',
+    value: 'R$ 66.550,00',
+    change: '+22,1%',
+    trend: 'up',
     icon: Calendar,
-    colorClass: "text-purple-600",
-    backgroundClass: "bg-purple-50 dark:bg-purple-900/20",
+    colorClass: 'text-purple-600',
+    backgroundClass: 'bg-purple-50 dark:bg-purple-900/20',
   },
 ];
 
@@ -79,21 +86,21 @@ interface FinanceiroKPIsProps {
 
 export function FinanceiroKPIs({ kpis = defaultKpis }: FinanceiroKPIsProps) {
   const getTrendClasses = (trend: FinanceiroKpiTrend) => {
-    if (trend === "up") {
-      return "text-green-600 dark:text-green-400";
+    if (trend === 'up') {
+      return 'text-green-600 dark:text-green-400';
     }
-    if (trend === "down") {
-      return "text-red-600 dark:text-red-400";
+    if (trend === 'down') {
+      return 'text-red-600 dark:text-red-400';
     }
-    return "text-slate-600 dark:text-slate-400";
+    return 'text-slate-600 dark:text-slate-400';
   };
 
   const renderTrendIcon = (trend: FinanceiroKpiTrend) => {
-    if (trend === "up") {
-      return <TrendingUp className="h-3 w-3" />;
+    if (trend === 'up') {
+      return <TrendingUp className="h-4 w-4" />;
     }
-    if (trend === "down") {
-      return <TrendingDown className="h-3 w-3" />;
+    if (trend === 'down') {
+      return <TrendingDown className="h-4 w-4" />;
     }
     return null;
   };
@@ -112,7 +119,9 @@ export function FinanceiroKPIs({ kpis = defaultKpis }: FinanceiroKPIsProps) {
               </div>
             </CardHeader>
             <CardBody className="pt-0">
-              <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">{kpi.value}</div>
+              <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                {kpi.value}
+              </div>
               <p className={`text-xs flex items-center gap-1 mt-1 ${getTrendClasses(kpi.trend)}`}>
                 {renderTrendIcon(kpi.trend)}
                 {kpi.change}
@@ -124,4 +133,3 @@ export function FinanceiroKPIs({ kpis = defaultKpis }: FinanceiroKPIsProps) {
     </div>
   );
 }
-

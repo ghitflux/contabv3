@@ -1,20 +1,20 @@
-"use client";
+'use client';
 
-import { useMemo, useState } from "react";
-import { Button, Card, CardBody, Input, Progress } from "@/heroui";
-import { CheckCircleIcon, DownloadIcon, RefreshIcon, SearchIcon } from "@/lib/icons";
-import { MonthYearPicker } from "@/components/ui/MonthYearPicker";
+import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
+import { Button, Card, CardBody, Input, Progress } from '@/heroui';
+import { CheckCircleIcon, DownloadIcon, RefreshIcon, SearchIcon } from '@/lib/icons';
+import { useMemo, useState } from 'react';
 
 type ObligationKey =
-  | "DCTFWeb"
-  | "EFD-Contribuições"
-  | "ECD"
-  | "ECF"
-  | "ISS"
-  | "FGTS"
-  | "INSS/eSocial";
+  | 'DCTFWeb'
+  | 'EFD-Contribuições'
+  | 'ECD'
+  | 'ECF'
+  | 'ISS'
+  | 'FGTS'
+  | 'INSS/eSocial';
 
-type ObligationStatus = "pending" | "completed";
+type ObligationStatus = 'pending' | 'completed';
 
 interface ClientInfo {
   id: string;
@@ -28,73 +28,73 @@ interface ClientObligations {
 }
 
 const OBLIGATION_TYPES: ObligationKey[] = [
-  "DCTFWeb",
-  "EFD-Contribuições",
-  "ECD",
-  "ECF",
-  "ISS",
-  "FGTS",
-  "INSS/eSocial",
+  'DCTFWeb',
+  'EFD-Contribuições',
+  'ECD',
+  'ECF',
+  'ISS',
+  'FGTS',
+  'INSS/eSocial',
 ];
 
 const CLIENTS: ClientInfo[] = [
   {
-    id: "1",
-    name: "Tech Solutions Ltda",
-    cnpj: "12.345.678/0001-90",
+    id: '1',
+    name: 'Tech Solutions Ltda',
+    cnpj: '12.345.678/0001-90',
   },
   {
-    id: "2",
-    name: "Comércio ABC S.A.",
-    cnpj: "98.765.432/0001-10",
+    id: '2',
+    name: 'Comércio ABC S.A.',
+    cnpj: '98.765.432/0001-10',
   },
   {
-    id: "3",
-    name: "Indústria XYZ Ltda",
-    cnpj: "11.222.333/0001-44",
+    id: '3',
+    name: 'Indústria XYZ Ltda',
+    cnpj: '11.222.333/0001-44',
   },
 ];
 
 const INITIAL_OBLIGATIONS: ClientObligations[] = [
   {
-    clientId: "1",
+    clientId: '1',
     obligations: {
-      DCTFWeb: "completed",
-      "EFD-Contribuições": "pending",
-      ECD: "pending",
-      ECF: "pending",
-      ISS: "pending",
-      FGTS: "pending",
-      "INSS/eSocial": "pending",
+      DCTFWeb: 'completed',
+      'EFD-Contribuições': 'pending',
+      ECD: 'pending',
+      ECF: 'pending',
+      ISS: 'pending',
+      FGTS: 'pending',
+      'INSS/eSocial': 'pending',
     },
   },
   {
-    clientId: "2",
+    clientId: '2',
     obligations: {
-      DCTFWeb: "pending",
-      "EFD-Contribuições": "pending",
-      ECD: "pending",
-      ECF: "pending",
-      ISS: "pending",
-      FGTS: "pending",
-      "INSS/eSocial": "pending",
+      DCTFWeb: 'pending',
+      'EFD-Contribuições': 'pending',
+      ECD: 'pending',
+      ECF: 'pending',
+      ISS: 'pending',
+      FGTS: 'pending',
+      'INSS/eSocial': 'pending',
     },
   },
   {
-    clientId: "3",
+    clientId: '3',
     obligations: {
-      DCTFWeb: "pending",
-      "EFD-Contribuições": "pending",
-      ECD: "pending",
-      ECF: "pending",
-      ISS: "pending",
-      FGTS: "pending",
-      "INSS/eSocial": "pending",
+      DCTFWeb: 'pending',
+      'EFD-Contribuições': 'pending',
+      ECD: 'pending',
+      ECF: 'pending',
+      ISS: 'pending',
+      FGTS: 'pending',
+      'INSS/eSocial': 'pending',
     },
   },
 ];
 
-const statusButtonClass = "bg-slate-900 hover:bg-slate-800 text-white";
+const statusButtonClass = 'bg-slate-900 hover:bg-slate-800 text-white';
 
 const statusConfig: Record<
   ObligationStatus,
@@ -104,18 +104,18 @@ const statusConfig: Record<
   }
 > = {
   pending: {
-    container: "",
-    label: "Baixar",
+    container: '',
+    label: 'Baixar',
   },
   completed: {
-    container: "bg-success-50 border border-success-200",
-    label: "Baixado",
+    container: 'bg-success-50 border border-success-200',
+    label: 'Baixado',
   },
 };
 
 export function ObrigacoesModule() {
-  const [competency, setCompetency] = useState("2025-10");
-  const [search, setSearch] = useState("");
+  const [competency, setCompetency] = useState('2025-10');
+  const [search, setSearch] = useState('');
   const [clientObligations, setClientObligations] =
     useState<ClientObligations[]>(INITIAL_OBLIGATIONS);
 
@@ -127,11 +127,11 @@ export function ObrigacoesModule() {
               ...row,
               obligations: {
                 ...row.obligations,
-                [obligationType]: "completed",
+                [obligationType]: 'completed',
               },
             }
-          : row,
-      ),
+          : row
+      )
     );
   };
 
@@ -143,11 +143,11 @@ export function ObrigacoesModule() {
               ...row,
               obligations: {
                 ...row.obligations,
-                [obligationType]: "pending",
+                [obligationType]: 'pending',
               },
             }
-          : row,
-      ),
+          : row
+      )
     );
   };
 
@@ -159,7 +159,7 @@ export function ObrigacoesModule() {
       if (!client) return false;
       return (
         client.name.toLowerCase().includes(term) ||
-        client.cnpj.replace(/\D/g, "").includes(term.replace(/\D/g, ""))
+        client.cnpj.replace(/\D/g, '').includes(term.replace(/\D/g, ''))
       );
     });
   }, [clientObligations, search]);
@@ -168,7 +168,7 @@ export function ObrigacoesModule() {
 
   const renderActionCell = (row: ClientObligations, obligationType: ObligationKey) => {
     const status = row.obligations[obligationType];
-    if (status === "completed") {
+    if (status === 'completed') {
       return (
         <div className="flex items-center justify-center gap-2">
           <Button
@@ -176,7 +176,7 @@ export function ObrigacoesModule() {
             variant="flat"
             color="success"
             radius="sm"
-          startContent={<CheckCircleIcon className="h-3 w-3" />}
+            startContent={<CheckCircleIcon className="h-4 w-4" />}
             className="font-medium"
           >
             Baixado
@@ -215,7 +215,8 @@ export function ObrigacoesModule() {
       <div>
         <h1 className="text-3xl font-bold text-foreground">Baixa de Obrigações</h1>
         <p className="text-default-500 mt-1">
-          Clique em &quot;Baixar&quot; para marcar a obrigação como entregue. Você pode desfazer a qualquer momento.
+          Clique em &quot;Baixar&quot; para marcar a obrigação como entregue. Você pode desfazer a
+          qualquer momento.
         </p>
       </div>
 
@@ -231,7 +232,9 @@ export function ObrigacoesModule() {
               />
             </div>
             <div className="flex-1">
-              <label className="text-sm font-medium text-default-600 sr-only md:not-sr-only">Buscar empresa</label>
+              <label className="text-sm font-medium text-default-600 sr-only md:not-sr-only">
+                Buscar empresa
+              </label>
               <Input
                 placeholder="Buscar empresa..."
                 value={search}
@@ -248,7 +251,10 @@ export function ObrigacoesModule() {
                 <tr className="text-left text-xs uppercase tracking-wide text-default-500">
                   <th className="px-4 py-3 bg-default-100 rounded-l-lg">Empresa / CNPJ</th>
                   {OBLIGATION_TYPES.map((type) => (
-                    <th key={type} className="px-3 py-3 text-center bg-default-100 whitespace-nowrap">
+                    <th
+                      key={type}
+                      className="px-3 py-3 text-center bg-default-100 whitespace-nowrap"
+                    >
                       {type}
                     </th>
                   ))}
@@ -261,8 +267,8 @@ export function ObrigacoesModule() {
                   if (!client) return null;
                   const total = OBLIGATION_TYPES.length;
                   const completed = OBLIGATION_TYPES.reduce(
-                    (acc, type) => acc + (row.obligations[type] === "completed" ? 1 : 0),
-                    0,
+                    (acc, type) => acc + (row.obligations[type] === 'completed' ? 1 : 0),
+                    0
                   );
 
                   return (
@@ -277,7 +283,10 @@ export function ObrigacoesModule() {
                         </div>
                       </td>
                       {OBLIGATION_TYPES.map((type) => (
-                        <td key={`${row.clientId}-${type}`} className="px-3 py-4 text-center align-middle">
+                        <td
+                          key={`${row.clientId}-${type}`}
+                          className="px-3 py-4 text-center align-middle"
+                        >
                           {renderActionCell(row, type)}
                         </td>
                       ))}
@@ -311,4 +320,3 @@ export function ObrigacoesModule() {
     </div>
   );
 }
-

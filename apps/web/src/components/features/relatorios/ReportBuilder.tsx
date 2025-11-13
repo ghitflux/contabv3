@@ -1,82 +1,82 @@
-"use client";
+'use client';
 
-import { useState } from "react";
 import {
+  Button,
   Card,
   CardBody,
   CardHeader,
-  Button,
+  Checkbox,
   Input,
   Select,
   SelectItem,
-  Checkbox,
   Table,
-  TableHeader,
-  TableColumn,
   TableBody,
-  TableRow,
   TableCell,
-} from "@/heroui";
-import { XIcon, PlusIcon, DownloadIcon, EyeIcon } from "@/lib/icons";
+  TableColumn,
+  TableHeader,
+  TableRow,
+} from '@/heroui';
+import { DownloadIcon, EyeIcon, PlusIcon, XIcon } from '@/lib/icons';
+import { useState } from 'react';
 
 interface ReportBuilderProps {
   onClose: () => void;
 }
 
-type DataSource = "clients" | "transactions" | "obligations" | "licenses" | "activities";
+type DataSource = 'clients' | 'transactions' | 'obligations' | 'licenses' | 'activities';
 
 const dataSourceFields = {
-  clients: ["name", "cnpj", "email", "city", "state", "status", "monthlyFee", "dueDay"],
-  transactions: ["date", "description", "category", "type", "amount", "status"],
-  obligations: ["type", "status", "dueDate", "completedDate"],
-  licenses: ["type", "status", "issueDate", "expiryDate", "fee", "feePaid"],
-  activities: ["title", "status", "priority", "assignedTo", "dueDate", "labels"],
+  clients: ['name', 'cnpj', 'email', 'city', 'state', 'status', 'monthlyFee', 'dueDay'],
+  transactions: ['date', 'description', 'category', 'type', 'amount', 'status'],
+  obligations: ['type', 'status', 'dueDate', 'completedDate'],
+  licenses: ['type', 'status', 'issueDate', 'expiryDate', 'fee', 'feePaid'],
+  activities: ['title', 'status', 'priority', 'assignedTo', 'dueDate', 'labels'],
 };
 
 const dataSourceLabels = {
-  clients: "Clientes",
-  transactions: "Transações Financeiras",
-  obligations: "Obrigações",
-  licenses: "Licenças",
-  activities: "Atividades",
+  clients: 'Clientes',
+  transactions: 'Transações Financeiras',
+  obligations: 'Obrigações',
+  licenses: 'Licenças',
+  activities: 'Atividades',
 };
 
 const fieldLabels: Record<string, string> = {
-  name: "Nome",
-  cnpj: "CNPJ",
-  email: "E-mail",
-  city: "Cidade",
-  state: "Estado",
-  status: "Status",
-  monthlyFee: "Honorário Mensal",
-  dueDay: "Dia de Vencimento",
-  date: "Data",
-  description: "Descrição",
-  category: "Categoria",
-  type: "Tipo",
-  amount: "Valor",
-  dueDate: "Vencimento",
-  completedDate: "Data de Conclusão",
-  issueDate: "Data de Emissão",
-  expiryDate: "Data de Expiração",
-  fee: "Taxa",
-  feePaid: "Taxa Paga",
-  title: "Título",
-  priority: "Prioridade",
-  assignedTo: "Responsável",
-  labels: "Etiquetas",
+  name: 'Nome',
+  cnpj: 'CNPJ',
+  email: 'E-mail',
+  city: 'Cidade',
+  state: 'Estado',
+  status: 'Status',
+  monthlyFee: 'Honorário Mensal',
+  dueDay: 'Dia de Vencimento',
+  date: 'Data',
+  description: 'Descrição',
+  category: 'Categoria',
+  type: 'Tipo',
+  amount: 'Valor',
+  dueDate: 'Vencimento',
+  completedDate: 'Data de Conclusão',
+  issueDate: 'Data de Emissão',
+  expiryDate: 'Data de Expiração',
+  fee: 'Taxa',
+  feePaid: 'Taxa Paga',
+  title: 'Título',
+  priority: 'Prioridade',
+  assignedTo: 'Responsável',
+  labels: 'Etiquetas',
 };
 
 export function ReportBuilder({ onClose }: ReportBuilderProps) {
-  const [reportName, setReportName] = useState("");
-  const [dataSource, setDataSource] = useState<DataSource>("clients");
+  const [reportName, setReportName] = useState('');
+  const [dataSource, setDataSource] = useState<DataSource>('clients');
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
-  const [filters, setFilters] = useState<
-    Array<{ field: string; operator: string; value: string }>
-  >([]);
-  const [groupBy, setGroupBy] = useState<string>("");
-  const [sortBy, setSortBy] = useState<string>("");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [filters, setFilters] = useState<Array<{ field: string; operator: string; value: string }>>(
+    []
+  );
+  const [groupBy, setGroupBy] = useState<string>('');
+  const [sortBy, setSortBy] = useState<string>('');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [showPreview, setShowPreview] = useState(false);
 
   const availableFields = dataSourceFields[dataSource];
@@ -88,10 +88,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
   };
 
   const addFilter = () => {
-    setFilters([
-      ...filters,
-      { field: availableFields[0], operator: "equals", value: "" },
-    ]);
+    setFilters([...filters, { field: availableFields[0], operator: 'equals', value: '' }]);
   };
 
   const removeFilter = (index: number) => {
@@ -107,8 +104,8 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
   const generateReport = () => {
     // Mock data generation - in real app, this would fetch from API
     const mockData = [
-      { id: "1", name: "Exemplo 1", status: "ativo" },
-      { id: "2", name: "Exemplo 2", status: "inativo" },
+      { id: '1', name: 'Exemplo 1', status: 'ativo' },
+      { id: '2', name: 'Exemplo 2', status: 'inativo' },
     ];
     return mockData;
   };
@@ -117,26 +114,24 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
     const data = generateReport();
     const fields = selectedFields.length > 0 ? selectedFields : availableFields;
 
-    const headers = fields.map((f) => fieldLabels[f] || f).join(",");
-    const rows = data.map((item) =>
-      fields.map((field) => (item as any)[field] || "").join(",")
-    );
+    const headers = fields.map((f) => fieldLabels[f] || f).join(',');
+    const rows = data.map((item) => fields.map((field) => (item as any)[field] || '').join(','));
 
-    const csv = [headers, ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+    const csv = [headers, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
+    const a = document.createElement('a');
     a.href = url;
-    a.download = `${reportName || "relatorio"}.csv`;
+    a.download = `${reportName || 'relatorio'}.csv`;
     a.click();
   };
 
   const exportToXLSX = () => {
-    alert("Exportação XLSX será implementada com a biblioteca xlsx");
+    alert('Exportação XLSX será implementada com a biblioteca xlsx');
   };
 
   const exportToPDF = () => {
-    alert("Exportação PDF será implementada com a biblioteca jsPDF");
+    alert('Exportação PDF será implementada com a biblioteca jsPDF');
   };
 
   const reportData = showPreview ? generateReport() : [];
@@ -196,7 +191,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
           </div>
           <p className="text-sm text-default-500">
             {selectedFields.length === 0
-              ? "Todos os campos serão exibidos"
+              ? 'Todos os campos serão exibidos'
               : `${selectedFields.length} campos selecionados`}
           </p>
         </div>
@@ -209,7 +204,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
               variant="bordered"
               size="sm"
               onPress={addFilter}
-              startContent={<PlusIcon className="h-3 w-3" />}
+              startContent={<PlusIcon className="h-4 w-4" />}
             >
               Adicionar Filtro
             </Button>
@@ -221,7 +216,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
                   selectedKeys={[filter.field]}
                   onSelectionChange={(keys) => {
                     const selected = Array.from(keys)[0] as string;
-                    updateFilter(index, "field", selected);
+                    updateFilter(index, 'field', selected);
                   }}
                   className="w-[180px]"
                 >
@@ -235,7 +230,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
                   selectedKeys={[filter.operator]}
                   onSelectionChange={(keys) => {
                     const selected = Array.from(keys)[0] as string;
-                    updateFilter(index, "operator", selected);
+                    updateFilter(index, 'operator', selected);
                   }}
                   className="w-[140px]"
                 >
@@ -247,14 +242,10 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
                 <Input
                   placeholder="Valor"
                   value={filter.value}
-                  onValueChange={(value) => updateFilter(index, "value", value)}
+                  onValueChange={(value) => updateFilter(index, 'value', value)}
                   className="flex-1"
                 />
-                <Button
-                  variant="light"
-                  isIconOnly
-                  onPress={() => removeFilter(index)}
-                >
+                <Button variant="light" isIconOnly onPress={() => removeFilter(index)}>
                   <XIcon className="h-4 w-4" />
                 </Button>
               </div>
@@ -267,18 +258,16 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
           <div className="space-y-2">
             <Select
               label="Agrupar Por"
-              selectedKeys={groupBy && groupBy !== "none" ? [groupBy] : []}
+              selectedKeys={groupBy && groupBy !== 'none' ? [groupBy] : []}
               onSelectionChange={(keys) => {
                 const selected = Array.from(keys)[0] as string;
-                setGroupBy(selected === "none" ? "" : selected || "");
+                setGroupBy(selected === 'none' ? '' : selected || '');
               }}
               placeholder="Nenhum"
             >
               <SelectItem key="none">Nenhum</SelectItem>
               {availableFields.map((field) => (
-                <SelectItem key={field}>
-                  {fieldLabels[field] || field}
-                </SelectItem>
+                <SelectItem key={field}>{fieldLabels[field] || field}</SelectItem>
               ))}
             </Select>
           </div>
@@ -286,10 +275,10 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
             <label className="text-sm font-medium">Ordenar Por</label>
             <div className="flex gap-2">
               <Select
-                selectedKeys={sortBy && sortBy !== "none" ? [sortBy] : []}
+                selectedKeys={sortBy && sortBy !== 'none' ? [sortBy] : []}
                 onSelectionChange={(keys) => {
                   const selected = Array.from(keys)[0] as string;
-                  setSortBy(selected === "none" ? "" : selected || "");
+                  setSortBy(selected === 'none' ? '' : selected || '');
                 }}
                 placeholder="Nenhum"
                 className="flex-1"
@@ -297,15 +286,13 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
               >
                 <SelectItem key="none">Nenhum</SelectItem>
                 {availableFields.map((field) => (
-                  <SelectItem key={field}>
-                    {fieldLabels[field] || field}
-                  </SelectItem>
+                  <SelectItem key={field}>{fieldLabels[field] || field}</SelectItem>
                 ))}
               </Select>
               <Select
                 selectedKeys={[sortOrder]}
                 onSelectionChange={(keys) => {
-                  const selected = Array.from(keys)[0] as "asc" | "desc";
+                  const selected = Array.from(keys)[0] as 'asc' | 'desc';
                   setSortOrder(selected);
                 }}
                 className="w-[120px]"
@@ -332,9 +319,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
                   {reportData.slice(0, 10).map((item, index) => (
                     <TableRow key={index}>
                       {displayFields.map((field) => (
-                        <TableCell key={field}>
-                          {String((item as any)[field] || "-")}
-                        </TableCell>
+                        <TableCell key={field}>{String((item as any)[field] || '-')}</TableCell>
                       ))}
                     </TableRow>
                   ))}
@@ -342,8 +327,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
               </Table>
             </div>
             <p className="text-sm text-default-500">
-              Mostrando {Math.min(10, reportData.length)} de {reportData.length}{" "}
-              registros
+              Mostrando {Math.min(10, reportData.length)} de {reportData.length} registros
             </p>
           </div>
         )}
@@ -355,7 +339,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
             onPress={() => setShowPreview(!showPreview)}
             startContent={<EyeIcon className="h-4 w-4" />}
           >
-            {showPreview ? "Ocultar" : "Visualizar"} Prévia
+            {showPreview ? 'Ocultar' : 'Visualizar'} Prévia
           </Button>
           <div className="flex gap-2">
             <Button
@@ -382,7 +366,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
             <Button
               color="primary"
               onPress={() => {
-                alert("Relatório salvo com sucesso!");
+                alert('Relatório salvo com sucesso!');
               }}
             >
               Salvar Relatório

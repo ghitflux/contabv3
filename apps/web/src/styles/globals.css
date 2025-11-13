@@ -9,7 +9,7 @@
 }
 
 .dark {
-  --background: 222.2 84% 4.9%;
+  --background: 222.2 84% 10%;
   --foreground: 210 40% 98%;
 }
 
@@ -24,7 +24,15 @@ html,
 body {
   max-width: 100vw;
   overflow-x: hidden;
-  font-family: var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+  font-family: var(
+    --font-sans,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif
+  );
 }
 
 body {
@@ -73,4 +81,11 @@ a {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.3);
+}
+
+/* Override any blue colors in calendar and datepicker */
+[data-slot='calendar-cell'][data-selected='true'],
+[data-slot='calendar-cell'][data-hover='true'] {
+  background-color: #E9B63B !important;
+  color: #000000 !important;
 }
