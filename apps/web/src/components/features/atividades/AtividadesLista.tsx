@@ -17,9 +17,11 @@ import {
   TableRow,
   Badge,
 } from "@/heroui"
-import { Search, Filter, Calendar, User, Tag } from "lucide-react"
+import { Search, Filter, Calendar, User } from "lucide-react"
 import { mockActivities } from "@/lib/mocks/activities"
 import { fadeIn, staggerItem } from "@/lib/animations"
+import { StatusBadge } from "@/components/ui/StatusBadge"
+import { LabelChip } from "@/components/ui/LabelChip"
 
 export function AtividadesLista() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -160,12 +162,13 @@ export function AtividadesLista() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="flat" color="default">
-                      {getStatusLabel(activity.status)}
-                    </Badge>
+                    <StatusBadge status={activity.status as any} />
                   </TableCell>
                   <TableCell>
-                    <Badge variant="flat" className={getPriorityColor(activity.priority)}>
+                    <Badge
+                      variant="flat"
+                      className={`${getPriorityColor(activity.priority)} text-[10px] [&::before]:hidden [&::after]:hidden`}
+                    >
                       {getPriorityLabel(activity.priority)}
                     </Badge>
                   </TableCell>
@@ -184,10 +187,7 @@ export function AtividadesLista() {
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {activity.labels.map((label) => (
-                        <Badge key={label} variant="flat" size="sm" className="text-xs">
-                          <Tag className="h-3 w-3 mr-1" />
-                          {label}
-                        </Badge>
+                        <LabelChip key={label} label={label} size="sm" />
                       ))}
                     </div>
                   </TableCell>

@@ -1,13 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, forwardRef, useImperativeHandle } from "react"
 import { motion } from "framer-motion"
 import {
   Button,
   Card,
   CardBody,
   CardHeader,
-  Badge,
   Modal,
   ModalContent,
   ModalHeader,
@@ -19,13 +18,22 @@ import {
   SelectItem,
   Checkbox,
 } from "@/heroui"
-import { Plus, Calendar, User, Tag } from "lucide-react"
+import { Plus, Calendar, User } from "lucide-react"
 import { mockActivities, type Activity } from "@/lib/mocks/activities"
 import { staggerContainer, staggerItem, cardHover } from "@/lib/animations"
+import { StatusBadge } from "@/components/ui/StatusBadge"
+import { LabelChip } from "@/components/ui/LabelChip"
 
-export function AtividadesKanban() {
+export const AtividadesKanban = forwardRef<
+  { openModal: () => void },
+  {}
+>((props, ref) => {
   const [activities, setActivities] = useState<Activity[]>(mockActivities)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+
+  useImperativeHandle(ref, () => ({
+    openModal: () => setIsDialogOpen(true),
+  }))
   const [newActivity, setNewActivity] = useState<Partial<Activity>>({
     status: "todo",
     priority: "medium",
@@ -34,10 +42,26 @@ export function AtividadesKanban() {
   })
 
   const columns = [
-    { id: "todo", title: "A Fazer", color: "bg-default-100" },
-    { id: "in-progress", title: "Em Andamento", color: "bg-primary-50 dark:bg-primary-950/20" },
-    { id: "review", title: "Revisão", color: "bg-warning-50 dark:bg-warning-950/20" },
-    { id: "done", title: "Concluído", color: "bg-success-50 dark:bg-success-950/20" },
+    {
+      id: "todo",
+      title: "A Fazer",
+      color: "bg-default-100/80 dark:bg-default-100/5"
+    },
+    {
+      id: "in-progress",
+      title: "Em Andamento",
+      color: "bg-primary-100/60 dark:bg-primary-900/20"
+    },
+    {
+      id: "review",
+      title: "Revisão",
+      color: "bg-warning-100/60 dark:bg-warning-900/20"
+    },
+    {
+      id: "done",
+      title: "Concluído",
+      color: "bg-success-100/60 dark:bg-success-900/20"
+    },
   ]
 
   const getPriorityColor = (priority: string) => {
@@ -78,15 +102,6 @@ export function AtividadesKanban() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button
-          color="primary"
-          startContent={<Plus className="h-4 w-4" />}
-          onPress={() => setIsDialogOpen(true)}
-        >
-          Nova Atividade
-        </Button>
-      </div>
 
       <motion.div
         className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
@@ -99,14 +114,14 @@ export function AtividadesKanban() {
           return (
             <motion.div key={column.id} variants={staggerItem}>
               <Card className={column.color}>
-                <CardHeader>
+                <div className="px-3 pt-3 pb-0">
                   <div className="flex items-center justify-between w-full">
                     <h3 className="text-base font-semibold">{column.title}</h3>
-                    <Badge variant="flat" color="default">
+                    <span className="inline-flex items-center justify-center min-w-6 h-6 px-2 rounded-full bg-default-100 dark:bg-default-100/20 text-default-700 dark:text-default-400 text-xs font-medium">
                       {columnActivities.length}
-                    </Badge>
+                    </span>
                   </div>
-                </CardHeader>
+                </div>
                 <CardBody className="space-y-3">
                   {columnActivities.map((activity) => (
                     <motion.div
@@ -120,17 +135,13 @@ export function AtividadesKanban() {
                         <CardBody className="p-4 space-y-3">
                           <div className="flex items-start justify-between gap-2">
                             <h4 className="font-medium text-sm leading-tight">{activity.title}</h4>
-                            <Badge
-                              className={getPriorityColor(activity.priority)}
-                              variant="flat"
-                              size="sm"
-                            >
+                            <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-medium ${getPriorityColor(activity.priority)}`}>
                               {activity.priority === "high"
                                 ? "Alta"
                                 : activity.priority === "medium"
                                   ? "Média"
                                   : "Baixa"}
-                            </Badge>
+                            </span>
                           </div>
                           {activity.description && (
                             <p className="text-xs text-default-500 line-clamp-2">
@@ -139,10 +150,7 @@ export function AtividadesKanban() {
                           )}
                           <div className="flex flex-wrap gap-1">
                             {activity.labels.map((label) => (
-                              <Badge key={label} variant="flat" size="sm" className="text-xs">
-                                <Tag className="h-3 w-3 mr-1" />
-                                {label}
-                              </Badge>
+                              <LabelChip key={label} label={label} size="sm" />
                             ))}
                           </div>
                           <div className="flex items-center justify-between text-xs text-default-500">
@@ -156,14 +164,14 @@ export function AtividadesKanban() {
                             </div>
                           </div>
                           {activity.recurrence && (
-                            <Badge variant="flat" size="sm" className="text-xs">
+                            <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium bg-default-100 dark:bg-default-100/20 text-default-700 dark:text-default-400">
                               Recorrente:{" "}
                               {activity.recurrence === "daily"
                                 ? "Diária"
                                 : activity.recurrence === "weekly"
                                   ? "Semanal"
                                   : "Mensal"}
-                            </Badge>
+                            </span>
                           )}
                         </CardBody>
                       </Card>
@@ -254,5 +262,7 @@ export function AtividadesKanban() {
       </Modal>
     </div>
   )
-}
+})
+
+AtividadesKanban.displayName = "AtividadesKanban"
 
