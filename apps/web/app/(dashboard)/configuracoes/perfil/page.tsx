@@ -1,0 +1,307 @@
+'use client';
+
+import { useEffect } from 'react';
+import { Card, Button, Input, Select, SelectItem, Switch, Divider, Skeleton } from '@heroui/react';
+import { useUserSettings } from '@/hooks/useSettings';
+import { useAuth } from '@/hooks/auth/AuthContext';
+import { ThemeMode, LanguageCode } from '@/types/settings';
+import { motion } from 'framer-motion';
+import { pageTransition } from '@/lib/animations';
+import { useState, useCallback } from 'react';
+import { toast } from '@/lib/toast';
+
+export default function PerfilPage() {
+  const { user } = useAuth();
+  const { settings, isLoading, error, fetchSettings, updateSettings } = useUserSettings();
+  const [formData, setFormData] = useState({
+    theme_mode: ThemeMode.SYSTEM as ThemeMode,
+    language: LanguageCode.PT_BR as LanguageCode,
+    notify_email_enabled: true,
+    notify_obligations: true,
+    notify_financial: true,
+    notify_licenses: true,
+    notify_reports: false,
+    notify_system: true,
+    email_digest_enabled: false,
+    email_digest_frequency: 'weekly',
+    show_email_publicly: false,
+  });
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Fetch settings on mount
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
+
+  // Update form data when settings are loaded
+  useEffect(() => {
+    if (settings) {
+      setFormData({
+        theme_mode: settings.theme_mode,
+        language: settings.language,
+        notify_email_enabled: settings.notify_email_enabled,
+        notify_obligations: settings.notify_obligations,
+        notify_financial: settings.notify_financial,
+        notify_licenses: settings.notify_licenses,
+        notify_reports: settings.notify_reports,
+        notify_system: settings.notify_system,
+        email_digest_enabled: settings.email_digest_enabled,
+        email_digest_frequency: settings.email_digest_frequency,
+        show_email_publicly: settings.show_email_publicly,
+      });
+    }
+  }, [settings]);
+
+  const handleChange = useCallback(
+    (field: string, value: any) => {
+      setFormData((prev) => ({
+        ...prev,
+        [field]: value,
+      }));
+    },
+    []
+  );
+
+  const handleSave = useCallback(async () => {
+    setIsSaving(true);
+    try {
+      await updateSettings(formData);
+      toast.success('Configurações atualizadas com sucesso!');
+    } catch (error) {
+      toast.error('Erro ao atualizar configurações');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [formData, updateSettings]);
+
+  if (error) {
+    return (
+      <motion.div variants={pageTransition} initial="hidden" animate="visible" className="space-y-4">
+        <Card className="p-6 border-danger">
+          <p className="text-danger">{error}</p>
+        </Card>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div
+      variants={pageTransition}
+      initial="hidden"
+      animate="visible"
+      className="w-full space-y-6"
+    >
+      {/* Profile Header */}
+      <Card className="p-6">
+        <div className="flex items-center gap-4">
+          <div className="flex-1">
+            <h2 className="text-2xl font-bold">{user?.name}</h2>
+            <p className="text-default-500">{user?.email}</p>
+            <p className="text-sm text-default-400 capitalize mt-1">Cargo: {user?.role}</p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Preferences Section */}
+      <Card className="p-6 space-y-6">
+        <div>
+          <h3 className="text-xl font-semibold mb-4">Preferências</h3>
+          <Divider className="mb-6" />
+
+          {isLoading ? (
+            <div className="space-y-4">
+              <Skeleton className="h-12 rounded-lg" />
+              <Skeleton className="h-12 rounded-lg" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Select
+                label="Tema"
+                placeholder="Selecione o tema"
+                selectedKeys={[formData.theme_mode]}
+                onChange={(e) => handleChange('theme_mode', e.target.value)}
+                description="Escolha como a aplicação será exibida"
+              >
+                <SelectItem key={ThemeMode.LIGHT} value={ThemeMode.LIGHT}>
+                  Claro
+                </SelectItem>
+                <SelectItem key={ThemeMode.DARK} value={ThemeMode.DARK}>
+                  Escuro
+                </SelectItem>
+                <SelectItem key={ThemeMode.SYSTEM} value={ThemeMode.SYSTEM}>
+                  Sistema
+                </SelectItem>
+              </Select>
+
+              <Select
+                label="Idioma"
+                placeholder="Selecione o idioma"
+                selectedKeys={[formData.language]}
+                onChange={(e) => handleChange('language', e.target.value)}
+                description="Idioma da interface"
+              >
+                <SelectItem key={LanguageCode.PT_BR} value={LanguageCode.PT_BR}>
+                  Português (Brasil)
+                </SelectItem>
+                <SelectItem key={LanguageCode.EN_US} value={LanguageCode.EN_US}>
+                  English (US)
+                </SelectItem>
+                <SelectItem key={LanguageCode.ES_ES} value={LanguageCode.ES_ES}>
+                  Español (España)
+                </SelectItem>
+              </Select>
+            </div>
+          )}
+        </div>
+
+        <Divider />
+
+        {/* Notifications Section */}
+        <div>
+          <h3 className="text-xl font-semibold mb-4">Notificações por Email</h3>
+          <Divider className="mb-6" />
+
+          {isLoading ? (
+            <div className="space-y-4">
+              <Skeleton className="h-12 rounded-lg" />
+              <Skeleton className="h-12 rounded-lg" />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <Switch
+                isSelected={formData.notify_email_enabled}
+                onChange={(e) => handleChange('notify_email_enabled', e.target.checked)}
+                description="Receber notificações por email"
+              >
+                Habilitar notificações por email
+              </Switch>
+
+              {formData.notify_email_enabled && (
+                <>
+                  <Switch
+                    isSelected={formData.notify_obligations}
+                    onChange={(e) => handleChange('notify_obligations', e.target.checked)}
+                    description="Notificações sobre obrigações vencidas"
+                  >
+                    Notificar sobre obrigações
+                  </Switch>
+
+                  <Switch
+                    isSelected={formData.notify_financial}
+                    onChange={(e) => handleChange('notify_financial', e.target.checked)}
+                    description="Notificações sobre transações financeiras"
+                  >
+                    Notificar sobre financeiro
+                  </Switch>
+
+                  <Switch
+                    isSelected={formData.notify_licenses}
+                    onChange={(e) => handleChange('notify_licenses', e.target.checked)}
+                    description="Notificações sobre licenças vencidas"
+                  >
+                    Notificar sobre licenças
+                  </Switch>
+
+                  <Switch
+                    isSelected={formData.notify_reports}
+                    onChange={(e) => handleChange('notify_reports', e.target.checked)}
+                    description="Notificações sobre relatórios gerados"
+                  >
+                    Notificar sobre relatórios
+                  </Switch>
+
+                  <Switch
+                    isSelected={formData.notify_system}
+                    onChange={(e) => handleChange('notify_system', e.target.checked)}
+                    description="Notificações do sistema"
+                  >
+                    Notificar eventos do sistema
+                  </Switch>
+
+                  <Divider className="my-4" />
+
+                  <Switch
+                    isSelected={formData.email_digest_enabled}
+                    onChange={(e) => handleChange('email_digest_enabled', e.target.checked)}
+                    description="Receber resumo consolidado de notificações"
+                  >
+                    Habilitar resumo de email
+                  </Switch>
+
+                  {formData.email_digest_enabled && (
+                    <Select
+                      label="Frequência do resumo"
+                      selectedKeys={[formData.email_digest_frequency]}
+                      onChange={(e) => handleChange('email_digest_frequency', e.target.value)}
+                      description="Com que frequência receber o resumo"
+                    >
+                      <SelectItem key="daily" value="daily">
+                        Diário
+                      </SelectItem>
+                      <SelectItem key="weekly" value="weekly">
+                        Semanal
+                      </SelectItem>
+                      <SelectItem key="monthly" value="monthly">
+                        Mensal
+                      </SelectItem>
+                    </Select>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        <Divider />
+
+        {/* Privacy Section */}
+        <div>
+          <h3 className="text-xl font-semibold mb-4">Privacidade</h3>
+          <Divider className="mb-6" />
+
+          {isLoading ? (
+            <Skeleton className="h-12 rounded-lg" />
+          ) : (
+            <Switch
+              isSelected={formData.show_email_publicly}
+              onChange={(e) => handleChange('show_email_publicly', e.target.checked)}
+              description="Permitir que outros usuários vejam seu email"
+            >
+              Exibir email publicamente
+            </Switch>
+          )}
+        </div>
+
+        {/* Save Button */}
+        <Divider />
+        <div className="flex justify-end gap-2">
+          <Button
+            isLoading={isSaving}
+            color="primary"
+            onClick={handleSave}
+            disabled={isLoading || isSaving}
+          >
+            Salvar Configurações
+          </Button>
+        </div>
+      </Card>
+
+      {/* Password Change Section */}
+      <Card className="p-6 space-y-4">
+        <div>
+          <h3 className="text-xl font-semibold mb-2">Segurança</h3>
+          <p className="text-default-500 text-sm">Atualize sua senha regularmente para manter sua conta segura</p>
+        </div>
+        <Divider />
+
+        {/* Password Change Form - Imported Component */}
+        <div className="space-y-4">
+          <p className="text-sm text-default-600 font-semibold">Alterar Senha</p>
+          <div className="bg-default-100 p-4 rounded-lg text-center text-sm text-default-500">
+            Componente de mudança de senha disponível em uma próxima atualização
+          </div>
+        </div>
+      </Card>
+    </motion.div>
+  );
+}

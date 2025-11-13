@@ -2,6 +2,7 @@
 
 import { NotificationCenter } from '@/components/shared/NotificationCenter';
 import { ThemeSwitcher } from '@/components/shared/ThemeSwitcher';
+import { ToastContainer } from '@/components/ui/Toast';
 import {
   Avatar,
   Button,
@@ -22,14 +23,18 @@ import {
   PanelRightCloseIcon,
   PanelRightOpenIcon,
   UsersIcon,
+  SettingsIcon,
 } from '@/lib/icons';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { useAuth } from '@/hooks/auth/AuthContext';
+import { UserRole } from '@/types/user';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const pathname = usePathname();
+  const { user } = useAuth();
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
@@ -39,6 +44,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Licenças', href: '/licencas', icon: ShieldIcon },
     { name: 'Relatórios', href: '/relatorios', icon: ChartIcon },
     { name: 'Atividades', href: '/atividades', icon: ClockIcon },
+    ...(user?.role === UserRole.ADMIN
+      ? [{ name: 'Configurações', href: '/configuracoes', icon: SettingsIcon }]
+      : []),
   ];
 
   return (
@@ -144,10 +152,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </DropdownTrigger>
               <DropdownMenu aria-label="Profile Actions">
                 <DropdownItem key="profile" className="gap-2">
-                  <p className="font-semibold">Usuário Mock</p>
-                  <p className="text-sm">admin@example.com</p>
+                  <p className="font-semibold">{user?.name || 'Usuário'}</p>
+                  <p className="text-sm">{user?.email || 'user@example.com'}</p>
                 </DropdownItem>
-                <DropdownItem key="settings">Configurações</DropdownItem>
+                <DropdownItem key="settings" href="/configuracoes/perfil">
+                  Configurações
+                </DropdownItem>
                 <DropdownItem key="logout" color="danger">
                   Sair
                 </DropdownItem>
@@ -159,6 +169,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Page Content */}
         <main className="flex-1 overflow-auto p-6">{children}</main>
       </div>
+      <ToastContainer />
     </div>
   );
 }
