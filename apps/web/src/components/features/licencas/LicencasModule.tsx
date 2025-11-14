@@ -24,13 +24,7 @@ import {
   Textarea,
   useDisclosure,
 } from "@/heroui";
-import { LicenseFilters as Filters } from "./LicenseFilters";
-import { LicensesTable } from "./LicensesTable";
-import { LicenseTimeline } from "./LicenseTimeline";
 import { LicenseCreateModal } from "./LicenseCreateModal";
-import { LicensesSummaryBar } from "./LicensesSummaryBar";
-import { licensesApi } from "@/lib/api/licenses";
-import { useClients } from "@/hooks/useClients";
 import {
   License,
   LicenseCreate,
@@ -477,51 +471,46 @@ export function LicencasModule() {
       variants={pageTransition}
       className="space-y-6"
     >
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Licenças e Certificações</h1>
-        <p className="text-default-500 mt-1">Gerencie licenças, alvarás e certificações dos clientes</p>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Licenças e Certificações</h1>
+          <p className="text-default-500 mt-1">Visualize rapidamente as licenças mockadas por cliente ou escritório</p>
+        </div>
+        <Button color="primary" onPress={() => setIsCreateOpen(true)} startContent={<Plus className="h-4 w-4" />}>
+          Nova licença
+        </Button>
+      </div>
+
+      <div className="flex flex-col gap-3 lg:flex-row">
+        <Input
+          className="lg:flex-1"
+          placeholder="Buscar por cliente ou tipo de licença..."
+          value={cardSearch}
+          onChange={(event) => setCardSearch(event.target.value)}
+          startContent={<Search className="h-4 w-4 text-default-400" />}
+        />
+        <Select
+          className="w-full lg:w-56"
+          selectedKeys={[cardTypeFilter]}
+          onSelectionChange={(keys) => setCardTypeFilter(Array.from(keys)[0] as string)}
+          items={cardTypeItems}
+          aria-label="Filtrar por tipo de licença"
+        >
+          {(item) => <SelectItem key={item.key}>{item.label}</SelectItem>}
+        </Select>
+        <Select
+          className="w-full lg:w-48"
+          selectedKeys={[cardStatusFilter]}
+          onSelectionChange={(keys) => setCardStatusFilter(Array.from(keys)[0] as string)}
+          items={cardStatusItems}
+          aria-label="Filtrar por status de licença"
+        >
+          {(item) => <SelectItem key={item.key}>{item.label}</SelectItem>}
+        </Select>
       </div>
 
       <Card>
-        <CardBody className="space-y-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-default-800">Painel de Licenças</h2>
-              <p className="text-sm text-default-500">Visualize rapidamente as licenças mockadas por cliente ou escritório.</p>
-            </div>
-            <Button color="primary" onPress={() => setIsCreateOpen(true)} startContent={<Plus className="h-4 w-4" />}>
-              Nova licença
-            </Button>
-          </div>
-
-          <div className="flex flex-col gap-3 lg:flex-row">
-            <Input
-              className="lg:flex-1"
-              placeholder="Buscar por cliente ou tipo de licença..."
-              value={cardSearch}
-              onChange={(event) => setCardSearch(event.target.value)}
-              startContent={<Search className="h-4 w-4 text-default-400" />}
-            />
-            <Select
-              className="w-full lg:w-56"
-              selectedKeys={[cardTypeFilter]}
-              onSelectionChange={(keys) => setCardTypeFilter(Array.from(keys)[0] as string)}
-              items={cardTypeItems}
-              aria-label="Filtrar por tipo de licença"
-            >
-              {(item) => <SelectItem key={item.key}>{item.label}</SelectItem>}
-            </Select>
-            <Select
-              className="w-full lg:w-48"
-              selectedKeys={[cardStatusFilter]}
-              onSelectionChange={(keys) => setCardStatusFilter(Array.from(keys)[0] as string)}
-              items={cardStatusItems}
-              aria-label="Filtrar por status de licença"
-            >
-              {(item) => <SelectItem key={item.key}>{item.label}</SelectItem>}
-            </Select>
-          </div>
-
+        <CardBody>
           <Tabs selectedKey={activeTab} onSelectionChange={(key) => setActiveTab(key as TabKey)} color="primary">
             <Tab key="clients" title={`Licenças de Clientes (${filteredClientLicenses.length})`}>
               <motion.div
@@ -548,76 +537,6 @@ export function LicencasModule() {
           </Tabs>
         </CardBody>
       </Card>
-
-      {selectedClientId && (
-        <LicensesSummaryBar clientId={selectedClientId} filters={summaryFilters} refreshKey={refreshKey} />
-      )}
-
-      <Card>
-        <CardBody>
-          <Select
-            label="Selecione um Cliente"
-            placeholder="Escolha um cliente"
-            selectedKeys={selectedClientId ? [selectedClientId] : []}
-            onSelectionChange={(keys) => {
-              const selected = Array.from(keys)[0] as string;
-              setSelectedClientId(selected || "");
-              setFilters((prev) => ({ ...prev, page: 1 }));
-              setRefreshKey((prev) => prev + 1);
-            }}
-            isLoading={clientsLoading}
-          >
-            {(clients?.items || []).map((client) => (
-              <SelectItem key={client.id}>
-                {client.razao_social} - {client.cnpj}
-              </SelectItem>
-            ))}
-          </Select>
-        </CardBody>
-      </Card>
-
-      {selectedClientId ? (
-        <>
-          <Card>
-            <CardBody>
-              <Filters
-                onFilterChange={handleFilterChange}
-                onCreateClick={() => setIsCreateOpen(true)}
-              />
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Lista de Licenças</h2>
-              {error && <span className="text-danger text-sm">{error}</span>}
-            </CardHeader>
-            <Divider />
-            <CardBody>
-              {licensesLoading ? (
-                <div className="flex justify-center py-10">
-                  <Spinner size="lg" />
-                </div>
-              ) : (
-                <LicensesTable
-                  licenses={licensesData?.items ?? []}
-                  loading={licensesLoading}
-                  onViewDetails={handleViewDetails}
-                  onRenew={handleRenew}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
-              )}
-            </CardBody>
-          </Card>
-        </>
-      ) : (
-        <Card>
-          <CardBody>
-            <p className="text-default-500">Selecione um cliente para visualizar as licenças.</p>
-          </CardBody>
-        </Card>
-      )}
 
       <LicenseCreateModal
         isOpen={isCreateOpen}

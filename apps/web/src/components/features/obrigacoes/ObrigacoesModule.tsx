@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
 import { pageTransition } from "@/lib/animations";
-import { Button, Card, CardBody, Input, Progress } from '@/heroui';
+import { Button, Card, CardBody, Input, Progress, Tab, Tabs } from '@/heroui';
 import { CheckCircleIcon, DownloadIcon, RefreshIcon, SearchIcon } from '@/lib/icons';
 import { useMemo, useState } from 'react';
 
@@ -57,6 +57,12 @@ const CLIENTS: ClientInfo[] = [
   },
 ];
 
+const OFFICE_CLIENT: ClientInfo = {
+  id: 'office',
+  name: 'Contábil Consult',
+  cnpj: 'N/A',
+};
+
 const INITIAL_OBLIGATIONS: ClientObligations[] = [
   {
     clientId: '1',
@@ -94,7 +100,21 @@ const INITIAL_OBLIGATIONS: ClientObligations[] = [
       'INSS/eSocial': 'pending',
     },
   },
+  {
+    clientId: 'office',
+    obligations: {
+      DCTFWeb: 'completed',
+      'EFD-Contribuições': 'completed',
+      ECD: 'completed',
+      ECF: 'pending',
+      ISS: 'pending',
+      FGTS: 'completed',
+      'INSS/eSocial': 'completed',
+    },
+  },
 ];
+
+type TabKey = 'clients' | 'office';
 
 const statusButtonClass = 'bg-slate-900 hover:bg-slate-800 text-white';
 
@@ -120,6 +140,7 @@ export function ObrigacoesModule() {
   const [search, setSearch] = useState('');
   const [clientObligations, setClientObligations] =
     useState<ClientObligations[]>(INITIAL_OBLIGATIONS);
+  const [activeTab, setActiveTab] = useState<TabKey>('clients');
 
   const handleMarkAsCompleted = (clientId: string, obligationType: ObligationKey) => {
     setClientObligations((prev) =>
@@ -153,20 +174,31 @@ export function ObrigacoesModule() {
     );
   };
 
+  const allClients = [...CLIENTS, OFFICE_CLIENT];
+
   const filteredRows = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return clientObligations;
-    return clientObligations.filter((row) => {
-      const client = CLIENTS.find((c) => c.id === row.clientId);
+    let rows = clientObligations;
+
+    // Filter by tab
+    if (activeTab === 'clients') {
+      rows = rows.filter((row) => row.clientId !== 'office');
+    } else {
+      rows = rows.filter((row) => row.clientId === 'office');
+    }
+
+    if (!term) return rows;
+    return rows.filter((row) => {
+      const client = allClients.find((c) => c.id === row.clientId);
       if (!client) return false;
       return (
         client.name.toLowerCase().includes(term) ||
         client.cnpj.replace(/\D/g, '').includes(term.replace(/\D/g, ''))
       );
     });
-  }, [clientObligations, search]);
+  }, [clientObligations, search, activeTab, allClients]);
 
-  const getClientInfo = (id: string) => CLIENTS.find((client) => client.id === id);
+  const getClientInfo = (id: string) => allClients.find((client) => client.id === id);
 
   const renderActionCell = (row: ClientObligations, obligationType: ObligationKey) => {
     const status = row.obligations[obligationType];
@@ -253,7 +285,9 @@ export function ObrigacoesModule() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <Tabs selectedKey={activeTab} onSelectionChange={(key) => setActiveTab(key as TabKey)} color="primary">
+            <Tab key="clients" title={`Clientes (${clientObligations.filter((o) => o.clientId !== 'office').length})`}>
+              <div className="overflow-x-auto pt-4">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-default-500">
@@ -318,11 +352,85 @@ export function ObrigacoesModule() {
             </table>
           </div>
 
-          {filteredRows.length === 0 && (
-            <div className="text-center py-12 text-default-400 text-sm">
-              Nenhuma empresa encontrada para a pesquisa realizada.
-            </div>
-          )}
+              {filteredRows.length === 0 && (
+                <div className="text-center py-12 text-default-400 text-sm">
+                  Nenhuma empresa encontrada para a pesquisa realizada.
+                </div>
+              )}
+              </div>
+            </Tab>
+            <Tab key="office" title="Escritório">
+              <div className="overflow-x-auto pt-4">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-default-500">
+                  <th className="px-4 py-3 bg-default-100 rounded-l-lg">Empresa / CNPJ</th>
+                  {OBLIGATION_TYPES.map((type) => (
+                    <th
+                      key={type}
+                      className="px-3 py-3 text-center bg-default-100 whitespace-nowrap"
+                    >
+                      {type}
+                    </th>
+                  ))}
+                  <th className="px-4 py-3 text-center bg-default-100 rounded-r-lg">Progresso</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.map((row) => {
+                  const client = getClientInfo(row.clientId);
+                  if (!client) return null;
+                  const total = OBLIGATION_TYPES.length;
+                  const completed = OBLIGATION_TYPES.reduce(
+                    (acc, type) => acc + (row.obligations[type] === 'completed' ? 1 : 0),
+                    0
+                  );
+
+                  return (
+                    <tr
+                      key={row.clientId}
+                      className="border-b border-default-200 last:border-none hover:bg-default-50 transition-colors"
+                    >
+                      <td className="px-4 py-4 align-top">
+                        <div>
+                          <p className="font-medium text-sm text-foreground">{client.name}</p>
+                          <p className="text-xs text-default-500 font-mono">{client.cnpj}</p>
+                        </div>
+                      </td>
+                      {OBLIGATION_TYPES.map((type) => (
+                        <td
+                          key={`${row.clientId}-${type}`}
+                          className="px-3 py-4 text-center align-middle"
+                        >
+                          {renderActionCell(row, type)}
+                        </td>
+                      ))}
+                      <td className="px-4 py-4 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <Progress
+                            aria-label="Progresso de obrigações"
+                            value={(completed / total) * 100}
+                            size="sm"
+                            className="max-w-[120px]"
+                          />
+                          <span className="text-xs font-medium text-default-500">
+                            {completed}/{total}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+              {filteredRows.length === 0 && (
+                <div className="text-center py-12 text-default-400 text-sm">
+                  Nenhuma empresa encontrada para a pesquisa realizada.
+                </div>
+              )}
+              </div>
+            </Tab>
+          </Tabs>
         </CardBody>
       </Card>
     </motion.div>
