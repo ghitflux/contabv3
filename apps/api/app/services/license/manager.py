@@ -56,7 +56,6 @@ class LicenseService:
             expiration_date=license_data.expiration_date,
             status=initial_status,
             notes=license_data.notes,
-            document_id=license_data.document_id,
         )
 
         license_obj = await self.repo.create(license_obj)
@@ -169,8 +168,6 @@ class LicenseService:
             license_obj.expiration_date = renewal_data.new_expiration_date
         if renewal_data.new_registration_number:
             license_obj.registration_number = renewal_data.new_registration_number
-        if renewal_data.document_id:
-            license_obj.document_id = renewal_data.document_id
 
         # Update status
         if license_obj.expiration_date:
@@ -279,7 +276,6 @@ class LicenseService:
             expiration_date=license_obj.expiration_date,
             status=license_obj.status,
             notes=license_obj.notes,
-            document_id=license_obj.document_id,
             created_at=license_obj.created_at,
             updated_at=license_obj.updated_at,
             days_until_expiration=days_until_expiration,

@@ -59,7 +59,7 @@ class LicenseBase(BaseModel):
 
 class LicenseCreate(LicenseBase):
     """Schema for creating a new license"""
-    document_id: Optional[UUID] = Field(None, description="Attached document ID")
+    pass
 
 
 class LicenseUpdate(BaseModel):
@@ -71,7 +71,6 @@ class LicenseUpdate(BaseModel):
     expiration_date: Optional[date] = None
     status: Optional[LicenseStatus] = None
     notes: Optional[str] = Field(None, max_length=1000)
-    document_id: Optional[UUID] = None
 
 
 class LicenseRenewal(BaseModel):
@@ -80,14 +79,12 @@ class LicenseRenewal(BaseModel):
     new_expiration_date: Optional[date] = Field(None, description="New expiration date")
     new_registration_number: Optional[str] = Field(None, min_length=1, max_length=100, description="New registration number (if changed)")
     notes: Optional[str] = Field(None, max_length=1000, description="Renewal notes")
-    document_id: Optional[UUID] = Field(None, description="New document ID")
 
 
 class LicenseResponse(LicenseBase):
     """Schema for license response"""
     id: UUID
     status: LicenseStatus
-    document_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
 
