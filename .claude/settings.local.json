@@ -70,7 +70,18 @@
       "Bash(findstr:*)",
       "Bash(taskkill:*)",
       "Bash(timeout:*)",
-      "Bash(nul)"
+      "Bash(nul)",
+      "Bash(alembic upgrade:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker volume rm:*)",
+      "Bash(docker volume prune:*)",
+      "Bash(docker volume:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyZWFkNzMyMS03M2U0LTQ1NjUtODRkOS1jOTJkYTAzOTY0NzEiLCJyb2xlIjoiYWRtaW4iLCJleHAiOjE3NjMwNDkzNzMsImlhdCI6MTc2MzA0NzU3M30.Icm1Wm_9G-VfBnUBT6qwzcuNWnxTzGdQu-xvzA7_5QY\" curl -s -H \"Authorization: Bearer $TOKEN\" http://localhost:8000/api/v1/settings/me)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyZWFkNzMyMS03M2U0LTQ1NjUtODRkOS1jOTJkYTAzOTY0NzEiLCJyb2xlIjoiYWRtaW4iLCJleHAiOjE3NjMwNDk5ODgsImlhdCI6MTc2MzA0ODE4OH0.3qOLR8miplO1zmubjnY0NOubNRuGJ5FdJ7-awrqMQ4c\" echo \"=== Testing /api/v1/settings/me ===\" curl -s -H \"Authorization: Bearer $TOKEN\" http://localhost:8000/api/v1/settings/me echo -e \"\\n\\n=== Testing /api/v1/permissions ===\" curl -s -H \"Authorization: Bearer $TOKEN\" http://localhost:8000/api/v1/permissions)",
+      "Bash(http://localhost:8000/api/v1/settings/me)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyZWFkNzMyMS03M2U0LTQ1NjUtODRkOS1jOTJkYTAzOTY0NzEiLCJyb2xlIjoiYWRtaW4iLCJleHAiOjE3NjMwNTAyMjAsImlhdCI6MTc2MzA0ODQyMH0.lsAGuDTaafSO-DG1ISBO1oY6wGMwnP3kAd8pttqmqrE\" curl -s -H \"Authorization: Bearer $TOKEN\" http://localhost:8000/api/v1/permissions)"
     ],
     "deny": [],
     "ask": []

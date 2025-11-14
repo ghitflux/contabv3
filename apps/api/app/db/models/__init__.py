@@ -13,7 +13,9 @@ from app.db.models.notification import Notification  # noqa: F401
 from app.db.models.obligation import Obligation  # noqa: F401
 from app.db.models.obligation_event import ObligationEvent  # noqa: F401
 from app.db.models.obligation_type import ObligationType  # noqa: F401
+from app.db.models.permission import Permission, RolePermission  # noqa: F401
 from app.db.models.report import ReportFormat, ReportHistory, ReportStatus, ReportTemplate, ReportType  # noqa: F401
+from app.db.models.settings import ClientDefaultSettings, SecuritySettings, SystemSettings, ThemeMode, UserSettings  # noqa: F401
 from app.db.models.user import User, UserRole  # noqa: F401
 
 __all__ = [
@@ -37,9 +39,16 @@ __all__ = [
     "Obligation",
     "ObligationEvent",
     "ObligationType",
+    "Permission",
+    "RolePermission",
     "ReportTemplate",
     "ReportHistory",
     "ReportType",
     "ReportFormat",
     "ReportStatus",
+    "SystemSettings",
+    "UserSettings",
+    "SecuritySettings",
+    "ClientDefaultSettings",
+    "ThemeMode",
 ]

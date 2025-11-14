@@ -23,8 +23,59 @@ interface UseNotificationsReturn {
   clearAll: () => void;
 }
 
+// Mock notifications for development
+const MOCK_NOTIFICATIONS: Notification[] = [
+  {
+    id: "mock-1",
+    type: "warning",
+    title: "Obrigação vencendo",
+    message: "DCTFWeb da Tech Solutions vence em 2 dias",
+    read: false,
+    created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(), // 1 hora atrás
+    data: {
+      obligation_id: "1",
+      client_name: "Tech Solutions Ltda",
+    },
+  },
+  {
+    id: "mock-2",
+    type: "success",
+    title: "Pagamento recebido",
+    message: "Honorários de R$ 2.500,00 recebidos de Tech Solutions",
+    read: false,
+    created_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), // 3 horas atrás
+    data: {
+      amount: 2500.0,
+      client_name: "Tech Solutions Ltda",
+    },
+  },
+  {
+    id: "mock-3",
+    type: "info",
+    title: "Novo cliente cadastrado",
+    message: "Comércio ABC foi adicionado ao sistema",
+    read: true,
+    created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // 1 dia atrás
+    data: {
+      client_name: "Comércio ABC Ltda",
+    },
+  },
+  {
+    id: "mock-4",
+    type: "danger",
+    title: "Licença expirada",
+    message: "Auto de Vistoria do Corpo de Bombeiros de Comércio ABC expirou",
+    read: false,
+    created_at: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(), // 6 horas atrás
+    data: {
+      license_type: "AVCB",
+      client_name: "Comércio ABC Ltda",
+    },
+  },
+];
+
 export function useNotifications(): UseNotificationsReturn {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
 
   const handleWebSocketMessage = useCallback((message: WebSocketMessage) => {
     console.log("Received WebSocket message:", message.type);

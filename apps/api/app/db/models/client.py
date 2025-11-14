@@ -90,7 +90,7 @@ class Client(Base, UUIDMixin, TimestampMixin):
     responsavel_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     responsavel_telefone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
-    # System access credentials (encrypted) - using existing column names
+    # System access credentials (encrypted)
     senha_prefeitura: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     login_seg_desemp: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     senha_seg_desemp: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

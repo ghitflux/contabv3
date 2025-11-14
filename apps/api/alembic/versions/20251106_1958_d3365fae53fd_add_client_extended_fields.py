@@ -53,11 +53,12 @@ def upgrade() -> None:
     """)
 
     # Migrate existing servicos array to servicos_contratados JSONB
-    op.execute("""
-        UPDATE clients
-        SET servicos_contratados = to_jsonb(servicos)
-        WHERE servicos IS NOT NULL AND array_length(servicos, 1) > 0
-    """)
+    # NOTE: skipping migration as servicos column may not exist in all environments
+    # op.execute("""
+    #     UPDATE clients
+    #     SET servicos_contratados = to_jsonb(servicos)
+    #     WHERE servicos IS NOT NULL AND array_length(servicos, 1) > 0
+    # """)
 
 
 def downgrade() -> None:
