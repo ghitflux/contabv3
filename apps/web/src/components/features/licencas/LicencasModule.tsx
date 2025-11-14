@@ -217,11 +217,6 @@ type LicenseListFilters = {
 };
 
 export function LicencasModule() {
-  const [selectedClientId, setSelectedClientId] = useState<string>("");
-  const [filters, setFilters] = useState<LicenseListFilters>({ page: 1, size: 10 });
-  const [licensesData, setLicensesData] = useState<{ items: License[]; total: number; page: number; size: number } | null>(null);
-  const [licensesLoading, setLicensesLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [selectedLicense, setSelectedLicense] = useState<License | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -300,74 +295,6 @@ export function LicencasModule() {
     notes: null,
   });
 
-  const { clients, isLoading: clientsLoading, fetchClients: fetchClientsData } = useClients();
-
-  useEffect(() => {
-    fetchClientsData({ size: 100 });
-  }, [fetchClientsData]);
-
-  const fetchLicenses = useCallback(
-    async (override?: Partial<LicenseListFilters & { client_id: string }>) => {
-      const clientId = override?.client_id ?? selectedClientId;
-      if (!clientId) {
-        setLicensesData(null);
-        return;
-      }
-
-      setLicensesLoading(true);
-      setError(null);
-
-      try {
-        const response = await licensesApi.list({
-          query: override?.query ?? filters.query,
-          license_type: override?.license_type ?? filters.license_type,
-          status: override?.status ?? filters.status,
-          client_id: clientId,
-          page: override?.page ?? filters.page ?? 1,
-          size: override?.size ?? filters.size ?? 10,
-          expiring_soon: override?.expiring_soon ?? filters.expiring_soon,
-          expired: override?.expired ?? filters.expired,
-        });
-
-        setLicensesData({
-          items: response.items ?? [],
-          total: response.total ?? 0,
-          page: response.page ?? 1,
-          size: response.size ?? 10,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Erro ao carregar licenças.";
-        setError(message);
-        console.error(err);
-      } finally {
-        setLicensesLoading(false);
-      }
-    },
-    [filters, selectedClientId]
-  );
-
-  useEffect(() => {
-    fetchLicenses();
-  }, [fetchLicenses]);
-
-  const summaryFilters = useMemo(
-    () => ({
-      license_type: filters.license_type,
-      status: filters.status,
-      expiring_soon: filters.expiring_soon,
-      expired: filters.expired,
-      query: filters.query,
-    }),
-    [filters]
-  );
-
-  const handleFilterChange = (nextFilters: LicenseListFilters) => {
-    setFilters((prev) => ({
-      ...prev,
-      ...nextFilters,
-      page: 1,
-    }));
-  };
 
   const handleViewDetails = async (license: License) => {
     try {
@@ -543,7 +470,7 @@ export function LicencasModule() {
         onClose={() => setIsCreateOpen(false)}
         onSubmit={handleCreateSubmit}
         defaultClientId={OFFICE_CLIENT_ID}
-        selectedClientId={selectedClientId}
+        selectedClientId=""
       />
 
       <Modal isOpen={isDetailsOpen} onClose={onDetailsClose} size="3xl">

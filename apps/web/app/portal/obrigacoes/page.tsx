@@ -16,7 +16,6 @@ import {
   useDisclosure,
   Spinner,
 } from "@/heroui";
-import { ObligationTimeline } from "@/components/features/obrigacoes/ObligationTimeline";
 import { useAuth } from "@/hooks/auth/useAuth";
 
 interface ClientObligation {

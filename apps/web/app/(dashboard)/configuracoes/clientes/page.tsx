@@ -27,7 +27,7 @@ export default function ClientesPage() {
     if (settings) {
       setFormData({
         default_payment_day: settings.default_payment_day,
-        default_honorario_amount: settings.default_honorario_amount,
+        default_honorario_amount: settings.default_honorario_amount || undefined,
         default_obligation_template_ids: settings.default_obligation_template_ids || '',
         default_cnae_ids: settings.default_cnae_ids || '',
         default_client_status: settings.default_client_status,

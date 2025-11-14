@@ -288,69 +288,68 @@ export function ObrigacoesModule() {
           <Tabs selectedKey={activeTab} onSelectionChange={(key) => setActiveTab(key as TabKey)} color="primary">
             <Tab key="clients" title={`Clientes (${clientObligations.filter((o) => o.clientId !== 'office').length})`}>
               <div className="overflow-x-auto pt-4">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-wide text-default-500">
-                  <th className="px-4 py-3 bg-default-100 rounded-l-lg">Empresa / CNPJ</th>
-                  {OBLIGATION_TYPES.map((type) => (
-                    <th
-                      key={type}
-                      className="px-3 py-3 text-center bg-default-100 whitespace-nowrap"
-                    >
-                      {type}
-                    </th>
-                  ))}
-                  <th className="px-4 py-3 text-center bg-default-100 rounded-r-lg">Progresso</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRows.map((row) => {
-                  const client = getClientInfo(row.clientId);
-                  if (!client) return null;
-                  const total = OBLIGATION_TYPES.length;
-                  const completed = OBLIGATION_TYPES.reduce(
-                    (acc, type) => acc + (row.obligations[type] === 'completed' ? 1 : 0),
-                    0
-                  );
-
-                  return (
-                    <tr
-                      key={row.clientId}
-                      className="border-b border-default-200 last:border-none hover:bg-default-50 transition-colors"
-                    >
-                      <td className="px-4 py-4 align-top">
-                        <div>
-                          <p className="font-medium text-sm text-foreground">{client.name}</p>
-                          <p className="text-xs text-default-500 font-mono">{client.cnpj}</p>
-                        </div>
-                      </td>
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="text-left text-xs uppercase tracking-wide text-default-500">
+                      <th className="px-4 py-3 bg-default-100 rounded-l-lg">Empresa / CNPJ</th>
                       {OBLIGATION_TYPES.map((type) => (
-                        <td
-                          key={`${row.clientId}-${type}`}
-                          className="px-3 py-4 text-center align-middle"
+                        <th
+                          key={type}
+                          className="px-3 py-3 text-center bg-default-100 whitespace-nowrap"
                         >
-                          {renderActionCell(row, type)}
-                        </td>
+                          {type}
+                        </th>
                       ))}
-                      <td className="px-4 py-4 text-center">
-                        <div className="flex flex-col items-center gap-2">
-                          <Progress
-                            aria-label="Progresso de obrigações"
-                            value={(completed / total) * 100}
-                            size="sm"
-                            className="max-w-[120px]"
-                          />
-                          <span className="text-xs font-medium text-default-500">
-                            {completed}/{total}
-                          </span>
-                        </div>
-                      </td>
+                      <th className="px-4 py-3 text-center bg-default-100 rounded-r-lg">Progresso</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {filteredRows.map((row) => {
+                      const client = getClientInfo(row.clientId);
+                      if (!client) return null;
+                      const total = OBLIGATION_TYPES.length;
+                      const completed = OBLIGATION_TYPES.reduce(
+                        (acc, type) => acc + (row.obligations[type] === 'completed' ? 1 : 0),
+                        0
+                      );
+
+                      return (
+                        <tr
+                          key={row.clientId}
+                          className="border-b border-default-200 last:border-none hover:bg-default-50 transition-colors"
+                        >
+                          <td className="px-4 py-4 align-top">
+                            <div>
+                              <p className="font-medium text-sm text-foreground">{client.name}</p>
+                              <p className="text-xs text-default-500 font-mono">{client.cnpj}</p>
+                            </div>
+                          </td>
+                          {OBLIGATION_TYPES.map((type) => (
+                            <td
+                              key={`${row.clientId}-${type}`}
+                              className="px-3 py-4 text-center align-middle"
+                            >
+                              {renderActionCell(row, type)}
+                            </td>
+                          ))}
+                          <td className="px-4 py-4 text-center">
+                            <div className="flex flex-col items-center gap-2">
+                              <Progress
+                                aria-label="Progresso de obrigações"
+                                value={(completed / total) * 100}
+                                size="sm"
+                                className="max-w-[120px]"
+                              />
+                              <span className="text-xs font-medium text-default-500">
+                                {completed}/{total}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
 
               {filteredRows.length === 0 && (
                 <div className="text-center py-12 text-default-400 text-sm">
@@ -361,68 +360,68 @@ export function ObrigacoesModule() {
             </Tab>
             <Tab key="office" title="Escritório">
               <div className="overflow-x-auto pt-4">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-wide text-default-500">
-                  <th className="px-4 py-3 bg-default-100 rounded-l-lg">Empresa / CNPJ</th>
-                  {OBLIGATION_TYPES.map((type) => (
-                    <th
-                      key={type}
-                      className="px-3 py-3 text-center bg-default-100 whitespace-nowrap"
-                    >
-                      {type}
-                    </th>
-                  ))}
-                  <th className="px-4 py-3 text-center bg-default-100 rounded-r-lg">Progresso</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRows.map((row) => {
-                  const client = getClientInfo(row.clientId);
-                  if (!client) return null;
-                  const total = OBLIGATION_TYPES.length;
-                  const completed = OBLIGATION_TYPES.reduce(
-                    (acc, type) => acc + (row.obligations[type] === 'completed' ? 1 : 0),
-                    0
-                  );
-
-                  return (
-                    <tr
-                      key={row.clientId}
-                      className="border-b border-default-200 last:border-none hover:bg-default-50 transition-colors"
-                    >
-                      <td className="px-4 py-4 align-top">
-                        <div>
-                          <p className="font-medium text-sm text-foreground">{client.name}</p>
-                          <p className="text-xs text-default-500 font-mono">{client.cnpj}</p>
-                        </div>
-                      </td>
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="text-left text-xs uppercase tracking-wide text-default-500">
+                      <th className="px-4 py-3 bg-default-100 rounded-l-lg">Empresa / CNPJ</th>
                       {OBLIGATION_TYPES.map((type) => (
-                        <td
-                          key={`${row.clientId}-${type}`}
-                          className="px-3 py-4 text-center align-middle"
+                        <th
+                          key={type}
+                          className="px-3 py-3 text-center bg-default-100 whitespace-nowrap"
                         >
-                          {renderActionCell(row, type)}
-                        </td>
+                          {type}
+                        </th>
                       ))}
-                      <td className="px-4 py-4 text-center">
-                        <div className="flex flex-col items-center gap-2">
-                          <Progress
-                            aria-label="Progresso de obrigações"
-                            value={(completed / total) * 100}
-                            size="sm"
-                            className="max-w-[120px]"
-                          />
-                          <span className="text-xs font-medium text-default-500">
-                            {completed}/{total}
-                          </span>
-                        </div>
-                      </td>
+                      <th className="px-4 py-3 text-center bg-default-100 rounded-r-lg">Progresso</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {filteredRows.map((row) => {
+                      const client = getClientInfo(row.clientId);
+                      if (!client) return null;
+                      const total = OBLIGATION_TYPES.length;
+                      const completed = OBLIGATION_TYPES.reduce(
+                        (acc, type) => acc + (row.obligations[type] === 'completed' ? 1 : 0),
+                        0
+                      );
+
+                      return (
+                        <tr
+                          key={row.clientId}
+                          className="border-b border-default-200 last:border-none hover:bg-default-50 transition-colors"
+                        >
+                          <td className="px-4 py-4 align-top">
+                            <div>
+                              <p className="font-medium text-sm text-foreground">{client.name}</p>
+                              <p className="text-xs text-default-500 font-mono">{client.cnpj}</p>
+                            </div>
+                          </td>
+                          {OBLIGATION_TYPES.map((type) => (
+                            <td
+                              key={`${row.clientId}-${type}`}
+                              className="px-3 py-4 text-center align-middle"
+                            >
+                              {renderActionCell(row, type)}
+                            </td>
+                          ))}
+                          <td className="px-4 py-4 text-center">
+                            <div className="flex flex-col items-center gap-2">
+                              <Progress
+                                aria-label="Progresso de obrigações"
+                                value={(completed / total) * 100}
+                                size="sm"
+                                className="max-w-[120px]"
+                              />
+                              <span className="text-xs font-medium text-default-500">
+                                {completed}/{total}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               {filteredRows.length === 0 && (
                 <div className="text-center py-12 text-default-400 text-sm">
                   Nenhuma empresa encontrada para a pesquisa realizada.
