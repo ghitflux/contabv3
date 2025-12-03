@@ -76,9 +76,14 @@ export interface ClientBase {
   responsavel_telefone: string | null;
 
   // System access credentials (will be encrypted on backend)
+  cpf_empresa: string | null;
+  senha_gov: string | null;
   senha_prefeitura: string | null;
   login_seg_desemp: string | null;
   senha_seg_desemp: string | null;
+  email_seg_desemp: string | null;
+  senha_nfse: string | null;
+  senha_certificado_digital: string | null;
   senha_gcw_resp: string | null;
 
   // Services and licenses
@@ -116,6 +121,15 @@ export interface ClientListItem {
   tipo_empresa: TipoEmpresa;
   created_at: string;
   updated_at: string;
+
+  // System access credentials (optional in list view)
+  cpf_empresa?: string | null;
+  senha_gov?: string | null;
+  login_seg_desemp?: string | null;
+  senha_seg_desemp?: string | null;
+  email_seg_desemp?: string | null;
+  senha_nfse?: string | null;
+  senha_certificado_digital?: string | null;
 }
 
 export interface ClientFilters {

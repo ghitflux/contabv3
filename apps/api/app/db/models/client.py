@@ -91,9 +91,14 @@ class Client(Base, UUIDMixin, TimestampMixin):
     responsavel_telefone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
     # System access credentials (encrypted)
+    cpf_empresa: Mapped[Optional[str]] = mapped_column(String(14), nullable=True)
+    senha_gov: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     senha_prefeitura: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     login_seg_desemp: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     senha_seg_desemp: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    email_seg_desemp: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    senha_nfse: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    senha_certificado_digital: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     senha_gcw_resp: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # Services and licenses (JSONB arrays)

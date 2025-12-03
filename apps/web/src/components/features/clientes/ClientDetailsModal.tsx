@@ -13,6 +13,7 @@ import {
   Divider,
 } from "@heroui/react";
 import { EditIcon } from "@/lib/icons";
+import { SnippetCopy } from "@/components/ui/SnippetCopy";
 import type { Client } from "@/types/client";
 import {
   formatCNPJ,
@@ -317,6 +318,60 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
                           <div>
                             <p className="text-xs text-gray-600 mb-1">Telefone</p>
                             <Snippet symbol="" size="sm">{formatPhone(client.responsavel_telefone) || client.responsavel_telefone}</Snippet>
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  </>
+                )}
+
+                {/* Credenciais de Acesso */}
+                {(client.cpf_empresa || client.senha_gov || client.login_seg_desemp || client.senha_seg_desemp || client.email_seg_desemp || client.senha_nfse || client.senha_certificado_digital) && (
+                  <>
+                    <Divider />
+                    <section>
+                      <h3 className="text-lg font-semibold mb-3">Credenciais de Acesso</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {client.cpf_empresa && (
+                          <div className="bg-primary-50 dark:bg-primary-950 p-3 rounded-lg">
+                            <p className="text-xs text-primary-600 dark:text-primary-400 mb-1 font-medium">CPF da Empresa</p>
+                            <SnippetCopy text={client.cpf_empresa} />
+                          </div>
+                        )}
+                        {client.senha_gov && (
+                          <div className="bg-secondary-50 dark:bg-secondary-950 p-3 rounded-lg">
+                            <p className="text-xs text-secondary-600 dark:text-secondary-400 mb-1 font-medium">Senha GOV.BR</p>
+                            <SnippetCopy text={client.senha_gov} hideByDefault />
+                          </div>
+                        )}
+                        {client.login_seg_desemp && (
+                          <div className="bg-success-50 dark:bg-success-950 p-3 rounded-lg">
+                            <p className="text-xs text-success-600 dark:text-success-400 mb-1 font-medium">Login Seguro Desemprego</p>
+                            <SnippetCopy text={client.login_seg_desemp} />
+                          </div>
+                        )}
+                        {client.senha_seg_desemp && (
+                          <div className="bg-success-50 dark:bg-success-950 p-3 rounded-lg">
+                            <p className="text-xs text-success-600 dark:text-success-400 mb-1 font-medium">Senha Seguro Desemprego</p>
+                            <SnippetCopy text={client.senha_seg_desemp} hideByDefault />
+                          </div>
+                        )}
+                        {client.email_seg_desemp && (
+                          <div className="bg-success-50 dark:bg-success-950 p-3 rounded-lg">
+                            <p className="text-xs text-success-600 dark:text-success-400 mb-1 font-medium">E-mail Seguro Desemprego</p>
+                            <SnippetCopy text={client.email_seg_desemp} />
+                          </div>
+                        )}
+                        {client.senha_nfse && (
+                          <div className="bg-warning-50 dark:bg-warning-950 p-3 rounded-lg">
+                            <p className="text-xs text-warning-600 dark:text-warning-400 mb-1 font-medium">Senha NFS-e</p>
+                            <SnippetCopy text={client.senha_nfse} hideByDefault />
+                          </div>
+                        )}
+                        {client.senha_certificado_digital && (
+                          <div className="bg-danger-50 dark:bg-danger-950 p-3 rounded-lg">
+                            <p className="text-xs text-danger-600 dark:text-danger-400 mb-1 font-medium">Senha Certificado Digital</p>
+                            <SnippetCopy text={client.senha_certificado_digital} hideByDefault />
                           </div>
                         )}
                       </div>

@@ -68,13 +68,31 @@ class ClientBase(BaseSchema):
     # Tax info
     regime_tributario: RegimeTributario
     tipo_empresa: TipoEmpresa
+    tipos_empresa: Optional[list[str]] = None
+    codigo_simples: Optional[str] = Field(None, max_length=50)
     data_abertura: Optional[date] = None
+    inicio_escritorio: Optional[date] = None
+
+    # Services and licenses
+    servicos_contratados: Optional[list[str]] = None
+    licencas_necessarias: Optional[list[str]] = None
 
     # Responsible person
     responsavel_nome: Optional[str] = Field(None, max_length=255)
     responsavel_cpf: Optional[str] = Field(None, max_length=14)
     responsavel_email: Optional[EmailStr] = None
     responsavel_telefone: Optional[str] = Field(None, max_length=20)
+
+    # System access credentials (will be encrypted on backend)
+    cpf_empresa: Optional[str] = Field(None, max_length=14)
+    senha_gov: Optional[str] = Field(None, max_length=255)
+    senha_prefeitura: Optional[str] = Field(None, max_length=255)
+    login_seg_desemp: Optional[str] = Field(None, max_length=255)
+    senha_seg_desemp: Optional[str] = Field(None, max_length=255)
+    email_seg_desemp: Optional[str] = Field(None, max_length=255)
+    senha_nfse: Optional[str] = Field(None, max_length=255)
+    senha_certificado_digital: Optional[str] = Field(None, max_length=255)
+    senha_gcw_resp: Optional[str] = Field(None, max_length=255)
 
     # Notes
     observacoes: Optional[str] = None
@@ -131,12 +149,30 @@ class ClientUpdate(BaseSchema):
 
     regime_tributario: Optional[RegimeTributario] = None
     tipo_empresa: Optional[TipoEmpresa] = None
+    tipos_empresa: Optional[list[str]] = None
+    codigo_simples: Optional[str] = Field(None, max_length=50)
     data_abertura: Optional[date] = None
+    inicio_escritorio: Optional[date] = None
+
+    # Services and licenses
+    servicos_contratados: Optional[list[str]] = None
+    licencas_necessarias: Optional[list[str]] = None
 
     responsavel_nome: Optional[str] = Field(None, max_length=255)
     responsavel_cpf: Optional[str] = Field(None, max_length=14)
     responsavel_email: Optional[EmailStr] = None
     responsavel_telefone: Optional[str] = Field(None, max_length=20)
+
+    # System access credentials
+    cpf_empresa: Optional[str] = Field(None, max_length=14)
+    senha_gov: Optional[str] = Field(None, max_length=255)
+    senha_prefeitura: Optional[str] = Field(None, max_length=255)
+    login_seg_desemp: Optional[str] = Field(None, max_length=255)
+    senha_seg_desemp: Optional[str] = Field(None, max_length=255)
+    email_seg_desemp: Optional[str] = Field(None, max_length=255)
+    senha_nfse: Optional[str] = Field(None, max_length=255)
+    senha_certificado_digital: Optional[str] = Field(None, max_length=255)
+    senha_gcw_resp: Optional[str] = Field(None, max_length=255)
 
     observacoes: Optional[str] = None
     status: Optional[ClientStatus] = None
@@ -161,6 +197,15 @@ class ClientListItem(TimestampSchema):
     honorarios_mensais: float
     regime_tributario: RegimeTributario
     tipo_empresa: TipoEmpresa
+
+    # System access credentials (optional in list view)
+    cpf_empresa: Optional[str] = None
+    senha_gov: Optional[str] = None
+    login_seg_desemp: Optional[str] = None
+    senha_seg_desemp: Optional[str] = None
+    email_seg_desemp: Optional[str] = None
+    senha_nfse: Optional[str] = None
+    senha_certificado_digital: Optional[str] = None
 
 
 class ClientDraftCreate(BaseSchema):
@@ -202,9 +247,14 @@ class ClientDraftCreate(BaseSchema):
     responsavel_email: Optional[str] = None
     responsavel_telefone: Optional[str] = None
 
+    cpf_empresa: Optional[str] = None
+    senha_gov: Optional[str] = None
     senha_prefeitura: Optional[str] = None
     login_seg_desemp: Optional[str] = None
     senha_seg_desemp: Optional[str] = None
+    email_seg_desemp: Optional[str] = None
+    senha_nfse: Optional[str] = None
+    senha_certificado_digital: Optional[str] = None
     senha_gcw_resp: Optional[str] = None
 
     servicos_contratados: Optional[list[str]] = None

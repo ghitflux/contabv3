@@ -39,6 +39,8 @@ const clientFormSchema = z.object({
   razao_social: z.string().min(1, "Razão social é obrigatória"),
   nome_fantasia: z.string().nullable(),
   cnpj: z.string().min(14, "CNPJ inválido"),
+  cpf_empresa: z.string().nullable(),
+  senha_gov: z.string().nullable(),
   inscricao_estadual: z.string().nullable(),
   inscricao_municipal: z.string().nullable(),
   codigo_simples: z.string().nullable(),
@@ -72,6 +74,9 @@ const clientFormSchema = z.object({
   senha_prefeitura: z.string().nullable(),
   login_seg_desemp: z.string().nullable(),
   senha_seg_desemp: z.string().nullable(),
+  email_seg_desemp: z.string().nullable(),
+  senha_nfse: z.string().nullable(),
+  senha_certificado_digital: z.string().nullable(),
   senha_gcw_resp: z.string().nullable(),
 
   servicos_contratados: z.array(z.string()),
@@ -111,6 +116,8 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
           razao_social: "",
           nome_fantasia: null,
           cnpj: "",
+          cpf_empresa: null,
+          senha_gov: null,
           inscricao_estadual: null,
           inscricao_municipal: null,
           codigo_simples: null,
@@ -138,6 +145,9 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
           senha_prefeitura: null,
           login_seg_desemp: null,
           senha_seg_desemp: null,
+          email_seg_desemp: null,
+          senha_nfse: null,
+          senha_certificado_digital: null,
           senha_gcw_resp: null,
           servicos_contratados: [],
           licencas_necessarias: [],
@@ -227,6 +237,95 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
                           isRequired
                           isInvalid={!!errors.cnpj}
                           errorMessage={errors.cnpj?.message}
+                        />
+                      )}
+                    />
+                    <Controller
+                      name="cpf_empresa"
+                      control={control}
+                      render={({ field }) => (
+                        <Input
+                          {...field}
+                          value={field.value || ""}
+                          label="CPF"
+                          placeholder="000.000.000-00"
+                        />
+                      )}
+                    />
+                    <Controller
+                      name="senha_gov"
+                      control={control}
+                      render={({ field }) => (
+                        <Input
+                          {...field}
+                          value={field.value || ""}
+                          type="password"
+                          label="Senha do GOV"
+                          placeholder="Digite a senha do GOV"
+                        />
+                      )}
+                    />
+                    <Controller
+                      name="login_seg_desemp"
+                      control={control}
+                      render={({ field }) => (
+                        <Input
+                          {...field}
+                          value={field.value || ""}
+                          label="Login Seguro Desemprego"
+                          placeholder="Digite o login"
+                        />
+                      )}
+                    />
+                    <Controller
+                      name="senha_seg_desemp"
+                      control={control}
+                      render={({ field }) => (
+                        <Input
+                          {...field}
+                          value={field.value || ""}
+                          type="password"
+                          label="Senha Seguro Desemprego"
+                          placeholder="Digite a senha"
+                        />
+                      )}
+                    />
+                    <Controller
+                      name="email_seg_desemp"
+                      control={control}
+                      render={({ field }) => (
+                        <Input
+                          {...field}
+                          value={field.value || ""}
+                          type="email"
+                          label="E-mail Seguro Desemprego"
+                          placeholder="email@exemplo.com"
+                        />
+                      )}
+                    />
+                    <Controller
+                      name="senha_nfse"
+                      control={control}
+                      render={({ field }) => (
+                        <Input
+                          {...field}
+                          value={field.value || ""}
+                          type="password"
+                          label="Senha da NFS-e"
+                          placeholder="Digite a senha da NFS-e"
+                        />
+                      )}
+                    />
+                    <Controller
+                      name="senha_certificado_digital"
+                      control={control}
+                      render={({ field }) => (
+                        <Input
+                          {...field}
+                          value={field.value || ""}
+                          type="password"
+                          label="Senha do Certificado Digital"
+                          placeholder="Digite a senha do certificado"
                         />
                       )}
                     />

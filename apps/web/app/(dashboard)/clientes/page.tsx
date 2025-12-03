@@ -8,13 +8,14 @@ import type { ClientListItem, ClientStatus, ClientCreate, RegimeTributario } fro
 import { formatCNPJ, getRegimeLabel, getStatusLabel } from '@/types/client';
 import { useEffect, useState } from 'react';
 import { SearchInput } from '@/components/ui/SearchInput';
-import { PlusIcon } from '@/lib/icons';
+import { PlusIcon, EyeIcon } from '@/lib/icons';
 import { ClientFormModal } from '@/components/features/clientes/ClientFormModal';
 import { ClientDetailsModal } from '@/components/features/clientes/ClientDetailsModal';
 import { ClientKPIs } from '@/components/features/clientes/ClientKPIs';
 import { ColumnFilter } from '@/components/features/clientes/ColumnFilter';
 import { Can } from '@/components/shared/Can';
 import { UserRole } from '@/types/user';
+import { SnippetCopy } from '@/components/ui/SnippetCopy';
 
 export default function ClientesPage() {
   const { clients, selectedClient, isLoading, fetchClients, fetchClientById, createClient, setSelectedClient } = useClients();
@@ -115,7 +116,7 @@ export default function ClientesPage() {
       animate="visible"
       exit="exit"
       variants={pageTransition}
-      className="space-y-6"
+      className="space-y-6 max-w-full overflow-hidden"
     >
       <div className="flex items-center justify-between">
         <div>
@@ -227,105 +228,169 @@ export default function ClientesPage() {
             </div>
           ) : (
             <>
-              <Table aria-label="Tabela de clientes" removeWrapper>
-                <TableHeader>
-                  <TableColumn>
-                    <div className="flex items-center gap-2">
-                      RAZÃO SOCIAL
-                      <ColumnFilter
-                        type="text"
-                        value={searchQuery}
-                        onChange={setSearchQuery}
-                        placeholder="Filtrar razão social"
-                      />
-                    </div>
-                  </TableColumn>
-                  <TableColumn>
-                    <div className="flex items-center gap-2">
-                      CNPJ
-                      <ColumnFilter
-                        type="text"
-                        value={cnpjFilter}
-                        onChange={setCnpjFilter}
-                        placeholder="Filtrar CNPJ"
-                      />
-                    </div>
-                  </TableColumn>
-                  <TableColumn>
-                    <div className="flex items-center gap-2">
-                      REGIME
-                      <ColumnFilter
-                        type="select"
-                        value={regimeFilter}
-                        onChange={setRegimeFilter}
-                        options={[
-                          { label: 'Simples Nacional', value: 'simples_nacional' },
-                          { label: 'Lucro Presumido', value: 'lucro_presumido' },
-                          { label: 'Lucro Real', value: 'lucro_real' },
-                          { label: 'MEI', value: 'mei' },
-                        ]}
-                        placeholder="Filtrar regime"
-                      />
-                    </div>
-                  </TableColumn>
-                  <TableColumn>
-                    <div className="flex items-center gap-2">
-                      HONORÁRIOS
-                      <ColumnFilter
-                        type="range"
-                        value={honorariosRange}
-                        onChange={setHonorariosRange}
-                        min={0}
-                        max={10000}
-                      />
-                    </div>
-                  </TableColumn>
-                  <TableColumn>STATUS</TableColumn>
-                  <TableColumn>AÇÕES</TableColumn>
-                </TableHeader>
-                <TableBody emptyContent="Nenhum cliente encontrado">
-                  {filteredClients.map((client) => (
-                    <TableRow key={client.id}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{client.razao_social}</p>
-                          {client.nome_fantasia && (
-                            <p className="text-xs text-default-500">{client.nome_fantasia}</p>
+              <div className="overflow-x-auto">
+                <Table aria-label="Tabela de clientes" removeWrapper>
+                  <TableHeader>
+                    <TableColumn>
+                      <div className="flex items-center gap-2">
+                        RAZÃO SOCIAL
+                        <ColumnFilter
+                          type="text"
+                          value={searchQuery}
+                          onChange={setSearchQuery}
+                          placeholder="Filtrar razão social"
+                        />
+                      </div>
+                    </TableColumn>
+                    <TableColumn>
+                      <div className="flex items-center gap-2">
+                        CNPJ
+                        <ColumnFilter
+                          type="text"
+                          value={cnpjFilter}
+                          onChange={setCnpjFilter}
+                          placeholder="Filtrar CNPJ"
+                        />
+                      </div>
+                    </TableColumn>
+                    <TableColumn className="min-w-[180px]">
+                      <div className="flex items-center gap-1">
+                        <Chip size="sm" variant="flat" color="primary" className="text-xs">CPF</Chip>
+                      </div>
+                    </TableColumn>
+                    <TableColumn className="min-w-[180px]">
+                      <div className="flex items-center gap-1">
+                        <Chip size="sm" variant="flat" color="secondary" className="text-xs">SENHA GOV</Chip>
+                      </div>
+                    </TableColumn>
+                    <TableColumn className="min-w-[200px]">
+                      <div className="flex items-center gap-1">
+                        <Chip size="sm" variant="flat" color="success" className="text-xs">EMAIL SEG. DESEMPREGO</Chip>
+                      </div>
+                    </TableColumn>
+                    <TableColumn className="min-w-[180px]">
+                      <div className="flex items-center gap-1">
+                        <Chip size="sm" variant="flat" color="warning" className="text-xs">SENHA NFS-e</Chip>
+                      </div>
+                    </TableColumn>
+                    <TableColumn className="min-w-[200px]">
+                      <div className="flex items-center gap-1">
+                        <Chip size="sm" variant="flat" color="danger" className="text-xs">SENHA CERT. DIGITAL</Chip>
+                      </div>
+                    </TableColumn>
+                    <TableColumn>
+                      <div className="flex items-center gap-2">
+                        REGIME
+                        <ColumnFilter
+                          type="select"
+                          value={regimeFilter}
+                          onChange={setRegimeFilter}
+                          options={[
+                            { label: 'Simples Nacional', value: 'simples_nacional' },
+                            { label: 'Lucro Presumido', value: 'lucro_presumido' },
+                            { label: 'Lucro Real', value: 'lucro_real' },
+                            { label: 'MEI', value: 'mei' },
+                          ]}
+                          placeholder="Filtrar regime"
+                        />
+                      </div>
+                    </TableColumn>
+                    <TableColumn>
+                      <div className="flex items-center gap-2">
+                        HONORÁRIOS
+                        <ColumnFilter
+                          type="range"
+                          value={honorariosRange}
+                          onChange={setHonorariosRange}
+                          min={0}
+                          max={10000}
+                        />
+                      </div>
+                    </TableColumn>
+                    <TableColumn>STATUS</TableColumn>
+                    <TableColumn>AÇÕES</TableColumn>
+                  </TableHeader>
+                  <TableBody emptyContent="Nenhum cliente encontrado">
+                    {filteredClients.map((client) => (
+                      <TableRow key={client.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{client.razao_social}</p>
+                            {client.nome_fantasia && (
+                              <p className="text-xs text-default-500">{client.nome_fantasia}</p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <code className="text-xs">{formatCNPJ(client.cnpj)}</code>
+                        </TableCell>
+                        <TableCell>
+                          {client.cpf_empresa ? (
+                            <SnippetCopy text={client.cpf_empresa} />
+                          ) : (
+                            <span className="text-default-400 text-xs">-</span>
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <code className="text-xs">{formatCNPJ(client.cnpj)}</code>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm">{getRegimeLabel(client.regime_tributario)}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-medium">
-                          {client.honorarios_mensais.toLocaleString('pt-BR', {
-                            style: 'currency',
-                            currency: 'BRL',
-                          })}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Chip size="sm" color={statusColors[client.status]} variant="flat">
-                          {getStatusLabel(client.status)}
-                        </Chip>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          size="sm"
-                          variant="light"
-                          onPress={() => handleViewDetails(client)}
-                        >
-                          Ver detalhes
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                        </TableCell>
+                        <TableCell>
+                          {client.senha_gov ? (
+                            <SnippetCopy text={client.senha_gov} hideByDefault />
+                          ) : (
+                            <span className="text-default-400 text-xs">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {client.email_seg_desemp ? (
+                            <SnippetCopy text={client.email_seg_desemp} />
+                          ) : (
+                            <span className="text-default-400 text-xs">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {client.senha_nfse ? (
+                            <SnippetCopy text={client.senha_nfse} hideByDefault />
+                          ) : (
+                            <span className="text-default-400 text-xs">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {client.senha_certificado_digital ? (
+                            <SnippetCopy text={client.senha_certificado_digital} hideByDefault />
+                          ) : (
+                            <span className="text-default-400 text-xs">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">{getRegimeLabel(client.regime_tributario)}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium">
+                            {client.honorarios_mensais.toLocaleString('pt-BR', {
+                              style: 'currency',
+                              currency: 'BRL',
+                            })}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Chip size="sm" color={statusColors[client.status]} variant="flat">
+                            {getStatusLabel(client.status)}
+                          </Chip>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="light"
+                            isIconOnly
+                            onPress={() => handleViewDetails(client)}
+                            aria-label="Ver detalhes"
+                          >
+                            <EyeIcon className="h-5 w-5" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
 
               {/* Pagination */}
               {clients && clients.pages > 1 && (
