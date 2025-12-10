@@ -13,6 +13,8 @@ from app.db.models.user import User
 from app.schemas.auth import (
     LoginRequest,
     LogoutRequest,
+    PasswordResetConfirm,
+    PasswordResetRequest,
     RefreshRequest,
     RefreshResponse,
     TokenResponse,
@@ -113,3 +115,47 @@ async def logout(
     auth_service = AuthService(db)
     result = await auth_service.logout(current_user)
     return ResponseSchema(**result)
+
+
+@router.post("/password-reset", response_model=ResponseSchema, status_code=status.HTTP_200_OK)
+async def request_password_reset(
+    request: PasswordResetRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ResponseSchema:
+    """
+    Request a password reset token. A stubbed token is returned for development.
+
+    Args:
+        request: Password reset request with user email
+        db: Database session
+    """
+    auth_service = AuthService(db)
+    token = await auth_service.request_password_reset(request.email)
+
+    # In production, this would be emailed. We return it to ease development/testing.
+    return ResponseSchema(
+        success=True,
+        message="If the email is registered, reset instructions have been sent.",
+        data={"reset_token": token} if token else None,
+    )
+
+
+@router.post("/password-reset/confirm", response_model=ResponseSchema, status_code=status.HTTP_200_OK)
+async def confirm_password_reset(
+    request: PasswordResetConfirm,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ResponseSchema:
+    """
+    Confirm password reset with token and new password.
+
+    Args:
+        request: Reset confirmation payload
+        db: Database session
+    """
+    auth_service = AuthService(db)
+    await auth_service.confirm_password_reset(request.token, request.new_password)
+
+    return ResponseSchema(
+        success=True,
+        message="Password reset successfully"
+    )

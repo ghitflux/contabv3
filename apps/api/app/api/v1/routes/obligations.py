@@ -77,7 +77,7 @@ async def list_obligations(
     if current_user.role == UserRole.CLIENTE:
         # Get client associated with this user
         client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id)
+        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
         if not client:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -125,7 +125,7 @@ async def get_obligation(
     # Check access: clients can only see their own
     if current_user.role == UserRole.CLIENTE:
         client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id)
+        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
         if not client or obligation.client_id != client.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -377,7 +377,7 @@ async def get_obligation_events(
     # Check access: clients can only see their own
     if current_user.role == UserRole.CLIENTE:
         client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id)
+        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
         if not client or obligation.client_id != client.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -413,7 +413,7 @@ async def get_upcoming_obligations(
     # Filter for clients
     if current_user.role == UserRole.CLIENTE:
         client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id)
+        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
         if client:
             obligations = [o for o in obligations if o.client_id == client.id]
         else:
@@ -447,7 +447,7 @@ async def get_overdue_obligations(
     # Filter for clients
     if current_user.role == UserRole.CLIENTE:
         client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id)
+        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
         if client:
             obligations = [o for o in obligations if o.client_id == client.id]
         else:

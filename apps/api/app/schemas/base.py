@@ -2,7 +2,7 @@
 Base schemas for the application.
 """
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -30,6 +30,7 @@ class ResponseSchema(BaseSchema):
 
     success: bool = True
     message: Optional[str] = None
+    data: Optional[dict[str, Any]] = None
 
 
 class PaginationParams(BaseSchema):

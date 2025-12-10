@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models.client import Client, ClientStatus
+from app.db.models.client import Client, ClientStatus, RegimeTributario, TipoEmpresa
 from app.db.repositories.base import BaseRepository
 
 
@@ -73,6 +73,8 @@ class ClientRepository(BaseRepository[Client]):
         query: Optional[str] = None,
         status: Optional[ClientStatus] = None,
         starts_with: Optional[str] = None,
+        regime_tributario: Optional[RegimeTributario] = None,
+        tipo_empresa: Optional[TipoEmpresa] = None,
         skip: int = 0,
         limit: int = 10,
     ) -> tuple[list[Client], int]:
@@ -110,6 +112,12 @@ class ClientRepository(BaseRepository[Client]):
         # Apply starts_with filter
         if starts_with and len(starts_with) == 1:
             filters.append(Client.razao_social.ilike(f"{starts_with}%"))
+
+        if regime_tributario:
+            filters.append(Client.regime_tributario == regime_tributario)
+
+        if tipo_empresa:
+            filters.append(Client.tipo_empresa == tipo_empresa)
 
         # Count query
         count_query = select(func.count()).select_from(Client).where(and_(*filters))
@@ -186,12 +194,13 @@ class ClientRepository(BaseRepository[Client]):
         )
         return list(result.scalars().all())
 
-    async def get_by_user_id(self, user_id: UUID) -> Client | None:
+    async def get_by_user_id(self, user_id: UUID, user_email: str | None = None) -> Client | None:
         """
         Get client associated with a user account.
 
         Args:
             user_id: User ID
+            user_email: Optional email fallback for legacy data
 
         Returns:
             Client or None if not found
@@ -204,4 +213,17 @@ class ClientRepository(BaseRepository[Client]):
                 )
             )
         )
-        return result.scalar_one_or_none()
+        client = result.scalar_one_or_none()
+
+        if not client and user_email:
+            result = await self.session.execute(
+                select(Client).where(
+                    and_(
+                        Client.email == user_email,
+                        Client.deleted_at.is_(None)
+                    )
+                )
+            )
+            client = result.scalar_one_or_none()
+
+        return client

@@ -37,6 +37,55 @@ export function ClientsTable({ clients, isLoading = false }: ClientsTableProps) 
         render: (client) => <SnippetCopy text={client.cnpj} />,
       },
       {
+        key: 'cpf_empresa',
+        label: 'CPF',
+        render: (client) => (
+          client.cpf_empresa ? <SnippetCopy text={client.cpf_empresa} /> : <span className="text-default-400">-</span>
+        ),
+      },
+      {
+        key: 'senha_gov',
+        label: 'Senha GOV',
+        render: (client) => (
+          client.senha_gov ? <SnippetCopy text={client.senha_gov} hideByDefault /> : <span className="text-default-400">-</span>
+        ),
+      },
+      {
+        key: 'login_seg_desemp',
+        label: 'Login Seg. Desemprego',
+        render: (client) => (
+          client.login_seg_desemp ? <SnippetCopy text={client.login_seg_desemp} /> : <span className="text-default-400">-</span>
+        ),
+      },
+      {
+        key: 'senha_seg_desemp',
+        label: 'Senha Seg. Desemprego',
+        render: (client) => (
+          client.senha_seg_desemp ? <SnippetCopy text={client.senha_seg_desemp} hideByDefault /> : <span className="text-default-400">-</span>
+        ),
+      },
+      {
+        key: 'email_seg_desemp',
+        label: 'E-mail Seg. Desemprego',
+        render: (client) => (
+          client.email_seg_desemp ? <SnippetCopy text={client.email_seg_desemp} /> : <span className="text-default-400">-</span>
+        ),
+      },
+      {
+        key: 'senha_nfse',
+        label: 'Senha NFS-e',
+        render: (client) => (
+          client.senha_nfse ? <SnippetCopy text={client.senha_nfse} hideByDefault /> : <span className="text-default-400">-</span>
+        ),
+      },
+      {
+        key: 'senha_certificado_digital',
+        label: 'Senha Cert. Digital',
+        render: (client) => (
+          client.senha_certificado_digital ? <SnippetCopy text={client.senha_certificado_digital} hideByDefault /> : <span className="text-default-400">-</span>
+        ),
+      },
+      {
         key: 'email',
         label: 'Email',
         render: (client) => <SnippetCopy text={client.email} />,

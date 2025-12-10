@@ -24,10 +24,10 @@ async def reset_admin_password():
                 return
 
             # Set new password
-            user.set_password("admin123")
+            user.set_password("Admin123!")
             await session.commit()
 
-            print("✓ Admin password has been reset to: admin123")
+            print("✓ Admin password has been reset to: Admin123!")
             print(f"✓ Hash: {user.password_hash}")
 
         except Exception as e:

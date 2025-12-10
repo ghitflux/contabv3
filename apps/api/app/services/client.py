@@ -8,8 +8,11 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models.client import Client
+from app.core.security import encrypt_field
+from app.db.models.client import Client, ClientStatus, RegimeTributario, TipoEmpresa
 from app.db.repositories.client import ClientRepository
+from app.db.repositories.settings import SystemSettingsRepository
+from app.db.repositories.user import UserRepository
 from app.schemas.client import ClientCreate, ClientDraftCreate, ClientListItem, ClientResponse, ClientUpdate
 
 
@@ -25,6 +28,61 @@ class ClientService:
         """
         self.session = session
         self.repo = ClientRepository(session)
+
+    def _encrypt_sensitive_fields(self, data: dict) -> dict:
+        """Encrypt sensitive credential fields in-place."""
+        sensitive_keys = [
+            "senha_gov",
+            "senha_prefeitura",
+            "senha_seg_desemp",
+            "senha_nfse",
+            "senha_certificado_digital",
+            "senha_gcw_resp",
+        ]
+
+        for key in sensitive_keys:
+            if key in data:
+                data[key] = encrypt_field(data[key])
+
+        return data
+
+    async def _validate_user_link(self, user_id: UUID | None, current_client_id: UUID | None = None) -> None:
+        """
+        Ensure a user exists and is not already linked to another client.
+
+        Args:
+            user_id: User to link
+            current_client_id: Current client (for updates)
+        """
+        if not user_id:
+            return
+
+        user_repo = UserRepository(self.session)
+        user = await user_repo.get_by_id(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Associated user not found",
+            )
+
+        existing_client = await self.repo.get_by_user_id(user_id)
+        if existing_client and existing_client.id != current_client_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="User already linked to another client",
+            )
+
+    async def _ensure_drafts_enabled(self) -> None:
+        """Check if client drafts feature is enabled in system settings."""
+        settings_repo = SystemSettingsRepository(self.session)
+        settings = await settings_repo.get_settings()
+        enabled = settings.enable_client_drafts if settings else True
+
+        if not enabled:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Client drafts are disabled",
+            )
 
     async def create_client(self, client_data: ClientCreate) -> ClientResponse:
         """
@@ -46,8 +104,12 @@ class ClientService:
                 detail="CNPJ already registered"
             )
 
+        payload = client_data.model_dump()
+        await self._validate_user_link(payload.get("user_id"))
+        payload = self._encrypt_sensitive_fields(payload)
+
         # Create client
-        client = Client(**client_data.model_dump())
+        client = Client(**payload)
         client = await self.repo.create(client)
         await self.session.commit()
         await self.session.refresh(client)
@@ -137,6 +199,9 @@ class ClientService:
 
         # Update fields
         update_data = client_data.model_dump(exclude_unset=True)
+        await self._validate_user_link(update_data.get("user_id"), current_client_id=client_id)
+        update_data = self._encrypt_sensitive_fields(update_data)
+
         for field, value in update_data.items():
             setattr(client, field, value)
 
@@ -172,6 +237,8 @@ class ClientService:
         query: Optional[str] = None,
         status: Optional[str] = None,
         starts_with: Optional[str] = None,
+        regime_tributario: Optional[str] = None,
+        tipo_empresa: Optional[str] = None,
         page: int = 1,
         size: int = 10,
     ) -> dict:
@@ -193,16 +260,37 @@ class ClientService:
         # Convert status string to enum
         status_enum = None
         if status:
-            from app.db.models.client import ClientStatus
             try:
                 status_enum = ClientStatus(status)
             except ValueError:
                 pass
 
+        regime_enum = None
+        if regime_tributario:
+            try:
+                regime_enum = RegimeTributario(regime_tributario)
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid regime_tributario: {regime_tributario}",
+                )
+
+        tipo_enum = None
+        if tipo_empresa:
+            try:
+                tipo_enum = TipoEmpresa(tipo_empresa)
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid tipo_empresa: {tipo_empresa}",
+                )
+
         clients, total = await self.repo.list_with_filters(
             query=query,
             status=status_enum,
             starts_with=starts_with,
+            regime_tributario=regime_enum,
+            tipo_empresa=tipo_enum,
             skip=skip,
             limit=size,
         )
@@ -255,17 +343,18 @@ class ClientService:
             - total_revenue: Total monthly revenue
         """
         from sqlalchemy import func, select
-        from app.db.models.client import Client, ClientStatus
+
+        active_filter = Client.deleted_at.is_(None)
 
         # Total clients
-        total_query = select(func.count(Client.id)).where(Client.is_deleted == False)
+        total_query = select(func.count(Client.id)).where(active_filter)
         total_result = await self.session.execute(total_query)
         total = total_result.scalar() or 0
 
         # By status
         status_query = (
             select(Client.status, func.count(Client.id))
-            .where(Client.is_deleted == False)
+            .where(active_filter)
             .group_by(Client.status)
         )
         status_result = await self.session.execute(status_query)
@@ -274,7 +363,7 @@ class ClientService:
         # By regime
         regime_query = (
             select(Client.regime_tributario, func.count(Client.id))
-            .where(Client.is_deleted == False)
+            .where(active_filter)
             .group_by(Client.regime_tributario)
         )
         regime_result = await self.session.execute(regime_query)
@@ -282,7 +371,7 @@ class ClientService:
 
         # Total revenue
         revenue_query = select(func.sum(Client.honorarios_mensais)).where(
-            Client.is_deleted == False,
+            active_filter,
             Client.status == ClientStatus.ATIVO
         )
         revenue_result = await self.session.execute(revenue_query)
@@ -306,20 +395,29 @@ class ClientService:
         Returns:
             Draft ID
         """
+        from sqlalchemy import select
         from app.db.models.client_draft import ClientDraft
-        import json
 
-        # Convert draft data to JSON
+        await self._ensure_drafts_enabled()
+
         draft_json = draft_data.model_dump(exclude={"draft_name"})
 
-        # Create draft
-        draft = ClientDraft(
-            name=draft_data.draft_name,
-            data=draft_json,
-            user_id=user_id
+        result = await self.session.execute(
+            select(ClientDraft).where(ClientDraft.user_id == user_id)
         )
+        draft = result.scalar_one_or_none()
 
-        self.session.add(draft)
+        if draft:
+            draft.draft_data = draft_json
+            draft.notes = draft_data.draft_name
+        else:
+            draft = ClientDraft(
+                user_id=user_id,
+                draft_data=draft_json,
+                notes=draft_data.draft_name,
+            )
+            self.session.add(draft)
+
         await self.session.commit()
         await self.session.refresh(draft)
 

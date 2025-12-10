@@ -24,7 +24,7 @@ async def seed_obligation_types(
     Seed obligation types into database.
     Admin/Funcionario only.
     """
-    if current_user.role not in [UserRole.ADMIN, UserRole.FUNCIONARIO]:
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins and funcionarios can seed data"
@@ -225,7 +225,7 @@ async def seed_obligations(
     Generate obligations for current and previous month for all clients.
     Admin/Funcionario only.
     """
-    if current_user.role not in [UserRole.ADMIN, UserRole.FUNCIONARIO]:
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins and funcionarios can seed data"

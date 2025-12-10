@@ -274,7 +274,7 @@ async def preview_report(
         from app.db.repositories.client import ClientRepository
 
         client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id)
+        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
         if client:
             request.filters.client_ids = [client.id]
 
@@ -306,7 +306,7 @@ async def export_report(
         from app.db.repositories.client import ClientRepository
 
         client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id)
+        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
         if client:
             request.filters.client_ids = [client.id]
 

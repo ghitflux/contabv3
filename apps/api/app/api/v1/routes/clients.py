@@ -5,11 +5,11 @@ Client routes.
 from typing import Annotated, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_active_user, get_db, require_admin, require_admin_or_func
-from app.db.models.user import User
+from app.db.models.user import User, UserRole
 from app.schemas.base import ResponseSchema
 from app.schemas.client import ClientCreate, ClientDraftCreate, ClientListItem, ClientResponse, ClientUpdate
 from app.services.client import ClientService
@@ -24,6 +24,8 @@ async def list_clients(
     query: Optional[str] = Query(None, description="Search by razao social or CNPJ"),
     status_filter: Optional[str] = Query(None, alias="status", description="Filter by status"),
     starts_with: Optional[str] = Query(None, description="Filter by first letter (A-Z)", max_length=1),
+    regime_tributario: Optional[str] = Query(None, description="Filter by tax regime"),
+    tipo_empresa: Optional[str] = Query(None, description="Filter by company type"),
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(10, ge=1, le=100, description="Page size"),
 ) -> dict:
@@ -47,6 +49,8 @@ async def list_clients(
         query=query,
         status=status_filter,
         starts_with=starts_with,
+        regime_tributario=regime_tributario,
+        tipo_empresa=tipo_empresa,
         page=page,
         size=size,
     )
@@ -99,17 +103,18 @@ async def get_client(
     Raises:
         HTTPException: 403 if not authorized, 404 if not found
     """
-    from app.db.models.user import UserRole
-
     service = ClientService(db)
     client = await service.get_client(client_id)
 
     # Check authorization for cliente users
     if current_user.role == UserRole.CLIENTE:
-        # TODO: Add relationship between user and client
-        # For now, allow if client email matches user email
-        if client.email != current_user.email:
-            from fastapi import HTTPException
+        if client.user_id and client.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to access this client"
+            )
+
+        if not client.user_id and client.email != current_user.email:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to access this client"

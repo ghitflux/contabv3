@@ -85,7 +85,7 @@ async def admin_user(session: AsyncSession) -> User:
         id=uuid4(),
         name="Admin Test",
         email="admin@test.com",
-        password_hash=hash_password("admin123"),
+        password_hash=hash_password("Admin123!"),
         role="admin",
         is_active=True,
         is_verified=True,
@@ -103,7 +103,7 @@ async def func_user(session: AsyncSession) -> User:
         id=uuid4(),
         name="Func Test",
         email="func@test.com",
-        password_hash=hash_password("func123"),
+        password_hash=hash_password("Func123!"),
         role="func",
         is_active=True,
         is_verified=True,
@@ -121,7 +121,7 @@ async def cliente_user(session: AsyncSession) -> User:
         id=uuid4(),
         name="Cliente Test",
         email="cliente@test.com",
-        password_hash=hash_password("cliente123"),
+        password_hash=hash_password("Cliente123!"),
         role="cliente",
         is_active=True,
         is_verified=True,
@@ -137,7 +137,7 @@ async def admin_token(client: AsyncClient, admin_user: User) -> str:
     """Get admin auth token."""
     response = await client.post(
         "/api/v1/auth/login",
-        json={"email": "admin@test.com", "password": "admin123"},
+        json={"email": "admin@test.com", "password": "Admin123!"},
     )
     assert response.status_code == 200
     return response.json()["access_token"]
@@ -148,7 +148,7 @@ async def func_token(client: AsyncClient, func_user: User) -> str:
     """Get func auth token."""
     response = await client.post(
         "/api/v1/auth/login",
-        json={"email": "func@test.com", "password": "func123"},
+        json={"email": "func@test.com", "password": "Func123!"},
     )
     assert response.status_code == 200
     return response.json()["access_token"]
@@ -159,7 +159,7 @@ async def cliente_token(client: AsyncClient, cliente_user: User) -> str:
     """Get cliente auth token."""
     response = await client.post(
         "/api/v1/auth/login",
-        json={"email": "cliente@test.com", "password": "cliente123"},
+        json={"email": "cliente@test.com", "password": "Cliente123!"},
     )
     assert response.status_code == 200
     return response.json()["access_token"]

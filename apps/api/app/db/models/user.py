@@ -44,6 +44,8 @@ class User(Base, UUIDMixin, TimestampMixin):
     )
 
     # Relationships
+    client = relationship("Client", back_populates="user", uselist=False)
+    client_draft = relationship("ClientDraft", back_populates="user", uselist=False)
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:

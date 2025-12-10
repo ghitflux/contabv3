@@ -51,7 +51,7 @@ async def list_transactions(
     # If user is client, override client_id filter
     if current_user.role == UserRole.CLIENTE:
         client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id)
+        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
         if not client:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -122,7 +122,7 @@ async def get_transaction(
     # Check access: clients can only see their own
     if current_user.role == UserRole.CLIENTE:
         client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id)
+        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
         if not client or transaction.client_id != client.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -447,7 +447,7 @@ async def get_client_financial_summary(
     # Check access
     if current_user.role == UserRole.CLIENTE:
         client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id)
+        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
         if not client or str(client.id) != str(client_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -489,7 +489,7 @@ async def generate_invoice_pdf(
                 detail="Transaction not found",
             )
 
-        client = await client_repo.get_by_user_id(current_user.id)
+        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
         if not client or transaction.client_id != client.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -541,7 +541,7 @@ async def generate_receipt_pdf(
                 detail="Transaction not found",
             )
 
-        client = await client_repo.get_by_user_id(current_user.id)
+        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
         if not client or transaction.client_id != client.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

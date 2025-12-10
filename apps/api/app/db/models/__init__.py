@@ -4,6 +4,7 @@
 from app.db.models.audit import AuditLog  # noqa: F401
 from app.db.models.base import Base  # noqa: F401
 from app.db.models.client import Client, ClientStatus, RegimeTributario, TipoEmpresa  # noqa: F401
+from app.db.models.client_draft import ClientDraft  # noqa: F401
 from app.db.models.cnae import Cnae  # noqa: F401
 from app.db.models.finance import FinancialTransaction, PaymentMethod, PaymentStatus, TransactionType  # noqa: F401
 from app.db.models.license import License  # noqa: F401
@@ -24,6 +25,7 @@ __all__ = [
     "UserRole",
     "AuditLog",
     "Client",
+    "ClientDraft",
     "ClientStatus",
     "RegimeTributario",
     "TipoEmpresa",

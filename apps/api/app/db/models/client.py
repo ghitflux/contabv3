@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import Boolean, Date, Float, Integer, Numeric, String, Text, func
+from sqlalchemy import Boolean, Date, Float, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import ENUM, JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -56,6 +56,15 @@ class Client(Base, UUIDMixin, TimestampMixin):
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     telefone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     celular: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+
+    # Optional portal user linkage
+    user_id: Mapped[Optional[UUID]] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
 
     # Address
     cep: Mapped[Optional[str]] = mapped_column(String(9), nullable=True)
@@ -124,6 +133,7 @@ class Client(Base, UUIDMixin, TimestampMixin):
     licenses = relationship("License", back_populates="client", cascade="all, delete-orphan")
     cnaes = relationship("Cnae", back_populates="client", cascade="all, delete-orphan")
     municipal_registrations = relationship("MunicipalRegistration", back_populates="client", cascade="all, delete-orphan")
+    user = relationship("User", back_populates="client", uselist=False)
 
     def __repr__(self) -> str:
         return f"<Client {self.razao_social} ({self.cnpj})>"

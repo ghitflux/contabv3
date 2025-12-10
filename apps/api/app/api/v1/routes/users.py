@@ -2,10 +2,10 @@
 User routes.
 """
 
-from typing import Annotated
+from typing import Annotated, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import (
@@ -14,12 +14,70 @@ from app.api.v1.deps import (
     require_admin,
     require_admin_or_func,
 )
-from app.db.models.user import User
+from app.db.models.user import User, UserRole
 from app.db.repositories.user import UserRepository
 from app.schemas.base import ResponseSchema
 from app.schemas.user import UserCreate, UserResponse, UserUpdate, UserUpdatePassword
+from app.services.security import enforce_password_policy
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+@router.get("", response_model=dict, status_code=status.HTTP_200_OK)
+async def list_users(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: User = Depends(require_admin()),
+    search: Optional[str] = Query(None, description="Search by name or email"),
+    q: Optional[str] = Query(None, include_in_schema=False),
+    role: Optional[UserRole] = Query(None, description="Filter by role"),
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    size: int = Query(10, ge=1, le=100, description="Page size"),
+    skip: Optional[int] = Query(None, ge=0, description="Skip items (overrides page)"),
+    limit: Optional[int] = Query(None, ge=1, le=200, description="Limit items (overrides size)"),
+) -> dict:
+    """
+    List users with pagination and filters (admin only).
+
+    Args:
+        db: Database session
+        _: Current admin user
+        search: Search term for name or email
+        role: Filter by role
+        is_active: Filter by active status
+        page: Page number (1-indexed)
+        size: Page size
+        skip: Items to skip (overrides page)
+        limit: Limit (overrides size)
+
+    Returns:
+        Paginated list of users
+    """
+    user_repo = UserRepository(db)
+
+    effective_limit = limit if limit is not None else size
+    effective_skip = skip if skip is not None else (page - 1) * effective_limit
+    calculated_page = (effective_skip // effective_limit) + 1 if effective_limit else page
+
+    search_term = search or q
+
+    users, total = await user_repo.list_with_filters(
+        search=search_term,
+        role=role,
+        is_active=is_active,
+        skip=effective_skip,
+        limit=effective_limit,
+    )
+
+    pages = (total + effective_limit - 1) // effective_limit if effective_limit else 0
+
+    return {
+        "items": [UserResponse.model_validate(u) for u in users],
+        "total": total,
+        "page": calculated_page,
+        "size": effective_limit,
+        "pages": pages,
+    }
 
 
 @router.get("/me", response_model=UserResponse, status_code=status.HTTP_200_OK)
@@ -64,8 +122,11 @@ async def create_user(
     if await user_repo.email_exists(user_data.email):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Email already registered"
-        )
+        detail="Email already registered"
+    )
+
+    # Validate password against security policy
+    await enforce_password_policy(db, user_data.password)
 
     # Create new user
     user = User(
@@ -149,7 +210,6 @@ async def update_user(
         )
 
     # Check authorization (admin or self)
-    from app.db.models.user import UserRole
     is_admin = current_user.role == UserRole.ADMIN
     is_self = current_user.id == user_id
 
@@ -220,6 +280,7 @@ async def update_own_password(
         )
 
     # Set new password
+    await enforce_password_policy(db, password_data.new_password)
     current_user.set_password(password_data.new_password)
 
     user_repo = UserRepository(db)

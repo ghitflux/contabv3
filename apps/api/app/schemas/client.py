@@ -51,6 +51,7 @@ class ClientBase(BaseSchema):
     email: EmailStr
     telefone: Optional[str] = Field(None, max_length=20)
     celular: Optional[str] = Field(None, max_length=20)
+    user_id: Optional[UUID] = None
 
     # Address
     cep: Optional[str] = Field(None, max_length=9)
@@ -176,6 +177,7 @@ class ClientUpdate(BaseSchema):
 
     observacoes: Optional[str] = None
     status: Optional[ClientStatus] = None
+    user_id: Optional[UUID] = None
 
 
 class ClientResponse(ClientBase, TimestampSchema):
@@ -197,6 +199,7 @@ class ClientListItem(TimestampSchema):
     honorarios_mensais: float
     regime_tributario: RegimeTributario
     tipo_empresa: TipoEmpresa
+    user_id: Optional[UUID] = None
 
     # System access credentials (optional in list view)
     cpf_empresa: Optional[str] = None

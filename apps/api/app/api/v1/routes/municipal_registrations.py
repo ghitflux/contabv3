@@ -47,7 +47,7 @@ async def list_municipal_registrations(
     # If user is client, get their client_id
     if current_user.role == UserRole.CLIENTE:
         client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id)
+        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
         if not client:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

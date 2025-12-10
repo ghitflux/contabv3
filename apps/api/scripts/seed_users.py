@@ -29,21 +29,21 @@ async def seed_users() -> None:
     seed_users_data = [
         {
             "email": "admin@contabil.com",
-            "password": "admin123",
+            "password": "Admin123!",
             "name": "Administrador Sistema",
             "role": UserRole.ADMIN,
             "is_verified": True,
         },
         {
             "email": "func@contabil.com",
-            "password": "func123",
+            "password": "Func123!",
             "name": "João Silva - Funcionário",
             "role": UserRole.FUNC,
             "is_verified": True,
         },
         {
             "email": "cliente@empresa.com",
-            "password": "cliente123",
+            "password": "Cliente123!",
             "name": "Carlos Oliveira - Empresa ABC",
             "role": UserRole.CLIENTE,
             "is_verified": False,

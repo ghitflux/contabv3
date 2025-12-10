@@ -2,7 +2,8 @@
 Authentication service with business logic.
 """
 
-from datetime import datetime, timezone
+import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
@@ -10,11 +11,14 @@ from fastapi import HTTPException, status
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import create_tokens, decode_token
+from app.core.security import create_access_token, create_tokens, decode_token
 from app.db.models.user import User
 from app.db.repositories.user import UserRepository
 from app.schemas.auth import RefreshResponse, TokenResponse
 from app.schemas.user import UserResponse
+from app.services.security import enforce_password_policy
+
+logger = logging.getLogger(__name__)
 
 
 class AuthService:
@@ -188,3 +192,83 @@ class AuthService:
             "success": True,
             "message": "Successfully logged out"
         }
+
+    async def request_password_reset(self, email: str) -> str | None:
+        """
+        Generate a password reset token for the given email.
+
+        Args:
+            email: User email requesting reset
+
+        Returns:
+            Reset token if user exists and is active, otherwise None
+        """
+        user = await self.user_repo.get_by_email(email)
+
+        if not user or not user.is_active:
+            logger.info("Password reset requested for unknown or inactive account: %s", email)
+            return None
+
+        token = create_access_token(
+            {
+                "sub": str(user.id),
+                "role": user.role.value,
+                "type": "password_reset",
+            },
+            expires_delta=timedelta(hours=1),
+        )
+
+        logger.info("Password reset token generated for user %s", email)
+        return token
+
+    async def confirm_password_reset(self, token: str, new_password: str) -> None:
+        """
+        Validate a password reset token and set the new password.
+
+        Args:
+            token: Reset token sent to the user
+            new_password: New password to apply
+        """
+        try:
+            payload = decode_token(token)
+        except JWTError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired password reset token",
+            ) from e
+
+        if payload.get("type") != "password_reset":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid password reset token type",
+            )
+
+        user_id_str: str | None = payload.get("sub")
+        if not user_id_str:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid password reset token payload",
+            )
+
+        try:
+            user_id = UUID(user_id_str)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid user in password reset token",
+            ) from e
+
+        user = await self.user_repo.get_by_id(user_id)
+        if not user or not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or inactive user for password reset",
+            )
+
+        await enforce_password_policy(self.session, new_password)
+
+        user.set_password(new_password)
+        await self.user_repo.update(user)
+        await self.session.commit()
+
+        logger.info("Password reset completed for user %s", user.email)
