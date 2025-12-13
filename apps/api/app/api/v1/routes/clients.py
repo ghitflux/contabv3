@@ -11,7 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.deps import get_current_active_user, get_db, require_admin, require_admin_or_func
 from app.db.models.user import User, UserRole
 from app.schemas.base import ResponseSchema
-from app.schemas.client import ClientCreate, ClientDraftCreate, ClientListItem, ClientResponse, ClientUpdate
+from app.schemas.client import (
+    ClientCreate,
+    ClientCreateResult,
+    ClientDraftCreate,
+    ClientListItem,
+    ClientResponse,
+    ClientUpdate,
+)
 from app.services.client import ClientService
 
 router = APIRouter(prefix="/clients", tags=["clients"])
@@ -123,12 +130,12 @@ async def get_client(
     return client
 
 
-@router.post("", response_model=ClientResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ClientCreateResult, status_code=status.HTTP_201_CREATED)
 async def create_client(
     client_data: ClientCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
     _: User = Depends(require_admin_or_func()),
-) -> ClientResponse:
+) -> ClientCreateResult:
     """
     Create a new client (admin or func only).
 

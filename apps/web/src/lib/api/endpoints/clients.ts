@@ -9,6 +9,7 @@ import type {
   ClientUpdate,
   ClientListResponse,
   ClientFilters,
+  ClientCreateResult,
 } from "@/types/client";
 
 export const clientsApi = {
@@ -46,8 +47,8 @@ export const clientsApi = {
   /**
    * Create a new client
    */
-  async create(data: ClientCreate): Promise<Client> {
-    return apiClient.post<Client>("/clients", data);
+  async create(data: ClientCreate): Promise<ClientCreateResult> {
+    return apiClient.post<ClientCreateResult>("/clients", data);
   },
 
   /**

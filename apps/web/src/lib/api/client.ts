@@ -6,6 +6,8 @@ import type { RefreshResponse } from "@/types/auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
+const REFRESH_TOKEN_COOKIE = "refresh_token";
+
 // Queue for requests waiting for token refresh
 let isRefreshing = false;
 let refreshSubscribers: Array<(token: string) => void> = [];
@@ -24,6 +26,60 @@ export interface ApiError extends Error {
   data?: any;
 }
 
+function getCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const cookies = document.cookie ? document.cookie.split("; ") : [];
+  for (const cookie of cookies) {
+    const [key, ...rest] = cookie.split("=");
+    if (key === name) return decodeURIComponent(rest.join("="));
+  }
+  return null;
+}
+
+function setCookie(name: string, value: string, maxAgeSeconds?: number) {
+  if (typeof document === "undefined") return;
+  const parts = [`${name}=${encodeURIComponent(value)}`, "Path=/", "SameSite=Lax"];
+  if (typeof maxAgeSeconds === "number" && maxAgeSeconds > 0) {
+    parts.push(`Max-Age=${Math.floor(maxAgeSeconds)}`);
+  }
+  document.cookie = parts.join("; ");
+}
+
+function deleteCookie(name: string) {
+  if (typeof document === "undefined") return;
+  document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax`;
+}
+
+function decodeJwtExp(token: string): number | null {
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+
+  try {
+    const payloadPart = parts[1];
+    if (!payloadPart) return null;
+
+    let payload = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
+    const pad = payload.length % 4;
+    if (pad) payload += "=".repeat(4 - pad);
+    const decoded = atob(payload);
+    const json = JSON.parse(decoded);
+    return typeof json?.exp === "number" ? json.exp : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistRefreshToken(refreshToken: string) {
+  if (typeof window === "undefined") return;
+
+  localStorage.setItem("refresh_token", refreshToken);
+
+  const exp = decodeJwtExp(refreshToken);
+  const nowSec = Math.floor(Date.now() / 1000);
+  const maxAge = exp && exp > nowSec ? exp - nowSec : undefined;
+  setCookie(REFRESH_TOKEN_COOKIE, refreshToken, maxAge);
+}
+
 export class ApiClient {
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
@@ -32,7 +88,8 @@ export class ApiClient {
     // Load tokens from localStorage on init
     if (typeof window !== "undefined") {
       this.accessToken = localStorage.getItem("access_token");
-      this.refreshToken = localStorage.getItem("refresh_token");
+      this.refreshToken = localStorage.getItem("refresh_token") || getCookie(REFRESH_TOKEN_COOKIE);
+      if (this.refreshToken) persistRefreshToken(this.refreshToken);
     }
   }
 
@@ -41,7 +98,7 @@ export class ApiClient {
     this.refreshToken = refreshToken;
     if (typeof window !== "undefined") {
       localStorage.setItem("access_token", accessToken);
-      localStorage.setItem("refresh_token", refreshToken);
+      persistRefreshToken(refreshToken);
     }
   }
 
@@ -51,6 +108,7 @@ export class ApiClient {
     if (typeof window !== "undefined") {
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
+      deleteCookie(REFRESH_TOKEN_COOKIE);
     }
   }
 
@@ -93,6 +151,10 @@ export class ApiClient {
     if (!this.accessToken && typeof window !== "undefined") {
       this.accessToken = localStorage.getItem("access_token");
     }
+    if (!this.refreshToken && typeof window !== "undefined") {
+      this.refreshToken = localStorage.getItem("refresh_token") || getCookie(REFRESH_TOKEN_COOKIE);
+      if (this.refreshToken) persistRefreshToken(this.refreshToken);
+    }
     if (this.accessToken && !headers.has("Authorization")) {
       headers.set("Authorization", `Bearer ${this.accessToken}`);
     }
@@ -108,7 +170,19 @@ export class ApiClient {
     let response = await fetch(url, config);
 
     // Handle 401 - Try to refresh token
-    if (response.status === 401 && this.refreshToken) {
+    if (response.status === 401) {
+      // Lazy load refresh token if missing
+      if (!this.refreshToken && typeof window !== "undefined") {
+        this.refreshToken = localStorage.getItem("refresh_token") || getCookie(REFRESH_TOKEN_COOKIE);
+        if (this.refreshToken) persistRefreshToken(this.refreshToken);
+      }
+
+      if (!this.refreshToken) {
+        const error: ApiError = new Error("API Error: Unauthorized");
+        error.status = 401;
+        throw error;
+      }
+
       if (isRefreshing) {
         // Wait for ongoing refresh to complete
         return new Promise((resolve, reject) => {
@@ -219,6 +293,10 @@ export class ApiClient {
     if (!this.accessToken && typeof window !== "undefined") {
       this.accessToken = localStorage.getItem("access_token");
     }
+    if (!this.refreshToken && typeof window !== "undefined") {
+      this.refreshToken = localStorage.getItem("refresh_token") || getCookie(REFRESH_TOKEN_COOKIE);
+      if (this.refreshToken) persistRefreshToken(this.refreshToken);
+    }
     if (this.accessToken && !headers.has("Authorization")) {
       headers.set("Authorization", `Bearer ${this.accessToken}`);
     }
@@ -234,7 +312,18 @@ export class ApiClient {
     let response = await fetch(url, config);
 
     // Handle 401 - Try to refresh token
-    if (response.status === 401 && this.refreshToken) {
+    if (response.status === 401) {
+      if (!this.refreshToken && typeof window !== "undefined") {
+        this.refreshToken = localStorage.getItem("refresh_token") || getCookie(REFRESH_TOKEN_COOKIE);
+        if (this.refreshToken) persistRefreshToken(this.refreshToken);
+      }
+
+      if (!this.refreshToken) {
+        const error: ApiError = new Error("API Error: Unauthorized");
+        error.status = 401;
+        throw error;
+      }
+
       if (isRefreshing) {
         // Wait for ongoing refresh to complete
         return new Promise((resolve, reject) => {

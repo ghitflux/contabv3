@@ -3,14 +3,20 @@
 import { Button, Card, CardBody, CardHeader, Input, Link } from '@/heroui';
 import { useAuth } from '@/hooks/auth/useAuth';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function LoginPage() {
-  const { login, isLoading, error } = useAuth();
+  const { login, isAuthenticated, isLoading, error } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace('/clientes');
+    }
+  }, [isAuthenticated, isLoading, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

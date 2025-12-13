@@ -98,6 +98,16 @@ export interface ClientCreate extends ClientBase {
   status?: ClientStatus;
 }
 
+export interface ClientUserCredentials {
+  access: string;
+  credential: string;
+}
+
+export interface ClientCreateResult {
+  client: Client;
+  credentials: ClientUserCredentials | null;
+}
+
 export interface ClientUpdate extends Partial<ClientBase> {
   status?: ClientStatus;
 }

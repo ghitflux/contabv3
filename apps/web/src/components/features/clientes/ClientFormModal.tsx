@@ -20,7 +20,9 @@ import {
   Divider,
   Chip,
 } from "@heroui/react";
-import { SaveIcon } from "@/lib/icons";
+import { EyeIcon, EyeOffIcon, SaveIcon } from "@/lib/icons";
+import { toast } from "@/lib/toast";
+import { maskCNPJ, maskCPF, onlyNumbers } from "@/lib/masks";
 import type { Client, ClientCreate } from "@/types/client";
 import {
   RegimeTributario,
@@ -35,27 +37,66 @@ import {
 import { DatePickerField } from "@/components/ui/DatePickerField";
 
 // Zod schema for validation
+const nullableString = z.preprocess(
+  (value) => {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed === "" ? null : trimmed;
+    }
+    return value;
+  },
+  z.string().nullable()
+);
+
+const nullableEmail = z.preprocess(
+  (value) => {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed === "" ? null : trimmed;
+    }
+    return value;
+  },
+  z.string().email("Email inválido").nullable()
+);
+
+const nullableCPF = z.preprocess(
+  (value) => {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed === "" ? null : trimmed;
+    }
+    return value;
+  },
+  z
+    .string()
+    .nullable()
+    .refine((value) => value === null || onlyNumbers(value).length === 11, "CPF inválido")
+);
+
 const clientFormSchema = z.object({
-  razao_social: z.string().min(1, "Razão social é obrigatória"),
-  nome_fantasia: z.string().nullable(),
-  cnpj: z.string().min(14, "CNPJ inválido"),
-  cpf_empresa: z.string().nullable(),
-  senha_gov: z.string().nullable(),
-  inscricao_estadual: z.string().nullable(),
-  inscricao_municipal: z.string().nullable(),
-  codigo_simples: z.string().nullable(),
+  razao_social: z.string().trim().min(1, "Razão social é obrigatória"),
+  nome_fantasia: nullableString,
+  cnpj: z
+    .string()
+    .trim()
+    .refine((value) => onlyNumbers(value).length === 14, "CNPJ inválido"),
+  cpf_empresa: nullableCPF,
+  senha_gov: nullableString,
+  inscricao_estadual: nullableString,
+  inscricao_municipal: nullableString,
+  codigo_simples: nullableString,
 
-  email: z.string().email("Email inválido"),
-  telefone: z.string().nullable(),
-  celular: z.string().nullable(),
+  email: z.string().trim().email("Email inválido"),
+  telefone: nullableString,
+  celular: nullableString,
 
-  cep: z.string().nullable(),
-  logradouro: z.string().nullable(),
-  numero: z.string().nullable(),
-  complemento: z.string().nullable(),
-  bairro: z.string().nullable(),
-  cidade: z.string().nullable(),
-  uf: z.string().nullable(),
+  cep: nullableString,
+  logradouro: nullableString,
+  numero: nullableString,
+  complemento: nullableString,
+  bairro: nullableString,
+  cidade: nullableString,
+  uf: nullableString,
 
   honorarios_mensais: z.coerce.number().min(0, "Valor inválido"),
   dia_vencimento: z.coerce.number().min(1).max(31),
@@ -63,26 +104,26 @@ const clientFormSchema = z.object({
   regime_tributario: z.nativeEnum(RegimeTributario),
   tipo_empresa: z.nativeEnum(TipoEmpresa),
   tipos_empresa: z.array(z.string()),
-  data_abertura: z.string().nullable(),
-  inicio_escritorio: z.string().nullable(),
+  data_abertura: nullableString,
+  inicio_escritorio: nullableString,
 
-  responsavel_nome: z.string().nullable(),
-  responsavel_cpf: z.string().nullable(),
-  responsavel_email: z.string().nullable(),
-  responsavel_telefone: z.string().nullable(),
+  responsavel_nome: nullableString,
+  responsavel_cpf: nullableCPF,
+  responsavel_email: nullableEmail,
+  responsavel_telefone: nullableString,
 
-  senha_prefeitura: z.string().nullable(),
-  login_seg_desemp: z.string().nullable(),
-  senha_seg_desemp: z.string().nullable(),
-  email_seg_desemp: z.string().nullable(),
-  senha_nfse: z.string().nullable(),
-  senha_certificado_digital: z.string().nullable(),
-  senha_gcw_resp: z.string().nullable(),
+  senha_prefeitura: nullableString,
+  login_seg_desemp: nullableString,
+  senha_seg_desemp: nullableString,
+  email_seg_desemp: nullableString,
+  senha_nfse: nullableString,
+  senha_certificado_digital: nullableString,
+  senha_gcw_resp: nullableString,
 
   servicos_contratados: z.array(z.string()),
   licencas_necessarias: z.array(z.string()),
 
-  observacoes: z.string().nullable(),
+  observacoes: nullableString,
 });
 
 type ClientFormData = z.infer<typeof clientFormSchema>;
@@ -96,6 +137,12 @@ interface ClientFormModalProps {
 
 export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormModalProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [visibleFields, setVisibleFields] = React.useState<Record<string, boolean>>({});
+
+  const isFieldVisible = (key: string) => Boolean(visibleFields[key]);
+  const toggleFieldVisibility = (key: string) => {
+    setVisibleFields((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   const {
     control,
@@ -163,6 +210,22 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
       onClose();
     } catch (error) {
       console.error("Erro ao salvar cliente:", error);
+      const message = (() => {
+        const err = error as any;
+        if (err?.status === 401) return "Sessão expirada. Faça login novamente.";
+        const detail = err?.data?.detail;
+        if (typeof detail === "string" && detail.trim()) return detail;
+        if (Array.isArray(detail) && detail.length > 0) {
+          const first = detail[0];
+          const loc = Array.isArray(first?.loc) ? first.loc.join(".") : undefined;
+          const msg = typeof first?.msg === "string" ? first.msg : undefined;
+          if (msg && loc) return `${loc}: ${msg}`;
+          if (msg) return msg;
+        }
+        if (typeof err?.message === "string" && err.message.trim()) return err.message;
+        return "Não foi possível salvar o cliente. Verifique os campos e tente novamente.";
+      })();
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -184,18 +247,18 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
       <ModalContent>
         {(onCloseModal) => (
           <>
-            <ModalHeader className="flex-shrink-0 px-6 pt-6">
-              <h2 className="text-2xl font-bold">
-                {client ? "Editar Cliente" : "Novo Cliente"}
-              </h2>
-            </ModalHeader>
-            <ModalBody className="overflow-y-auto px-6 py-6">
-              <form
-                id="client-form"
-                // @ts-ignore - Type mismatch from resolver
-                onSubmit={handleSubmit(onSubmit)}
-                className="space-y-6"
-              >
+            <form
+              // @ts-ignore - Type mismatch from resolver
+              onSubmit={handleSubmit(onSubmit)}
+              className="contents"
+            >
+              <ModalHeader className="flex-shrink-0 px-6 pt-6">
+                <h2 className="text-2xl font-bold">
+                  {client ? "Editar Cliente" : "Novo Cliente"}
+                </h2>
+              </ModalHeader>
+              <ModalBody className="overflow-y-auto px-6 py-6">
+                <div className="space-y-6">
                 {/* Dados da Empresa */}
                 <section>
                   <h3 className="text-lg font-semibold mb-3">Dados da Empresa</h3>
@@ -232,9 +295,12 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
                       render={({ field }) => (
                         <Input
                           {...field}
+                          value={field.value || ""}
+                          onChange={(e) => field.onChange(maskCNPJ(e.target.value))}
                           label="CNPJ"
                           placeholder="00.000.000/0000-00"
                           isRequired
+                          maxLength={18}
                           isInvalid={!!errors.cnpj}
                           errorMessage={errors.cnpj?.message}
                         />
@@ -247,8 +313,12 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
                         <Input
                           {...field}
                           value={field.value || ""}
+                          onChange={(e) => field.onChange(maskCPF(e.target.value))}
                           label="CPF"
                           placeholder="000.000.000-00"
+                          maxLength={14}
+                          isInvalid={!!errors.cpf_empresa}
+                          errorMessage={errors.cpf_empresa?.message}
                         />
                       )}
                     />
@@ -259,9 +329,25 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
                         <Input
                           {...field}
                           value={field.value || ""}
-                          type="password"
+                          type={isFieldVisible("senha_gov") ? "text" : "password"}
                           label="Senha do GOV"
                           placeholder="Digite a senha do GOV"
+                          endContent={
+                            <Button
+                              type="button"
+                              variant="light"
+                              size="sm"
+                              isIconOnly
+                              onPress={() => toggleFieldVisibility("senha_gov")}
+                              aria-label={isFieldVisible("senha_gov") ? "Ocultar senha" : "Mostrar senha"}
+                            >
+                              {isFieldVisible("senha_gov") ? (
+                                <EyeOffIcon className="h-4 w-4" />
+                              ) : (
+                                <EyeIcon className="h-4 w-4" />
+                              )}
+                            </Button>
+                          }
                         />
                       )}
                     />
@@ -284,9 +370,27 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
                         <Input
                           {...field}
                           value={field.value || ""}
-                          type="password"
+                          type={isFieldVisible("senha_seg_desemp") ? "text" : "password"}
                           label="Senha Seguro Desemprego"
                           placeholder="Digite a senha"
+                          endContent={
+                            <Button
+                              type="button"
+                              variant="light"
+                              size="sm"
+                              isIconOnly
+                              onPress={() => toggleFieldVisibility("senha_seg_desemp")}
+                              aria-label={
+                                isFieldVisible("senha_seg_desemp") ? "Ocultar senha" : "Mostrar senha"
+                              }
+                            >
+                              {isFieldVisible("senha_seg_desemp") ? (
+                                <EyeOffIcon className="h-4 w-4" />
+                              ) : (
+                                <EyeIcon className="h-4 w-4" />
+                              )}
+                            </Button>
+                          }
                         />
                       )}
                     />
@@ -310,9 +414,25 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
                         <Input
                           {...field}
                           value={field.value || ""}
-                          type="password"
+                          type={isFieldVisible("senha_nfse") ? "text" : "password"}
                           label="Senha da NFS-e"
                           placeholder="Digite a senha da NFS-e"
+                          endContent={
+                            <Button
+                              type="button"
+                              variant="light"
+                              size="sm"
+                              isIconOnly
+                              onPress={() => toggleFieldVisibility("senha_nfse")}
+                              aria-label={isFieldVisible("senha_nfse") ? "Ocultar senha" : "Mostrar senha"}
+                            >
+                              {isFieldVisible("senha_nfse") ? (
+                                <EyeOffIcon className="h-4 w-4" />
+                              ) : (
+                                <EyeIcon className="h-4 w-4" />
+                              )}
+                            </Button>
+                          }
                         />
                       )}
                     />
@@ -323,9 +443,29 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
                         <Input
                           {...field}
                           value={field.value || ""}
-                          type="password"
+                          type={isFieldVisible("senha_certificado_digital") ? "text" : "password"}
                           label="Senha do Certificado Digital"
                           placeholder="Digite a senha do certificado"
+                          endContent={
+                            <Button
+                              type="button"
+                              variant="light"
+                              size="sm"
+                              isIconOnly
+                              onPress={() => toggleFieldVisibility("senha_certificado_digital")}
+                              aria-label={
+                                isFieldVisible("senha_certificado_digital")
+                                  ? "Ocultar senha"
+                                  : "Mostrar senha"
+                              }
+                            >
+                              {isFieldVisible("senha_certificado_digital") ? (
+                                <EyeOffIcon className="h-4 w-4" />
+                              ) : (
+                                <EyeIcon className="h-4 w-4" />
+                              )}
+                            </Button>
+                          }
                         />
                       )}
                     />
@@ -749,8 +889,12 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
                         <Input
                           {...field}
                           value={field.value || ""}
+                          onChange={(e) => field.onChange(maskCPF(e.target.value))}
                           label="CPF do Responsável"
                           placeholder="000.000.000-00"
+                          maxLength={14}
+                          isInvalid={!!errors.responsavel_cpf}
+                          errorMessage={errors.responsavel_cpf?.message}
                         />
                       )}
                     />
@@ -801,22 +945,22 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
                     )}
                   />
                 </section>
-              </form>
-            </ModalBody>
-            <ModalFooter className="flex-shrink-0 border-t border-divider px-6 pb-6">
-              <Button variant="light" onClick={onCloseModal}>
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                form="client-form"
-                color="primary"
-                startContent={<SaveIcon className="h-4 w-4" />}
-                isLoading={isSubmitting}
-              >
-                {isSubmitting ? "Salvando..." : "Salvar"}
-              </Button>
-            </ModalFooter>
+                </div>
+              </ModalBody>
+              <ModalFooter className="flex-shrink-0 border-t border-divider px-6 pb-6">
+                <Button variant="light" onPress={onCloseModal}>
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  color="primary"
+                  startContent={<SaveIcon className="h-4 w-4" />}
+                  isLoading={isSubmitting}
+                >
+                  {isSubmitting ? "Salvando..." : "Salvar"}
+                </Button>
+              </ModalFooter>
+            </form>
           </>
         )}
       </ModalContent>

@@ -2,6 +2,8 @@
 Client service with business logic.
 """
 
+import secrets
+import string
 from typing import Optional
 from uuid import UUID
 
@@ -10,10 +12,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import encrypt_field
 from app.db.models.client import Client, ClientStatus, RegimeTributario, TipoEmpresa
+from app.db.models.user import User, UserRole
 from app.db.repositories.client import ClientRepository
 from app.db.repositories.settings import SystemSettingsRepository
 from app.db.repositories.user import UserRepository
-from app.schemas.client import ClientCreate, ClientDraftCreate, ClientListItem, ClientResponse, ClientUpdate
+from app.schemas.client import (
+    ClientCreate,
+    ClientCreateResult,
+    ClientDraftCreate,
+    ClientListItem,
+    ClientResponse,
+    ClientUpdate,
+    ClientUserCredentials,
+)
+from app.services.security import enforce_password_policy
 
 
 class ClientService:
@@ -45,6 +57,65 @@ class ClientService:
                 data[key] = encrypt_field(data[key])
 
         return data
+
+    async def _generate_portal_password(self) -> str:
+        """
+        Generate a password that satisfies the current security policy.
+        """
+        specials = "!@#$%^&*()-_=+"
+        rng = secrets.SystemRandom()
+
+        def build(length: int) -> str:
+            # Ensure minimum complexity regardless of policy (policy may be stricter).
+            chars = [
+                secrets.choice(string.ascii_lowercase),
+                secrets.choice(string.ascii_uppercase),
+                secrets.choice(string.digits),
+                secrets.choice(specials),
+            ]
+            pool = string.ascii_letters + string.digits + specials
+            chars.extend(secrets.choice(pool) for _ in range(max(0, length - len(chars))))
+            rng.shuffle(chars)
+            return "".join(chars)
+
+        for length in (16, 20, 24, 32):
+            for _ in range(20):
+                candidate = build(length)
+                try:
+                    await enforce_password_policy(self.session, candidate)
+                    return candidate
+                except HTTPException:
+                    continue
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate a compliant password",
+        )
+
+    async def _create_portal_user(self, name: str, email: str) -> tuple[UUID, str]:
+        """
+        Create a new cliente user for portal access and return (user_id, plain_password).
+        """
+        user_repo = UserRepository(self.session)
+        existing = await user_repo.get_by_email(email)
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email already registered",
+            )
+
+        password = await self._generate_portal_password()
+        user = User(
+            name=name,
+            email=email,
+            role=UserRole.CLIENTE,
+            is_active=True,
+            is_verified=False,
+        )
+        user.set_password(password)
+        user = await user_repo.create(user)
+
+        return user.id, password
 
     async def _validate_user_link(self, user_id: UUID | None, current_client_id: UUID | None = None) -> None:
         """
@@ -84,7 +155,7 @@ class ClientService:
                 detail="Client drafts are disabled",
             )
 
-    async def create_client(self, client_data: ClientCreate) -> ClientResponse:
+    async def create_client(self, client_data: ClientCreate) -> ClientCreateResult:
         """
         Create a new client.
 
@@ -106,6 +177,14 @@ class ClientService:
 
         payload = client_data.model_dump()
         await self._validate_user_link(payload.get("user_id"))
+
+        credentials: ClientUserCredentials | None = None
+        if not payload.get("user_id"):
+            user_name = payload.get("responsavel_nome") or payload.get("razao_social")
+            user_id, plain_password = await self._create_portal_user(user_name, payload["email"])
+            payload["user_id"] = user_id
+            credentials = ClientUserCredentials(access=payload["email"], credential=plain_password)
+
         payload = self._encrypt_sensitive_fields(payload)
 
         # Create client
@@ -114,7 +193,10 @@ class ClientService:
         await self.session.commit()
         await self.session.refresh(client)
 
-        return ClientResponse.model_validate(client)
+        return ClientCreateResult(
+            client=ClientResponse.model_validate(client),
+            credentials=credentials,
+        )
 
     async def get_client(self, client_id: UUID) -> ClientResponse:
         """

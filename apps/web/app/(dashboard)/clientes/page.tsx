@@ -4,21 +4,25 @@ import { motion } from "framer-motion";
 import { Button, Card, CardBody, CardHeader, Chip, Divider, Pagination, Spinner, Table, TableBody, TableCell, TableColumn, TableHeader, TableRow, useDisclosure } from '@/heroui';
 import { pageTransition } from "@/lib/animations";
 import { useClients } from '@/hooks/useClients';
-import type { ClientListItem, ClientStatus, ClientCreate, RegimeTributario } from '@/types/client';
+import type { ClientListItem, ClientStatus, ClientCreate, ClientUserCredentials, RegimeTributario } from '@/types/client';
 import { formatCNPJ, getRegimeLabel, getStatusLabel } from '@/types/client';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { SearchInput } from '@/components/ui/SearchInput';
 import { PlusIcon, EyeIcon } from '@/lib/icons';
 import { ClientFormModal } from '@/components/features/clientes/ClientFormModal';
 import { ClientDetailsModal } from '@/components/features/clientes/ClientDetailsModal';
+import { ClientCreatedSuccessModal } from '@/components/features/clientes/ClientCreatedSuccessModal';
 import { ClientKPIs } from '@/components/features/clientes/ClientKPIs';
 import { ColumnFilter } from '@/components/features/clientes/ColumnFilter';
 import { Can } from '@/components/shared/Can';
 import { UserRole } from '@/types/user';
 import { SnippetCopy } from '@/components/ui/SnippetCopy';
+import { toast } from '@/lib/toast';
 
 export default function ClientesPage() {
   const { clients, selectedClient, isLoading, fetchClients, fetchClientById, createClient, setSelectedClient } = useClients();
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [letterFilter, setLetterFilter] = useState('');
@@ -32,6 +36,8 @@ export default function ClientesPage() {
   // Separate modals for create/edit and view
   const { isOpen: isFormOpen, onOpen: onFormOpen, onClose: onFormClose } = useDisclosure();
   const { isOpen: isDetailsOpen, onOpen: onDetailsOpen, onClose: onDetailsClose } = useDisclosure();
+  const { isOpen: isCreatedOpen, onOpen: onCreatedOpen, onClose: onCreatedClose } = useDisclosure();
+  const [createdCredentials, setCreatedCredentials] = useState<ClientUserCredentials | null>(null);
 
   const pageSize = 10;
 
@@ -53,6 +59,14 @@ export default function ClientesPage() {
       starts_with: letterFilter || undefined,
       page,
       size: pageSize,
+    }).catch((err) => {
+      const status = (err as any)?.status;
+      if (status === 401) {
+        toast.error('Sessão expirada. Faça login novamente.');
+        router.replace('/auth/login');
+        return;
+      }
+      toast.error('Não foi possível carregar a lista de clientes.');
     });
   }, [searchQuery, statusFilter, letterFilter, page, fetchClients]);
 
@@ -62,8 +76,13 @@ export default function ClientesPage() {
   };
 
   const handleSaveClient = async (data: ClientCreate) => {
-    await createClient(data);
-    onFormClose();
+    const result = await createClient(data);
+
+    if (result.credentials) {
+      setCreatedCredentials(result.credentials);
+      // Open after the form closes to avoid stacked modals/focus issues.
+      setTimeout(() => onCreatedOpen(), 0);
+    }
     // Refresh list
     fetchClients({
       query: searchQuery || undefined,
@@ -71,7 +90,14 @@ export default function ClientesPage() {
       starts_with: letterFilter || undefined,
       page,
       size: pageSize,
+    }).catch(() => {
+      toast.error('Não foi possível atualizar a lista de clientes.');
     });
+  };
+
+  const handleCloseCreated = () => {
+    setCreatedCredentials(null);
+    onCreatedClose();
   };
 
   const handleCloseDetails = () => {
@@ -421,6 +447,16 @@ export default function ClientesPage() {
         isOpen={isDetailsOpen}
         onClose={handleCloseDetails}
       />
+
+      {/* Created Success Modal */}
+      {createdCredentials && (
+        <ClientCreatedSuccessModal
+          isOpen={isCreatedOpen}
+          onClose={handleCloseCreated}
+          access={createdCredentials.access}
+          credential={createdCredentials.credential}
+        />
+      )}
     </motion.div>
   );
 }

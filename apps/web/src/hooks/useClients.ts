@@ -6,6 +6,7 @@ import { clientsApi } from "@/lib/api/endpoints/clients";
 import type {
   Client,
   ClientCreate,
+  ClientCreateResult,
   ClientFilters,
   ClientListResponse,
   ClientUpdate,
@@ -50,12 +51,12 @@ export function useClients() {
   }, []);
 
   const createClient = useCallback(
-    async (data: ClientCreate) => {
+    async (data: ClientCreate): Promise<ClientCreateResult> => {
       setIsLoading(true);
       setError(null);
 
       try {
-        const newClient = await clientsApi.create(data);
+        const result = await clientsApi.create(data);
         // Refresh list
         if (clients) {
           await fetchClients({
@@ -63,7 +64,7 @@ export function useClients() {
             size: clients.size,
           });
         }
-        return newClient;
+        return result;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to create client");
         throw err;

@@ -187,6 +187,20 @@ class ClientResponse(ClientBase, TimestampSchema):
     status: ClientStatus
 
 
+class ClientUserCredentials(BaseSchema):
+    """Credentials generated for the cliente portal user (returned only on creation)."""
+
+    access: EmailStr
+    credential: str
+
+
+class ClientCreateResult(BaseSchema):
+    """Response for client creation including generated access credentials."""
+
+    client: ClientResponse
+    credentials: Optional[ClientUserCredentials] = None
+
+
 class ClientListItem(TimestampSchema):
     """Schema for client list item (simplified)."""
 
