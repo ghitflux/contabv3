@@ -100,15 +100,24 @@ class ObligationType(Base):
         Returns:
             bool: True if applicable, False otherwise
         """
+        tipo_empresa = getattr(client.tipo_empresa, "value", client.tipo_empresa)
+        regime = getattr(client.regime_tributario, "value", client.regime_tributario)
+
+        if regime == "mei":
+            return self.applies_to_mei
+
+        if tipo_empresa == "financeiro":
+            tipo_empresa = "servico"
+
         # Check tipo_empresa
         tipo_empresa_match = False
-        if client.tipo_empresa == "comercio" and self.applies_to_commerce:
+        if tipo_empresa == "comercio" and self.applies_to_commerce:
             tipo_empresa_match = True
-        elif client.tipo_empresa == "servico" and self.applies_to_service:
+        elif tipo_empresa == "servico" and self.applies_to_service:
             tipo_empresa_match = True
-        elif client.tipo_empresa == "industria" and self.applies_to_industry:
+        elif tipo_empresa == "industria" and self.applies_to_industry:
             tipo_empresa_match = True
-        elif client.tipo_empresa == "misto" and (
+        elif tipo_empresa == "misto" and (
             self.applies_to_commerce or self.applies_to_service
         ):
             tipo_empresa_match = True
@@ -117,14 +126,11 @@ class ObligationType(Base):
             return False
 
         # Check regime_tributario
-        regime_match = False
-        if client.regime_tributario == "simples_nacional" and self.applies_to_simples:
-            regime_match = True
-        elif client.regime_tributario == "lucro_presumido" and self.applies_to_presumido:
-            regime_match = True
-        elif client.regime_tributario == "lucro_real" and self.applies_to_real:
-            regime_match = True
-        elif client.regime_tributario == "mei" and self.applies_to_mei:
-            regime_match = True
+        if regime == "simples_nacional":
+            return self.applies_to_simples
+        if regime == "lucro_presumido":
+            return self.applies_to_presumido
+        if regime == "lucro_real":
+            return self.applies_to_real
 
-        return regime_match
+        return False

@@ -5,7 +5,7 @@ Obligation rules for commerce companies.
 from typing import List
 
 from app.db.models.client import Client, RegimeTributario
-from app.patterns.strategies.base import ObligationRule
+from app.patterns.strategies.base import DEPARTAMENTO_PESSOAL_CODES, ObligationRule
 
 
 class CommerceRule(ObligationRule):
@@ -30,62 +30,45 @@ class CommerceRule(ObligationRule):
         # Simples Nacional
         if client.regime_tributario == RegimeTributario.SIMPLES_NACIONAL:
             codes.extend([
-                "DAS_MENSAL",           # Documento de Arrecadação do Simples
-                "DEFIS_ANUAL",          # Declaração de Informações Socioeconômicas e Fiscais
+                "PGDAS_MENSAL",
+                "DAS_MENSAL",
+                "EFD_CONTRIBUICOES",
+                "EFD_ICMS_IPI_MENSAL",
+                "DIEF_MENSAL",
+                "ICMS_ANTECIPACAO_MENSAL",
             ])
 
         # Lucro Presumido
         elif client.regime_tributario == RegimeTributario.LUCRO_PRESUMIDO:
             codes.extend([
-                "DCTF_MENSAL",          # Declaração de Débitos e Créditos Tributários Federais
-                "PIS_COFINS_MENSAL",    # PIS/COFINS Cumulativo
-                "EFD_CONTRIBUICOES",    # Escrituração Fiscal Digital de Contribuições
-                "IRPJ_TRIMESTRAL",      # Imposto de Renda Pessoa Jurídica
-                "CSLL_TRIMESTRAL",      # Contribuição Social sobre o Lucro Líquido
+                "PIS_COFINS_MENSAL",
+                "EFD_CONTRIBUICOES",
+                "EFD_ICMS_IPI_MENSAL",
+                "ICMS_NORMAL_MENSAL",
+                "IRPJ_CSLL_TRIMESTRAL",
+                "ECD_ANUAL",
+                "ECF_ANUAL",
             ])
 
         # Lucro Real
         elif client.regime_tributario == RegimeTributario.LUCRO_REAL:
             codes.extend([
-                "DCTF_MENSAL",
-                "PIS_COFINS_MENSAL",    # PIS/COFINS Não-Cumulativo
+                "PIS_COFINS_MENSAL",
                 "EFD_CONTRIBUICOES",
-                "IRPJ_MENSAL",          # IR estimativa mensal
-                "CSLL_MENSAL",          # CSLL estimativa mensal
-                "LALUR_ANUAL",          # Livro de Apuração do Lucro Real
+                "EFD_ICMS_IPI_MENSAL",
+                "IRPJ_CSLL_TRIMESTRAL",
+                "ECD_ANUAL",
+                "ECF_ANUAL",
+                "LALUR_ANUAL",
             ])
 
         # MEI
         elif client.regime_tributario == RegimeTributario.MEI:
             codes.extend([
-                "DAS_MEI_MENSAL",       # DAS específico para MEI
-                "DASN_SIMEI_ANUAL",     # Declaração Anual do Simples Nacional - MEI
+                "DAS_MEI_MENSAL",
+                "DASN_SIMEI_ANUAL",
             ])
 
-        # Obrigações estaduais (ICMS)
-        # Commerce sempre tem ICMS
-        if client.regime_tributario != RegimeTributario.MEI:
-            codes.append("SPED_FISCAL")  # SPED Fiscal (ICMS/IPI)
-
-        # GIA (alguns estados)
-        if client.uf in ["SP"]:
-            codes.append("GIA_MENSAL")  # Guia de Informação e Apuração do ICMS
-
-        # Obrigações municipais (ISS - se houver prestação de serviço)
-        # Commerce puro normalmente não tem ISS, mas fica como exemplo
-
-        # Obrigações trabalhistas e previdenciárias
-        codes.extend([
-            "ESOCIAL_MENSAL",       # eSocial
-            "FGTS_MENSAL",          # FGTS
-            "CAGED_MENSAL",         # Cadastro Geral de Empregados e Desempregados
-        ])
-
-        # Obrigações anuais comuns
-        codes.extend([
-            "DIRPJ_ANUAL",          # Declaração de Informações Econômico-Fiscais da PJ
-            "DIRF_ANUAL",           # Declaração do Imposto de Renda Retido na Fonte
-            "RAIS_ANUAL",           # Relação Anual de Informações Sociais
-        ])
+        codes.extend(DEPARTAMENTO_PESSOAL_CODES)
 
         return codes

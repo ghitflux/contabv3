@@ -329,7 +329,7 @@ async def export_report(
         file_bytes, file_path = await exporter.export(
             pdf_data, request.filename or f"report_{request.report_type}_{datetime.now().isoformat()}"
         )
-    else:  # CSV
+    else:  # CSV or XLS
         exporter = CSVExporter()
         csv_data = {
             "title": request.report_type.replace("_", " ").title(),
@@ -337,9 +337,11 @@ async def export_report(
             "summary": report_data,
             "table_data": _prepare_csv_table_data(report_data),
         }
-        file_bytes, file_path = await exporter.export(
-            csv_data, request.filename or f"report_{request.report_type}_{datetime.now().isoformat()}"
-        )
+        file_extension = "csv" if request.format == ReportFormat.CSV else "xls"
+        desired_name = request.filename or f"report_{request.report_type}_{datetime.now().isoformat()}"
+        if not desired_name.endswith(f".{file_extension}"):
+            desired_name = f"{desired_name}.{file_extension}"
+        file_bytes, file_path = await exporter.export(csv_data, desired_name)
 
     # Save to history
     repo = ReportRepository(db)
@@ -372,7 +374,7 @@ async def download_report(
 ):
     """Download a previously generated report."""
     repo = ReportRepository(db)
-    history = await repo.get_by_id(report_id)
+    history = await repo.get_history_by_id(report_id)
 
     if not history:
         raise HTTPException(
@@ -385,8 +387,11 @@ async def download_report(
             status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
         )
 
-    # Check if expired
-    if history.expires_at and history.expires_at < datetime.utcnow():
+    # Check if expired (handle tz-aware)
+    from datetime import timezone
+
+    now = datetime.now(timezone.utc)
+    if history.expires_at and history.expires_at < now:
         raise HTTPException(
             status_code=status.HTTP_410_GONE, detail="Report file has expired"
         )
@@ -396,10 +401,15 @@ async def download_report(
             status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
         )
 
-    # Return file
+    media_type = "application/pdf"
+    if history.format == ReportFormat.CSV:
+        media_type = "text/csv"
+    elif history.format == ReportFormat.XLS:
+        media_type = "application/vnd.ms-excel"
+
     return FileResponse(
         history.file_path,
-        media_type="application/pdf" if history.format == ReportFormat.PDF else "text/csv",
+        media_type=media_type,
         filename=history.file_path.split("/")[-1],
     )
 
@@ -475,4 +485,3 @@ def _prepare_table_data(report_data: dict) -> list[list[str]]:
 def _prepare_csv_table_data(report_data: dict) -> list[list[str]]:
     """Convert report data to CSV table format."""
     return _prepare_table_data(report_data)
-

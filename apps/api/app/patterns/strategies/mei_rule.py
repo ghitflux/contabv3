@@ -5,7 +5,7 @@ Obligation rules for MEI (Microempreendedor Individual).
 from typing import List
 
 from app.db.models.client import Client
-from app.patterns.strategies.base import ObligationRule
+from app.patterns.strategies.base import DEPARTAMENTO_PESSOAL_CODES, ObligationRule
 
 
 class MEIRule(ObligationRule):
@@ -28,15 +28,10 @@ class MEIRule(ObligationRule):
             List of obligation type codes
         """
         codes = [
-            "DAS_MEI_MENSAL",       # DAS mensal simplificado
-            "DASN_SIMEI_ANUAL",     # Declaração anual
+            "DAS_MEI_MENSAL",
+            "DASN_SIMEI_ANUAL",
         ]
 
-        # Se tiver funcionários (MEI pode ter 1 funcionário)
-        # Aqui poderíamos verificar se o cliente tem funcionários
-        # Por enquanto, vamos adicionar sempre
-        codes.extend([
-            "FGTS_MENSAL",          # Se tiver empregado
-        ])
+        codes.extend(DEPARTAMENTO_PESSOAL_CODES)
 
         return codes

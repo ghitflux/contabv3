@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.report import ReportFormat, ReportHistory, ReportStatus, ReportTemplate, ReportType
 from app.db.repositories.base import BaseRepository
+from fastapi.encoders import jsonable_encoder
 
 
 class ReportRepository(BaseRepository[ReportTemplate]):
@@ -65,9 +66,9 @@ class ReportRepository(BaseRepository[ReportTemplate]):
     async def save_template_history(
         self,
         user_id: UUID,
-        report_type: ReportType,
+        report_type: ReportType | str,
         filters_used: dict,
-        format: ReportFormat,
+        format: ReportFormat | str,
         file_path: Optional[str] = None,
         file_size: Optional[int] = None,
         template_id: Optional[UUID] = None,
@@ -94,11 +95,24 @@ class ReportRepository(BaseRepository[ReportTemplate]):
         if not expires_at:
             expires_at = datetime.utcnow() + timedelta(days=7)
 
+        # Normalize enums to DB enums
+        if not isinstance(report_type, ReportType):
+            # Accept pydantic enums/strings
+            value = getattr(report_type, "value", report_type)
+            report_type = ReportType(value)
+
+        if not isinstance(format, ReportFormat):
+            value = getattr(format, "value", format)
+            format = ReportFormat(value)
+
+        # Ensure filters are JSON-serializable (dates/datetimes -> ISO strings)
+        filters_json = jsonable_encoder(filters_used)
+
         history = ReportHistory(
             template_id=template_id,
             user_id=user_id,
             report_type=report_type,
-            filters_used=filters_used,
+            filters_used=filters_json,
             format=format,
             file_path=file_path,
             file_size=file_size,
@@ -109,8 +123,15 @@ class ReportRepository(BaseRepository[ReportTemplate]):
         self.db.add(history)
         await self.db.flush()
         await self.db.refresh(history)
+        await self.db.commit()
 
         return history
+
+    async def get_history_by_id(self, history_id: UUID) -> Optional[ReportHistory]:
+        """Get a report history record by ID."""
+        stmt = select(ReportHistory).where(ReportHistory.id == history_id)
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def get_history(
         self,
@@ -179,4 +200,3 @@ class ReportRepository(BaseRepository[ReportTemplate]):
         await self.db.flush()
 
         return count
-

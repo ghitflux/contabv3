@@ -12,23 +12,22 @@ import {
   DropdownTrigger,
   Link,
 } from '@/heroui';
+import { useAuth } from '@/hooks/auth/AuthContext';
 import {
   BarChartIcon as ChartIcon,
   ClockIcon,
   DollarSignIcon as CurrencyIcon,
   FileTextIcon as DocumentIcon,
-  HomeIcon,
   MenuIcon,
-  LicenseIcon as ShieldIcon,
   PanelRightCloseIcon,
   PanelRightOpenIcon,
-  UsersIcon,
   SettingsIcon,
+  LicenseIcon as ShieldIcon,
+  UsersIcon,
 } from '@/lib/icons';
+import { UserRole } from '@/types/user';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { useAuth } from '@/hooks/auth/AuthContext';
-import { UserRole } from '@/types/user';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -37,13 +36,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { user } = useAuth();
 
   const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-    { name: 'Clientes', href: '/clientes', icon: UsersIcon },
-    { name: 'Obrigações', href: '/obrigacoes', icon: DocumentIcon },
-    { name: 'Financeiro', href: '/financeiro', icon: CurrencyIcon },
-    { name: 'Licenças', href: '/licencas', icon: ShieldIcon },
-    { name: 'Relatórios', href: '/relatorios', icon: ChartIcon },
-    { name: 'Atividades', href: '/atividades', icon: ClockIcon },
+    ...(user?.role === UserRole.CLIENTE
+      ? [
+          { name: 'Meus Dados', href: '/meus-dados', icon: UsersIcon },
+          { name: 'Financeiro', href: '/financeiro', icon: CurrencyIcon },
+          { name: 'Downloads', href: '/downloads', icon: DocumentIcon },
+          { name: 'Relatórios', href: '/relatorios', icon: ChartIcon },
+          { name: 'Atividades', href: '/atividades', icon: ClockIcon },
+        ]
+      : [
+          { name: 'Clientes', href: '/clientes', icon: UsersIcon },
+          { name: 'Obrigações', href: '/obrigacoes', icon: DocumentIcon },
+          { name: 'Licenças', href: '/licencas', icon: ShieldIcon },
+          { name: 'Relatórios', href: '/relatorios', icon: ChartIcon },
+          { name: 'Downloads', href: '/downloads', icon: DocumentIcon },
+          { name: 'Atividades', href: '/atividades', icon: ClockIcon },
+        ]),
     ...(user?.role === UserRole.ADMIN
       ? [{ name: 'Configurações', href: '/configuracoes', icon: SettingsIcon }]
       : []),
@@ -65,9 +73,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       >
         <div
           className={`flex h-16 items-center border-b border-divider ${
-            isCollapsed && !isMobileSidebarOpen
-              ? 'justify-center px-0'
-              : 'justify-between px-6'
+            isCollapsed && !isMobileSidebarOpen ? 'justify-center px-0' : 'justify-between px-6'
           }`}
         >
           {!isCollapsed || isMobileSidebarOpen ? (

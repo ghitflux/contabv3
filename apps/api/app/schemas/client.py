@@ -35,7 +35,7 @@ class TipoEmpresa(str, Enum):
     COMERCIO = "comercio"
     SERVICO = "servico"
     INDUSTRIA = "industria"
-    MISTO = "misto"
+    FINANCEIRO = "financeiro"
 
 
 class ClientBase(BaseSchema):
@@ -86,6 +86,7 @@ class ClientBase(BaseSchema):
 
     # System access credentials (will be encrypted on backend)
     cpf_empresa: Optional[str] = Field(None, max_length=14)
+    senha_sistema: Optional[str] = Field(None, max_length=255)
     senha_gov: Optional[str] = Field(None, max_length=255)
     senha_prefeitura: Optional[str] = Field(None, max_length=255)
     login_seg_desemp: Optional[str] = Field(None, max_length=255)
@@ -166,6 +167,7 @@ class ClientUpdate(BaseSchema):
 
     # System access credentials
     cpf_empresa: Optional[str] = Field(None, max_length=14)
+    senha_sistema: Optional[str] = Field(None, max_length=255)
     senha_gov: Optional[str] = Field(None, max_length=255)
     senha_prefeitura: Optional[str] = Field(None, max_length=255)
     login_seg_desemp: Optional[str] = Field(None, max_length=255)
@@ -217,6 +219,7 @@ class ClientListItem(TimestampSchema):
 
     # System access credentials (optional in list view)
     cpf_empresa: Optional[str] = None
+    senha_sistema: Optional[str] = None
     senha_gov: Optional[str] = None
     login_seg_desemp: Optional[str] = None
     senha_seg_desemp: Optional[str] = None

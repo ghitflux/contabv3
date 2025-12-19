@@ -5,7 +5,7 @@ Obligation rules for service companies.
 from typing import List
 
 from app.db.models.client import Client, RegimeTributario
-from app.patterns.strategies.base import ObligationRule
+from app.patterns.strategies.base import DEPARTAMENTO_PESSOAL_CODES, ObligationRule
 
 
 class ServiceRule(ObligationRule):
@@ -30,28 +30,31 @@ class ServiceRule(ObligationRule):
         # Simples Nacional
         if client.regime_tributario == RegimeTributario.SIMPLES_NACIONAL:
             codes.extend([
+                "PGDAS_MENSAL",
                 "DAS_MENSAL",
-                "DEFIS_ANUAL",
             ])
 
         # Lucro Presumido
         elif client.regime_tributario == RegimeTributario.LUCRO_PRESUMIDO:
             codes.extend([
-                "DCTF_MENSAL",
+                "ISS_MENSAL",
                 "PIS_COFINS_MENSAL",
                 "EFD_CONTRIBUICOES",
-                "IRPJ_TRIMESTRAL",
-                "CSLL_TRIMESTRAL",
+                "IRPJ_CSLL_TRIMESTRAL",
+                "ECD_ANUAL",
+                "ECF_ANUAL",
             ])
 
         # Lucro Real
         elif client.regime_tributario == RegimeTributario.LUCRO_REAL:
             codes.extend([
-                "DCTF_MENSAL",
+                "ISS_MENSAL",
                 "PIS_COFINS_MENSAL",
                 "EFD_CONTRIBUICOES",
-                "IRPJ_MENSAL",
-                "CSLL_MENSAL",
+                "NFS_E_MENSAL",
+                "IRPJ_CSLL_TRIMESTRAL",
+                "ECD_ANUAL",
+                "ECF_ANUAL",
                 "LALUR_ANUAL",
             ])
 
@@ -62,27 +65,6 @@ class ServiceRule(ObligationRule):
                 "DASN_SIMEI_ANUAL",
             ])
 
-        # Obrigações municipais (ISS)
-        # Service sempre tem ISS
-        if client.regime_tributario != RegimeTributario.MEI:
-            codes.append("NFS_E_MENSAL")  # Nota Fiscal de Serviços Eletrônica
-
-        # Algumas cidades exigem declaração de ISS
-        if client.cidade in ["São Paulo", "Rio de Janeiro", "Belo Horizonte"]:
-            codes.append("DMS_MENSAL")  # Declaração Mensal de Serviços
-
-        # Obrigações trabalhistas e previdenciárias
-        codes.extend([
-            "ESOCIAL_MENSAL",
-            "FGTS_MENSAL",
-            "CAGED_MENSAL",
-        ])
-
-        # Obrigações anuais comuns
-        codes.extend([
-            "DIRPJ_ANUAL",
-            "DIRF_ANUAL",
-            "RAIS_ANUAL",
-        ])
+        codes.extend(DEPARTAMENTO_PESSOAL_CODES)
 
         return codes

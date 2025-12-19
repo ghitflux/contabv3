@@ -106,6 +106,83 @@ async def list_obligations(
     }
 
 
+@router.get("/matrix")
+async def get_obligations_matrix(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    month: int = Query(..., ge=1, le=12, description="Month"),
+    year: int = Query(..., ge=2020, le=2100, description="Year"),
+    search: Optional[str] = Query(None, description="Search by company name"),
+):
+    """
+    Get obligations matrix (Companies x Obligation Types).
+
+    Returns a matrix structure for the minimalist panel with:
+    - List of clients
+    - Each client's obligations for the specified month/year
+    - Progress counter
+    """
+    from sqlalchemy import select, func
+    from sqlalchemy.orm import selectinload
+    from app.db.models.client import Client
+    from app.db.models.obligation import Obligation
+    from app.db.models.obligation_type import ObligationType
+
+    # Query clients
+    query = select(Client).where(Client.deleted_at.is_(None))
+    if search:
+        query = query.where(Client.razao_social.ilike(f"%{search}%"))
+    query = query.order_by(Client.razao_social)
+
+    result = await db.execute(query)
+    clients = result.scalars().all()
+
+    # Build matrix
+    matrix = []
+    for client in clients:
+        # Get client's obligations for this month/year
+        oblig_query = (
+            select(Obligation)
+            .options(selectinload(Obligation.obligation_type))
+            .where(
+                Obligation.client_id == client.id,
+                func.extract('month', Obligation.due_date) == month,
+                func.extract('year', Obligation.due_date) == year,
+            )
+        )
+        oblig_result = await db.execute(oblig_query)
+        obligations = oblig_result.scalars().all()
+
+        obligations_list = []
+        for ob in obligations:
+            obligations_list.append({
+                "id": str(ob.id),
+                "status": str(ob.status.value if hasattr(ob.status, 'value') else ob.status),
+                "receipt_url": ob.receipt_url,
+                "due_date": ob.due_date.isoformat() if ob.due_date else None,
+                "obligation_type_name": ob.obligation_type.name if ob.obligation_type else "",
+                "obligation_type_code": ob.obligation_type.code if ob.obligation_type else "",
+                "recurrence": ob.obligation_type.recurrence if ob.obligation_type else None,
+            })
+
+        # Calculate progress
+        completed = sum(1 for ob_data in obligations_list if ob_data["status"] == "concluida")
+        total = len(obligations_list)
+
+        matrix.append({
+            "client_id": str(client.id),
+            "client_name": client.razao_social,
+            "client_cnpj": client.cnpj,
+            "client_regime_tributario": getattr(client.regime_tributario, "value", client.regime_tributario),
+            "client_tipo_empresa": getattr(client.tipo_empresa, "value", client.tipo_empresa),
+            "obligations": obligations_list,
+            "completed": completed,  # Flat instead of nested
+            "total": total  # Flat instead of nested
+        })
+
+    return matrix
+
+
 @router.get("/{obligation_id}", response_model=ObligationResponse)
 async def get_obligation(
     obligation_id: UUID,
@@ -154,11 +231,12 @@ async def generate_obligations(
         )
 
     generator = ObligationGenerator(db)
+    repo = ObligationRepository(db)
 
     if request.client_id:
         # Generate for specific client
         client_repo = ClientRepository(db)
-        client = await client_repo.get(request.client_id)
+        client = await client_repo.get_by_id(request.client_id)
         if not client:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -172,10 +250,16 @@ async def generate_obligations(
             generated_by_id=current_user.id,
         )
 
+        obligations_with_relations = []
+        for ob in obligations:
+            ob_full = await repo.get_by_id_with_relations(ob.id)
+            if ob_full:
+                obligations_with_relations.append(_obligation_to_response(ob_full))
+
         return {
             "success": True,
-            "total_obligations": len(obligations),
-            "obligations": obligations,
+            "total_obligations": len(obligations_with_relations),
+            "obligations": obligations_with_relations,
         }
     else:
         # Generate for all clients
@@ -506,93 +590,6 @@ async def get_obligation_templates(
         }
         for t in templates
     ]
-
-
-@router.get("/matrix", response_model=list[dict])
-async def get_obligations_matrix(
-    db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    month: int = Query(..., ge=1, le=12, description="Month"),
-    year: int = Query(..., ge=2020, le=2100, description="Year"),
-    search: Optional[str] = Query(None, description="Search by company name"),
-):
-    """
-    Get obligations matrix (Companies x Obligation Types).
-
-    Returns a matrix structure for the minimalist panel with:
-    - List of clients
-    - Each client's obligations for the specified month/year
-    - Progress counter
-    """
-    from sqlalchemy import select, func
-    from app.db.models.client import Client
-    from app.db.models.obligation import Obligation
-    from app.db.models.obligation_type import ObligationType
-
-    # Fixed obligation types for matrix
-    FIXED_TYPES = [
-        "DCTFWeb",
-        "EFD-Contribuições",
-        "ECD",
-        "ECF",
-        "ISS",
-        "FGTS",
-        "INSS/eSocial"
-    ]
-
-    # Query clients
-    query = select(Client).where(Client.deleted_at.is_(None))
-    if search:
-        query = query.where(Client.razao_social.ilike(f"%{search}%"))
-    query = query.order_by(Client.razao_social)
-
-    result = await db.execute(query)
-    clients = result.scalars().all()
-
-    # Build matrix
-    matrix = []
-    for client in clients:
-        # Get client's obligations for this month/year
-        oblig_query = select(Obligation).join(ObligationType).where(
-            Obligation.client_id == client.id,
-            func.extract('month', Obligation.due_date) == month,
-            func.extract('year', Obligation.due_date) == year
-        )
-        oblig_result = await db.execute(oblig_query)
-        obligations = oblig_result.scalars().all()
-
-        # Map obligations by type name
-        obligations_by_type = {}
-        for ob in obligations:
-            if ob.obligation_type:
-                type_name = ob.obligation_type.name
-                obligations_by_type[type_name] = {
-                    "id": str(ob.id),
-                    "status": ob.status.value,
-                    "receipt_url": ob.receipt_url,
-                    "due_date": ob.due_date.isoformat() if ob.due_date else None,
-                    "obligation_type_name": ob.obligation_type.name,
-                }
-
-        # Build obligations array for fixed types
-        obligations_data = []
-        for type_name in FIXED_TYPES:
-            obligations_data.append(obligations_by_type.get(type_name))
-
-        # Calculate progress
-        completed = sum(1 for ob_data in obligations_data if ob_data and ob_data["status"] == "concluida")
-        total = len([ob for ob in obligations_data if ob is not None])
-
-        matrix.append({
-            "client_id": str(client.id),
-            "client_name": client.razao_social,
-            "client_cnpj": client.cnpj,
-            "obligations": obligations_data,
-            "progress": {"completed": completed, "total": total}
-        })
-
-    return matrix
-
 
 @router.post("/{obligation_id}/complete", response_model=ObligationResponse)
 async def complete_obligation(

@@ -20,7 +20,7 @@ import {
   Divider,
   Chip,
 } from "@heroui/react";
-import { EyeIcon, EyeOffIcon, SaveIcon } from "@/lib/icons";
+import { EyeIcon, EyeOffIcon, RefreshIcon, SaveIcon } from "@/lib/icons";
 import { toast } from "@/lib/toast";
 import { maskCNPJ, maskCPF, onlyNumbers } from "@/lib/masks";
 import type { Client, ClientCreate } from "@/types/client";
@@ -81,13 +81,14 @@ const clientFormSchema = z.object({
     .trim()
     .refine((value) => onlyNumbers(value).length === 14, "CNPJ inválido"),
   cpf_empresa: nullableCPF,
+  senha_sistema: nullableString,
   senha_gov: nullableString,
   inscricao_estadual: nullableString,
   inscricao_municipal: nullableString,
   codigo_simples: nullableString,
 
   email: z.string().trim().email("Email inválido"),
-  telefone: nullableString,
+  telefone: nullableString.optional(),
   celular: nullableString,
 
   cep: nullableString,
@@ -143,12 +144,12 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
   const toggleFieldVisibility = (key: string) => {
     setVisibleFields((prev) => ({ ...prev, [key]: !prev[key] }));
   };
-
   const {
     control,
     handleSubmit,
     formState: { errors },
     reset,
+    setValue,
   } = useForm<ClientFormData>({
     // @ts-expect-error - Type mismatch between react-hook-form and @hookform/resolvers versions
     resolver: zodResolver(clientFormSchema),
@@ -164,12 +165,12 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
           nome_fantasia: null,
           cnpj: "",
           cpf_empresa: null,
+          senha_sistema: null,
           senha_gov: null,
           inscricao_estadual: null,
           inscricao_municipal: null,
           codigo_simples: null,
           email: "",
-          telefone: null,
           celular: null,
           cep: null,
           logradouro: null,
@@ -201,6 +202,40 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
           observacoes: null,
         },
   });
+
+  const generateSystemPassword = React.useCallback(() => {
+    const length = 16;
+    const upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const lower = "abcdefghijklmnopqrstuvwxyz";
+    const digits = "0123456789";
+    const specials = "!@#$%^&*()-_=+";
+    const all = upper + lower + digits + specials;
+    const values = new Uint32Array(length);
+    const cryptoApi = globalThis.crypto;
+
+    if (cryptoApi?.getRandomValues) {
+      cryptoApi.getRandomValues(values);
+    } else {
+      for (let i = 0; i < length; i += 1) {
+        values[i] = Math.floor(Math.random() * all.length);
+      }
+    }
+
+    const pick = (chars: string, idx: number) => chars[values[idx] % chars.length];
+    const base = [
+      pick(upper, 0),
+      pick(lower, 1),
+      pick(digits, 2),
+      pick(specials, 3),
+    ];
+
+    for (let i = base.length; i < length; i += 1) {
+      base.push(pick(all, i));
+    }
+
+    const password = base.sort(() => 0.5 - Math.random()).join("");
+    setValue("senha_sistema", password, { shouldDirty: true, shouldTouch: true });
+  }, [setValue]);
 
   const onSubmit = async (data: ClientFormData) => {
     try {
@@ -262,7 +297,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
                 {/* Dados da Empresa */}
                 <section>
                   <h3 className="text-lg font-semibold mb-3">Dados da Empresa</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     <Controller
                       name="razao_social"
                       control={control}
@@ -513,7 +548,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
                 {/* Contato */}
                 <section>
                   <h3 className="text-lg font-semibold mb-3">Contato</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     <Controller
                       name="email"
                       control={control}
@@ -526,18 +561,6 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
                           isRequired
                           isInvalid={!!errors.email}
                           errorMessage={errors.email?.message}
-                        />
-                      )}
-                    />
-                    <Controller
-                      name="telefone"
-                      control={control}
-                      render={({ field }) => (
-                        <Input
-                          {...field}
-                          value={field.value || ""}
-                          label="Telefone"
-                          placeholder="(00) 0000-0000"
                         />
                       )}
                     />
@@ -558,10 +581,62 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
 
                 <Divider />
 
+                {/* Acesso ao Sistema */}
+                <section>
+                  <h3 className="text-lg font-semibold mb-3">Acesso ao Sistema</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <Controller
+                      name="senha_sistema"
+                      control={control}
+                      render={({ field }) => (
+                        <Input
+                          {...field}
+                          value={field.value || ""}
+                          type={isFieldVisible("senha_sistema") ? "text" : "password"}
+                          label="Senha de Acesso"
+                          placeholder="Clique em gerar ou digite a senha"
+                          endContent={
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                variant="light"
+                                size="sm"
+                                isIconOnly
+                                onPress={generateSystemPassword}
+                                aria-label="Gerar senha"
+                              >
+                                <RefreshIcon className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="light"
+                                size="sm"
+                                isIconOnly
+                                onPress={() => toggleFieldVisibility("senha_sistema")}
+                                aria-label={
+                                  isFieldVisible("senha_sistema") ? "Ocultar senha" : "Mostrar senha"
+                                }
+                              >
+                                {isFieldVisible("senha_sistema") ? (
+                                  <EyeOffIcon className="h-4 w-4" />
+                                ) : (
+                                  <EyeIcon className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                          }
+                        />
+                      )}
+                    />
+                  </div>
+                </section>
+
+                <Divider />
+
                 {/* Endereço */}
                 <section>
                   <h3 className="text-lg font-semibold mb-3">Endereço</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     <Controller
                       name="cep"
                       control={control}
@@ -655,7 +730,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
                 {/* Tributação */}
                 <section>
                   <h3 className="text-lg font-semibold mb-3">Tributação</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     <Controller
                       name="regime_tributario"
                       control={control}
@@ -710,7 +785,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
                 {/* Financeiro */}
                 <section>
                   <h3 className="text-lg font-semibold mb-3">Financeiro</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     <Controller
                       name="honorarios_mensais"
                       control={control}
@@ -869,7 +944,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
                 {/* Responsável */}
                 <section>
                   <h3 className="text-lg font-semibold mb-3">Responsável</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     <Controller
                       name="responsavel_nome"
                       control={control}

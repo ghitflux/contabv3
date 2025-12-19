@@ -87,7 +87,7 @@ def test_tipo_empresa_enum():
     assert TipoEmpresa.COMERCIO == "comercio"
     assert TipoEmpresa.SERVICO == "servico"
     assert TipoEmpresa.INDUSTRIA == "industria"
-    assert TipoEmpresa.MISTO == "misto"
+    assert TipoEmpresa.FINANCEIRO == "financeiro"
 
 
 def test_client_repr():

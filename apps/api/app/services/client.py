@@ -6,11 +6,14 @@ import secrets
 import string
 from typing import Optional
 from uuid import UUID
+from datetime import date
+
+from app.services.obligation.generator import ObligationGenerator
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import encrypt_field
+from app.core.security import decrypt_field, encrypt_field
 from app.db.models.client import Client, ClientStatus, RegimeTributario, TipoEmpresa
 from app.db.models.user import User, UserRole
 from app.db.repositories.client import ClientRepository
@@ -44,6 +47,7 @@ class ClientService:
     def _encrypt_sensitive_fields(self, data: dict) -> dict:
         """Encrypt sensitive credential fields in-place."""
         sensitive_keys = [
+            "senha_sistema",
             "senha_gov",
             "senha_prefeitura",
             "senha_seg_desemp",
@@ -57,6 +61,39 @@ class ClientService:
                 data[key] = encrypt_field(data[key])
 
         return data
+
+    def _decrypt_sensitive_fields(self, data: dict) -> dict:
+        """Decrypt sensitive credential fields in-place."""
+        sensitive_keys = [
+            "senha_sistema",
+            "senha_gov",
+            "senha_prefeitura",
+            "senha_seg_desemp",
+            "senha_nfse",
+            "senha_certificado_digital",
+            "senha_gcw_resp",
+        ]
+
+        for key in sensitive_keys:
+            if key in data:
+                try:
+                    data[key] = decrypt_field(data[key])
+                except Exception:
+                    data[key] = data[key]
+
+        return data
+
+    def _build_client_response(self, client: Client) -> ClientResponse:
+        """Serialize client data with decrypted sensitive fields."""
+        data = ClientResponse.model_validate(client).model_dump()
+        self._decrypt_sensitive_fields(data)
+        return ClientResponse(**data)
+
+    def _build_client_list_item(self, client: Client) -> ClientListItem:
+        """Serialize list item data with decrypted sensitive fields."""
+        data = ClientListItem.model_validate(client).model_dump()
+        self._decrypt_sensitive_fields(data)
+        return ClientListItem(**data)
 
     async def _generate_portal_password(self) -> str:
         """
@@ -92,7 +129,12 @@ class ClientService:
             detail="Failed to generate a compliant password",
         )
 
-    async def _create_portal_user(self, name: str, email: str) -> tuple[UUID, str]:
+    async def _create_portal_user(
+        self,
+        name: str,
+        email: str,
+        password: str | None = None,
+    ) -> tuple[UUID, str]:
         """
         Create a new cliente user for portal access and return (user_id, plain_password).
         """
@@ -104,7 +146,11 @@ class ClientService:
                 detail="Email already registered",
             )
 
-        password = await self._generate_portal_password()
+        if password:
+            await enforce_password_policy(self.session, password)
+            portal_password = password
+        else:
+            portal_password = await self._generate_portal_password()
         user = User(
             name=name,
             email=email,
@@ -112,10 +158,22 @@ class ClientService:
             is_active=True,
             is_verified=False,
         )
-        user.set_password(password)
+        user.set_password(portal_password)
         user = await user_repo.create(user)
 
-        return user.id, password
+        return user.id, portal_password
+
+    async def _update_portal_password(self, user_id: UUID | None, password: str) -> None:
+        """Update portal user password if a linked user exists."""
+        if not user_id:
+            return
+
+        await enforce_password_policy(self.session, password)
+        user_repo = UserRepository(self.session)
+        user = await user_repo.get_by_id(user_id)
+        if user:
+            user.set_password(password)
+            await user_repo.update(user)
 
     async def _validate_user_link(self, user_id: UUID | None, current_client_id: UUID | None = None) -> None:
         """
@@ -179,11 +237,20 @@ class ClientService:
         await self._validate_user_link(payload.get("user_id"))
 
         credentials: ClientUserCredentials | None = None
+        portal_password = payload.get("senha_sistema")
         if not payload.get("user_id"):
             user_name = payload.get("responsavel_nome") or payload.get("razao_social")
-            user_id, plain_password = await self._create_portal_user(user_name, payload["email"])
+            user_id, plain_password = await self._create_portal_user(
+                user_name,
+                payload["email"],
+                portal_password,
+            )
             payload["user_id"] = user_id
             credentials = ClientUserCredentials(access=payload["email"], credential=plain_password)
+            if portal_password:
+                payload["senha_sistema"] = portal_password
+        elif portal_password:
+            await self._update_portal_password(payload.get("user_id"), portal_password)
 
         payload = self._encrypt_sensitive_fields(payload)
 
@@ -193,8 +260,67 @@ class ClientService:
         await self.session.commit()
         await self.session.refresh(client)
 
+        # Generate obligations for current month
+        try:
+            from datetime import datetime
+            today = datetime.now()
+            generator = ObligationGenerator(self.session)
+            await generator.generate_for_client(
+                client=client,
+                year=today.year,
+                month=today.month,
+                generated_by_id=payload.get("user_id")
+            )
+            await self.session.commit()
+        except Exception as e:
+            # Log error but don't fail client creation
+            print(f"Warning: Failed to generate obligations for client {client.id}: {e}")
+            pass
+
+        # Create licenses based on licencas_necessarias
+        try:
+            from app.db.models.license import License, LicenseType, LicenseStatus
+            from app.db.repositories.license import LicenseRepository
+            from datetime import datetime, timedelta
+
+            # Map licencas_necessarias to LicenseType
+            license_mapping = {
+                'licenca_sanitaria': LicenseType.LICENCA_SANITARIA,
+                'arcb_bombeiros': LicenseType.LICENCA_BOMBEIROS,
+                'licenca_operacoes': LicenseType.ALVARA_FUNCIONAMENTO,
+                'baixo_risco': LicenseType.ALVARA_FUNCIONAMENTO,
+                'cert_acessibilidade': LicenseType.OUTROS,
+            }
+
+            licencas_necessarias = client.licencas_necessarias or []
+            if licencas_necessarias:
+                license_repo = LicenseRepository(self.session)
+                today = datetime.now()
+
+                for licenca_code in licencas_necessarias:
+                    license_type = license_mapping.get(licenca_code)
+                    if license_type:
+                        # Create license card with pending status
+                        license = License(
+                            client_id=client.id,
+                            license_type=license_type,
+                            status=LicenseStatus.EM_PROCESSO,
+                            registration_number="PENDENTE",
+                            issuing_authority="A DEFINIR",
+                            issue_date=today.date(),
+                            expiration_date=None,
+                            notes=f"Licença criada automaticamente ao cadastrar cliente. Preencha os dados quando disponível."
+                        )
+                        license = await license_repo.create(license)
+
+                await self.session.commit()
+        except Exception as e:
+            # Log error but don't fail client creation
+            print(f"Warning: Failed to create licenses for client {client.id}: {e}")
+            pass
+
         return ClientCreateResult(
-            client=ClientResponse.model_validate(client),
+            client=self._build_client_response(client),
             credentials=credentials,
         )
 
@@ -219,7 +345,7 @@ class ClientService:
                 detail="Client not found"
             )
 
-        return ClientResponse.model_validate(client)
+        return self._build_client_response(client)
 
     async def get_client_by_cnpj(self, cnpj: str) -> ClientResponse:
         """
@@ -242,7 +368,7 @@ class ClientService:
                 detail="Client not found"
             )
 
-        return ClientResponse.model_validate(client)
+        return self._build_client_response(client)
 
     async def update_client(
         self,
@@ -281,6 +407,10 @@ class ClientService:
 
         # Update fields
         update_data = client_data.model_dump(exclude_unset=True)
+        portal_password = update_data.get("senha_sistema")
+        if portal_password:
+            target_user_id = update_data.get("user_id") or client.user_id
+            await self._update_portal_password(target_user_id, portal_password)
         await self._validate_user_link(update_data.get("user_id"), current_client_id=client_id)
         update_data = self._encrypt_sensitive_fields(update_data)
 
@@ -291,7 +421,7 @@ class ClientService:
         await self.session.commit()
         await self.session.refresh(client)
 
-        return ClientResponse.model_validate(client)
+        return self._build_client_response(client)
 
     async def delete_client(self, client_id: UUID) -> None:
         """
@@ -378,7 +508,7 @@ class ClientService:
         )
 
         # Convert to list items
-        items = [ClientListItem.model_validate(c) for c in clients]
+        items = [self._build_client_list_item(c) for c in clients]
 
         # Calculate pages
         pages = (total + size - 1) // size if size > 0 else 0
@@ -465,6 +595,29 @@ class ClientService:
             "by_regime": by_regime,
             "total_revenue": float(total_revenue),
         }
+
+    async def get_client_by_user_id(self, user_id: UUID) -> ClientResponse:
+        """
+        Get client by user ID.
+
+        Args:
+            user_id: User UUID
+
+        Returns:
+            Client data
+
+        Raises:
+            HTTPException: If client not found or user not linked
+        """
+        client = await self.repo.get_by_user_id(user_id)
+
+        if not client:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Client not found for this user"
+            )
+
+        return self._build_client_response(client)
 
     async def save_draft(self, draft_data: ClientDraftCreate, user_id: UUID) -> UUID:
         """

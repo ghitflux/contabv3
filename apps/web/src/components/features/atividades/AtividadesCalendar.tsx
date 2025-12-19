@@ -1,15 +1,28 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { motion } from "framer-motion"
-import { Card, CardBody, CardHeader, Button } from "@/heroui"
+import { Card, CardBody, CardHeader, Button, Spinner } from "@/heroui"
 import { ChevronLeft, ChevronRight, Calendar } from "lucide-react"
-import { mockActivities } from "@/lib/mocks/activities"
 import { fadeIn, staggerItem } from "@/lib/animations"
+import { ActivityPriority, type Activity } from "@/types/activity"
 
-export function AtividadesCalendar() {
+type AtividadesCalendarProps = {
+  activities: Activity[]
+  isLoading?: boolean
+}
+
+export function AtividadesCalendar({ activities, isLoading = false }: AtividadesCalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [view, setView] = useState<"month" | "week" | "day">("month")
+  const activitiesByDate = useMemo(() => {
+    const map: Record<string, Activity[]> = {}
+    activities.forEach((activity) => {
+      if (!activity.due_date) return
+      map[activity.due_date] = [...(map[activity.due_date] ?? []), activity]
+    })
+    return map
+  }, [activities])
 
   const monthNames = [
     "Janeiro",
@@ -48,7 +61,7 @@ export function AtividadesCalendar() {
   const getActivitiesForDate = (date: Date | null) => {
     if (!date) return []
     const dateStr = date.toISOString().split("T")[0]
-    return mockActivities.filter((a) => a.dueDate === dateStr)
+    return activitiesByDate[dateStr] ?? []
   }
 
   const navigateMonth = (direction: number) => {
@@ -117,6 +130,11 @@ export function AtividadesCalendar() {
           </div>
         </CardHeader>
         <CardBody>
+          {isLoading && (
+            <div className="flex justify-center py-4">
+              <Spinner size="sm" color="primary" />
+            </div>
+          )}
           <div className="grid grid-cols-7 gap-2">
             {dayNames.map((day) => (
               <div
@@ -151,9 +169,9 @@ export function AtividadesCalendar() {
                           <div
                             key={activity.id}
                             className={`text-xs p-1 rounded truncate ${
-                              activity.priority === "high"
+                              activity.priority === ActivityPriority.HIGH
                                 ? "bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-400"
-                                : activity.priority === "medium"
+                                : activity.priority === ActivityPriority.MEDIUM
                                   ? "bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-400"
                                   : "bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400"
                             }`}
@@ -178,4 +196,3 @@ export function AtividadesCalendar() {
     </motion.div>
   )
 }
-

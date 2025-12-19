@@ -19,26 +19,35 @@ import {
   Checkbox,
 } from "@/heroui"
 import { Plus, Calendar, User } from "lucide-react"
-import { mockActivities, type Activity } from "@/lib/mocks/activities"
 import { staggerContainer, staggerItem, cardHover } from "@/lib/animations"
 import { StatusBadge } from "@/components/ui/StatusBadge"
 import { LabelChip } from "@/components/ui/LabelChip"
+import type { Activity, ActivityCreate } from "@/types/activity"
+import { ActivityPriority, ActivityStatus } from "@/types/activity"
+import { toast } from "@/lib/toast"
 
 export const AtividadesKanban = forwardRef<
   { openModal: () => void },
-  {}
->((props, ref) => {
-  const [activities, setActivities] = useState<Activity[]>(mockActivities)
+  {
+    activities: Activity[]
+    isLoading?: boolean
+    onCreate: (payload: ActivityCreate) => Promise<void>
+    defaultAssigneeId?: string
+    defaultAssigneeName?: string | null
+  }
+>(({ activities, isLoading, onCreate, defaultAssigneeId, defaultAssigneeName }, ref) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useImperativeHandle(ref, () => ({
     openModal: () => setIsDialogOpen(true),
   }))
-  const [newActivity, setNewActivity] = useState<Partial<Activity>>({
-    status: "todo",
-    priority: "medium",
+  const [newActivity, setNewActivity] = useState<Partial<ActivityCreate>>({
+    status: ActivityStatus.TODO,
+    priority: ActivityPriority.MEDIUM,
     labels: [],
     reminders: false,
+    assigned_to_id: defaultAssigneeId,
   })
 
   const columns = [
@@ -64,39 +73,63 @@ export const AtividadesKanban = forwardRef<
     },
   ]
 
-  const getPriorityColor = (priority: string) => {
+  const getPriorityColor = (priority: string | ActivityPriority) => {
     switch (priority) {
-      case "high":
+      case ActivityPriority.HIGH:
         return "bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-400"
-      case "medium":
+      case ActivityPriority.MEDIUM:
         return "bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-400"
-      case "low":
+      case ActivityPriority.LOW:
         return "bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400"
       default:
         return "bg-default-100 text-default-700"
     }
   }
 
-  const handleCreateActivity = () => {
-    const activity: Activity = {
-      id: String(activities.length + 1),
-      title: newActivity.title || "",
-      description: newActivity.description || "",
-      status: newActivity.status as Activity["status"],
-      priority: newActivity.priority as Activity["priority"],
-      assignedTo: newActivity.assignedTo || "",
-      dueDate: newActivity.dueDate || "",
-      labels: newActivity.labels || [],
-      recurrence: newActivity.recurrence,
-      reminders: newActivity.reminders || false,
+  const handleCreateActivity = async () => {
+    const assignedToId = newActivity.assigned_to_id || defaultAssigneeId || ""
+    if (!assignedToId) {
+      toast.error("Informe o responsável da atividade.")
+      return
+    }
+    if (!newActivity.title?.trim()) {
+      toast.error("Informe o título da atividade.")
+      return
     }
 
-    setActivities([...activities, activity])
-    setIsDialogOpen(false)
-    setNewActivity({ status: "todo", priority: "medium", labels: [], reminders: false })
+    const payload: ActivityCreate = {
+      title: newActivity.title.trim(),
+      description: newActivity.description?.trim() || null,
+      status: (newActivity.status as ActivityStatus | string) || ActivityStatus.TODO,
+      priority: (newActivity.priority as ActivityPriority | string) || ActivityPriority.MEDIUM,
+      assigned_to_id: assignedToId,
+      due_date: newActivity.due_date || null,
+      labels: newActivity.labels || [],
+      recurrence: (newActivity.recurrence as any) || null,
+      reminders: Boolean(newActivity.reminders),
+    }
+
+    try {
+      setIsSubmitting(true)
+      await onCreate(payload)
+      setIsDialogOpen(false)
+      setNewActivity({
+        status: ActivityStatus.TODO,
+        priority: ActivityPriority.MEDIUM,
+        labels: [],
+        reminders: false,
+        assigned_to_id: defaultAssigneeId,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Não foi possível criar a atividade."
+      toast.error(message)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const formatDate = (date: string) => {
+  const formatDate = (date: string | null | undefined) => {
+    if (!date) return "-"
     return new Date(date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })
   }
 
@@ -118,7 +151,7 @@ export const AtividadesKanban = forwardRef<
                   <div className="flex items-center justify-between w-full">
                     <h3 className="text-base font-semibold">{column.title}</h3>
                     <span className="inline-flex items-center justify-center min-w-6 h-6 px-2 rounded-full bg-default-100 dark:bg-default-100/20 text-default-700 dark:text-default-400 text-xs font-medium">
-                      {columnActivities.length}
+                      {isLoading ? "..." : columnActivities.length}
                     </span>
                   </div>
                 </div>
@@ -136,9 +169,9 @@ export const AtividadesKanban = forwardRef<
                           <div className="flex items-start justify-between gap-2">
                             <h4 className="font-medium text-sm leading-tight">{activity.title}</h4>
                             <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-medium ${getPriorityColor(activity.priority)}`}>
-                              {activity.priority === "high"
+                              {activity.priority === ActivityPriority.HIGH
                                 ? "Alta"
-                                : activity.priority === "medium"
+                                : activity.priority === ActivityPriority.MEDIUM
                                   ? "Média"
                                   : "Baixa"}
                             </span>
@@ -156,11 +189,13 @@ export const AtividadesKanban = forwardRef<
                           <div className="flex items-center justify-between text-xs text-default-500">
                             <div className="flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
-                              <span>{formatDate(activity.dueDate)}</span>
+                              <span>{formatDate(activity.due_date)}</span>
                             </div>
                             <div className="flex items-center gap-1">
                               <User className="h-3 w-3" />
-                              <span className="truncate max-w-[100px]">{activity.assignedTo}</span>
+                              <span className="truncate max-w-[140px]">
+                                {activity.assigned_to_name || activity.assigned_to_id || "-"}
+                              </span>
                             </div>
                           </div>
                           {activity.recurrence && (
@@ -214,7 +249,7 @@ export const AtividadesKanban = forwardRef<
                     label="Prioridade"
                     selectedKeys={newActivity.priority ? [newActivity.priority] : []}
                     onSelectionChange={(keys) => {
-                      const value = Array.from(keys)[0] as Activity["priority"] | undefined
+                      const value = Array.from(keys)[0] as ActivityPriority | undefined
                       if (value) {
                         setNewActivity({ ...newActivity, priority: value })
                       }
@@ -226,18 +261,27 @@ export const AtividadesKanban = forwardRef<
                   </Select>
                   <Input
                     label="Responsável"
-                    placeholder="Nome do responsável"
-                    value={newActivity.assignedTo || ""}
-                    onValueChange={(value) =>
-                      setNewActivity({ ...newActivity, assignedTo: value })
+                    placeholder="ID do responsável"
+                    isDisabled={Boolean(defaultAssigneeId)}
+                    value={
+                      newActivity.assigned_to_id ||
+                      defaultAssigneeName ||
+                      defaultAssigneeId ||
+                      ""
                     }
+                    description={
+                      defaultAssigneeId
+                        ? "Responsável padrão: você."
+                        : "Informe o ID do usuário responsável."
+                    }
+                    onValueChange={(value) => setNewActivity({ ...newActivity, assigned_to_id: value })}
                   />
                 </div>
                 <Input
                   label="Data de Vencimento"
                   type="date"
-                  value={newActivity.dueDate || ""}
-                  onValueChange={(value) => setNewActivity({ ...newActivity, dueDate: value })}
+                  value={newActivity.due_date || ""}
+                  onValueChange={(value) => setNewActivity({ ...newActivity, due_date: value })}
                 />
                 <Checkbox
                   isSelected={newActivity.reminders}
@@ -252,7 +296,7 @@ export const AtividadesKanban = forwardRef<
                 <Button variant="light" onPress={onClose}>
                   Cancelar
                 </Button>
-                <Button color="primary" onPress={handleCreateActivity}>
+                <Button color="primary" onPress={handleCreateActivity} isLoading={isSubmitting}>
                   Criar Atividade
                 </Button>
               </ModalFooter>
@@ -265,4 +309,3 @@ export const AtividadesKanban = forwardRef<
 })
 
 AtividadesKanban.displayName = "AtividadesKanban"
-

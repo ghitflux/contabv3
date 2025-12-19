@@ -20,6 +20,7 @@ import {
   LICENSE_TYPE_LABELS,
   SUMMARY_LICENSE_TYPES,
 } from "@/types/license";
+import { toast } from "@/lib/toast";
 
 type LicenseCreatePayload = {
   client_id: string;
@@ -53,7 +54,7 @@ export function LicenseCreateModal({
   const resolvedOfficeId = defaultClientId ?? OFFICE_CLIENT_ID;
   const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState({
-    client_id: "",
+    client_id: resolvedOfficeId ?? "",
     isOffice: Boolean(resolvedOfficeId),
     license_type: LicenseType.ALVARA_FUNC,
     status: LicenseStatus.PENDING,
@@ -68,7 +69,7 @@ export function LicenseCreateModal({
   useEffect(() => {
     if (isOpen) {
       setForm({
-        client_id: selectedClientId ?? "",
+        client_id: resolvedOfficeId ?? selectedClientId ?? "",
         isOffice: Boolean(resolvedOfficeId),
         license_type: LicenseType.ALVARA_FUNC,
         status: LicenseStatus.PENDING,
@@ -105,20 +106,30 @@ export function LicenseCreateModal({
   };
 
   const handleSave = async () => {
+    const hasOfficeClient = Boolean(resolvedOfficeId);
+    if (form.isOffice && !hasOfficeClient) {
+      toast.error("Configure o ID do escritório (NEXT_PUBLIC_OFFICE_CLIENT_ID) para salvar licenças do escritório.");
+      return;
+    }
+
+    const isOffice = form.isOffice && hasOfficeClient;
+    const clientId = isOffice ? resolvedOfficeId ?? "" : form.client_id.trim();
+
+    if (!clientId) {
+      toast.error("Informe o cliente da licença.");
+      return;
+    }
+    if (!form.registration_number.trim()) {
+      toast.error("Informe o número de registro.");
+      return;
+    }
+    if (!form.issuing_authority.trim()) {
+      toast.error("Informe o órgão emissor.");
+      return;
+    }
+
     try {
       setIsSaving(true);
-      const isOffice = form.isOffice && Boolean(resolvedOfficeId);
-      const clientId = isOffice ? resolvedOfficeId : form.client_id;
-
-      if (!clientId) {
-        throw new Error("Informe o cliente da licença.");
-      }
-      if (!form.registration_number.trim()) {
-        throw new Error("Informe o número de registro.");
-      }
-      if (!form.issuing_authority.trim()) {
-        throw new Error("Informe o órgão emissor.");
-      }
 
       const payload: LicenseCreatePayload = {
         client_id: clientId,
@@ -133,10 +144,11 @@ export function LicenseCreateModal({
       };
 
       await onSubmit(payload);
+      toast.success("Licença criada com sucesso.");
       onClose();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Não foi possível criar a licença.";
-      alert(message);
+      toast.error(message);
     } finally {
       setIsSaving(false);
     }
@@ -161,9 +173,11 @@ export function LicenseCreateModal({
               onValueChange={(value) => {
                 setField("isOffice", value);
                 if (value) {
-                  setField("client_id", "");
+                  setField("client_id", resolvedOfficeId ?? "");
                 } else if (selectedClientId) {
                   setField("client_id", selectedClientId);
+                } else {
+                  setField("client_id", "");
                 }
               }}
             >

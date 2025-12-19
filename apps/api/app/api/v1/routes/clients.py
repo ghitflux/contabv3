@@ -24,6 +24,25 @@ from app.services.client import ClientService
 router = APIRouter(prefix="/clients", tags=["clients"])
 
 
+@router.get("/me", response_model=ClientResponse, status_code=status.HTTP_200_OK)
+async def get_my_client(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: User = Depends(get_current_active_user),
+) -> ClientResponse:
+    """
+    Get current user's client data.
+    """
+    if current_user.role != UserRole.CLIENTE:
+         raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User is not a client"
+        )
+
+    service = ClientService(db)
+    return await service.get_client_by_user_id(current_user.id)
+
+
+
 @router.get("", response_model=dict, status_code=status.HTTP_200_OK)
 async def list_clients(
     db: Annotated[AsyncSession, Depends(get_db)],

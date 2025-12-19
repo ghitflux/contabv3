@@ -36,6 +36,7 @@ class ReportFormat(str, Enum):
 
     PDF = "pdf"
     CSV = "csv"
+    XLS = "xls"
 
 
 class ReportStatus(str, Enum):
@@ -462,4 +463,3 @@ class AuditReportData(BaseSchema):
     actions_by_user: dict[str, int]
     actions_by_module: dict[str, int]
     actions_by_type: dict[str, int]
-

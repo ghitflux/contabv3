@@ -91,6 +91,8 @@ class License(Base):
     )
     updated_at = Column(
         DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
         onupdate=func.now(),
     )
 

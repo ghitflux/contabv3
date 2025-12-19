@@ -16,8 +16,10 @@ import {
   TableColumn,
   TableHeader,
   TableRow,
+  Skeleton,
 } from "@/heroui";
 import { ArrowDownRight, ArrowUpRight, Download, MoreVertical, Plus, Search } from "lucide-react";
+import { useTransactions } from "@/hooks/useTransactions";
 
 type LancamentoTipo = "receita" | "despesa";
 type LancamentoStatus = "pago" | "pendente" | "atrasado";
@@ -33,64 +35,16 @@ interface Lancamento {
   cliente?: string;
 }
 
-const MOCK_LANCAMENTOS: Lancamento[] = [
-  {
-    id: "1",
-    data: "2025-01-15",
-    descricao: "Honorários - Janeiro 2025",
-    categoria: "Serviços Contábeis",
-    tipo: "receita",
-    valor: 5500.0,
-    status: "pago",
-    cliente: "ABC Comércio Ltda",
-  },
-  {
-    id: "2",
-    data: "2025-01-20",
-    descricao: "Aluguel do escritório",
-    categoria: "Despesas Fixas",
-    tipo: "despesa",
-    valor: 3200.0,
-    status: "pago",
-  },
-  {
-    id: "3",
-    data: "2025-01-25",
-    descricao: "Consultoria Fiscal",
-    categoria: "Serviços Especializados",
-    tipo: "receita",
-    valor: 2800.0,
-    status: "pendente",
-    cliente: "XYZ Indústria S.A.",
-  },
-  {
-    id: "4",
-    data: "2025-01-10",
-    descricao: "Energia elétrica",
-    categoria: "Despesas Operacionais",
-    tipo: "despesa",
-    valor: 450.0,
-    status: "pago",
-  },
-  {
-    id: "5",
-    data: "2025-01-28",
-    descricao: "Honorários - Janeiro 2025",
-    categoria: "Serviços Contábeis",
-    tipo: "receita",
-    valor: 4200.0,
-    status: "atrasado",
-    cliente: "DEF Serviços Ltda",
-  },
-];
-
 export function FinanceiroLancamentos() {
   const [busca, setBusca] = useState("");
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
 
+  // Fetch transactions from API
+  const { transactions, isLoading } = useTransactions({ autoFetch: true });
+
   const lancamentosFiltrados = useMemo(() => {
-    return MOCK_LANCAMENTOS.filter((lancamento) => {
+    return transactions.filter((lancamento) => {
       const matchTipo = filtroTipo === "todos" || lancamento.tipo === filtroTipo;
       const matchStatus = filtroStatus === "todos" || lancamento.status === filtroStatus;
       const matchBusca =
@@ -101,7 +55,7 @@ export function FinanceiroLancamentos() {
 
       return matchTipo && matchStatus && matchBusca;
     });
-  }, [busca, filtroStatus, filtroTipo]);
+  }, [transactions, busca, filtroStatus, filtroTipo]);
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat("pt-BR", {
@@ -116,6 +70,21 @@ export function FinanceiroLancamentos() {
     if (status === "pendente") return "warning";
     return "danger";
   };
+
+  if (isLoading) {
+    return (
+      <Card className="border border-default-200/50 dark:border-default-100/20">
+        <CardHeader>
+          <Skeleton className="h-6 w-48" />
+        </CardHeader>
+        <CardBody className="space-y-4">
+          {[...Array(5)].map((_, i) => (
+            <Skeleton key={i} className="h-12 w-full" />
+          ))}
+        </CardBody>
+      </Card>
+    );
+  }
 
   return (
     <Card className="border border-default-200/50 dark:border-default-100/20">

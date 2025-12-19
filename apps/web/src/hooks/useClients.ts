@@ -24,7 +24,12 @@ export function useClients() {
     setError(null);
 
     try {
-      const data = await clientsApi.list(filters);
+      // Use max size (100) if not specified to show all clients
+      const filtersWithSize = {
+        ...filters,
+        size: filters?.size ?? 100, // Default to 100 (max allowed by backend)
+      };
+      const data = await clientsApi.list(filtersWithSize);
       setClients(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch clients");

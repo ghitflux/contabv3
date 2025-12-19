@@ -3,37 +3,37 @@
  */
 
 export enum ClientStatus {
-  ATIVO = "ativo",
-  INATIVO = "inativo",
-  PENDENTE = "pendente",
+  ATIVO = 'ativo',
+  INATIVO = 'inativo',
+  PENDENTE = 'pendente',
 }
 
 export enum RegimeTributario {
-  SIMPLES_NACIONAL = "simples_nacional",
-  LUCRO_PRESUMIDO = "lucro_presumido",
-  LUCRO_REAL = "lucro_real",
-  MEI = "mei",
+  SIMPLES_NACIONAL = 'simples_nacional',
+  LUCRO_PRESUMIDO = 'lucro_presumido',
+  LUCRO_REAL = 'lucro_real',
+  MEI = 'mei',
 }
 
 export enum TipoEmpresa {
-  COMERCIO = "comercio",
-  SERVICO = "servico",
-  INDUSTRIA = "industria",
-  MISTO = "misto",
+  COMERCIO = 'comercio',
+  SERVICO = 'servico',
+  INDUSTRIA = 'industria',
+  FINANCEIRO = 'financeiro',
 }
 
 export enum ServicoContratado {
-  FISCAL = "fiscal",
-  CONTABIL = "contabil",
-  PESSOAL = "pessoal",
+  FISCAL = 'fiscal',
+  CONTABIL = 'contabil',
+  PESSOAL = 'pessoal',
 }
 
 export enum LicencaNecessaria {
-  LICENCA_SANITARIA = "licenca_sanitaria",
-  ARCB_BOMBEIROS = "arcb_bombeiros",
-  LICENCA_OPERACOES = "licenca_operacoes",
-  BAIXO_RISCO = "baixo_risco",
-  CERT_ACESSIBILIDADE = "cert_acessibilidade",
+  LICENCA_SANITARIA = 'licenca_sanitaria',
+  ARCB_BOMBEIROS = 'arcb_bombeiros',
+  LICENCA_OPERACOES = 'licenca_operacoes',
+  BAIXO_RISCO = 'baixo_risco',
+  CERT_ACESSIBILIDADE = 'cert_acessibilidade',
 }
 
 export interface ClientBase {
@@ -77,6 +77,7 @@ export interface ClientBase {
 
   // System access credentials (will be encrypted on backend)
   cpf_empresa: string | null;
+  senha_sistema: string | null;
   senha_gov: string | null;
   senha_prefeitura: string | null;
   login_seg_desemp: string | null;
@@ -134,6 +135,7 @@ export interface ClientListItem {
 
   // System access credentials (optional in list view)
   cpf_empresa?: string | null;
+  senha_sistema?: string | null;
   senha_gov?: string | null;
   login_seg_desemp?: string | null;
   senha_seg_desemp?: string | null;
@@ -144,9 +146,9 @@ export interface ClientListItem {
 
 export interface ClientFilters {
   query?: string;
-  status?: ClientStatus | "";
-  regime_tributario?: RegimeTributario | "";
-  tipo_empresa?: TipoEmpresa | "";
+  status?: ClientStatus | '';
+  regime_tributario?: RegimeTributario | '';
+  tipo_empresa?: TipoEmpresa | '';
   starts_with?: string; // A-Z alphabetical filter
   page?: number;
   size?: number;
@@ -164,7 +166,7 @@ export interface ClientListResponse {
  * Helper function to format CNPJ for display.
  */
 export function formatCNPJ(cnpj: string): string {
-  const digits = cnpj.replace(/\D/g, "");
+  const digits = cnpj.replace(/\D/g, '');
   if (digits.length !== 14) return cnpj;
   return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
 }
@@ -174,7 +176,7 @@ export function formatCNPJ(cnpj: string): string {
  */
 export function formatPhone(phone: string | null): string | null {
   if (!phone) return null;
-  const digits = phone.replace(/\D/g, "");
+  const digits = phone.replace(/\D/g, '');
   if (digits.length === 10) {
     return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
   }
@@ -189,9 +191,9 @@ export function formatPhone(phone: string | null): string | null {
  */
 export function getStatusLabel(status: ClientStatus): string {
   const labels: Record<ClientStatus, string> = {
-    [ClientStatus.ATIVO]: "Ativo",
-    [ClientStatus.INATIVO]: "Inativo",
-    [ClientStatus.PENDENTE]: "Pendente",
+    [ClientStatus.ATIVO]: 'Ativo',
+    [ClientStatus.INATIVO]: 'Inativo',
+    [ClientStatus.PENDENTE]: 'Pendente',
   };
   return labels[status];
 }
@@ -201,10 +203,10 @@ export function getStatusLabel(status: ClientStatus): string {
  */
 export function getRegimeLabel(regime: RegimeTributario): string {
   const labels: Record<RegimeTributario, string> = {
-    [RegimeTributario.SIMPLES_NACIONAL]: "Simples Nacional",
-    [RegimeTributario.LUCRO_PRESUMIDO]: "Lucro Presumido",
-    [RegimeTributario.LUCRO_REAL]: "Lucro Real",
-    [RegimeTributario.MEI]: "MEI",
+    [RegimeTributario.SIMPLES_NACIONAL]: 'Simples Nacional',
+    [RegimeTributario.LUCRO_PRESUMIDO]: 'Lucro Presumido',
+    [RegimeTributario.LUCRO_REAL]: 'Lucro Real',
+    [RegimeTributario.MEI]: 'MEI',
   };
   return labels[regime];
 }
@@ -214,10 +216,10 @@ export function getRegimeLabel(regime: RegimeTributario): string {
  */
 export function getTipoEmpresaLabel(tipo: TipoEmpresa | string): string {
   const labels: Record<string, string> = {
-    [TipoEmpresa.COMERCIO]: "Comércio",
-    [TipoEmpresa.SERVICO]: "Serviço",
-    [TipoEmpresa.INDUSTRIA]: "Indústria",
-    [TipoEmpresa.MISTO]: "Misto",
+    [TipoEmpresa.COMERCIO]: 'Comércio',
+    [TipoEmpresa.SERVICO]: 'Serviço',
+    [TipoEmpresa.INDUSTRIA]: 'Indústria',
+    [TipoEmpresa.FINANCEIRO]: 'Financeiro',
   };
   return labels[tipo] || tipo;
 }
@@ -227,9 +229,9 @@ export function getTipoEmpresaLabel(tipo: TipoEmpresa | string): string {
  */
 export function getServicoContratadoLabel(servico: ServicoContratado | string): string {
   const labels: Record<string, string> = {
-    [ServicoContratado.FISCAL]: "Fiscal",
-    [ServicoContratado.CONTABIL]: "Contábil",
-    [ServicoContratado.PESSOAL]: "Pessoal",
+    [ServicoContratado.FISCAL]: 'Fiscal',
+    [ServicoContratado.CONTABIL]: 'Contábil',
+    [ServicoContratado.PESSOAL]: 'Pessoal',
   };
   return labels[servico] || servico;
 }
@@ -239,11 +241,11 @@ export function getServicoContratadoLabel(servico: ServicoContratado | string): 
  */
 export function getLicencaNecessariaLabel(licenca: LicencaNecessaria | string): string {
   const labels: Record<string, string> = {
-    [LicencaNecessaria.LICENCA_SANITARIA]: "Licença Sanitária",
-    [LicencaNecessaria.ARCB_BOMBEIROS]: "ARCB Bombeiros",
-    [LicencaNecessaria.LICENCA_OPERACOES]: "Licença de Operações",
-    [LicencaNecessaria.BAIXO_RISCO]: "Baixo Risco",
-    [LicencaNecessaria.CERT_ACESSIBILIDADE]: "Cert. de Acessibilidade",
+    [LicencaNecessaria.LICENCA_SANITARIA]: 'Licença Sanitária',
+    [LicencaNecessaria.ARCB_BOMBEIROS]: 'ARCB Bombeiros',
+    [LicencaNecessaria.LICENCA_OPERACOES]: 'Licença de Operações',
+    [LicencaNecessaria.BAIXO_RISCO]: 'Baixo Risco',
+    [LicencaNecessaria.CERT_ACESSIBILIDADE]: 'Cert. de Acessibilidade',
   };
   return labels[licenca] || licenca;
 }
@@ -278,8 +280,8 @@ export interface ClientDraftCreate {
 // ========== Obligations Templates ==========
 
 export enum ObligationPeriodicidade {
-  MENSAL = "mensal",
-  ANUAL = "anual",
+  MENSAL = 'mensal',
+  ANUAL = 'anual',
 }
 
 export interface ObligationTemplate {

@@ -21,7 +21,7 @@ from app.patterns.strategies import (
     ObligationRule,
     ServiceRule,
 )
-from app.schemas.obligation import ObligationStatus
+from app.schemas.obligation import ObligationRecurrence, ObligationStatus
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class ObligationFactory:
             TipoEmpresa.COMERCIO: CommerceRule(),
             TipoEmpresa.SERVICO: ServiceRule(),
             TipoEmpresa.INDUSTRIA: IndustryRule(),
-            TipoEmpresa.MISTO: CommerceRule(),  # Mixed uses commerce rules + service
+            TipoEmpresa.FINANCEIRO: ServiceRule(),
         }
 
         # MEI strategy (overrides tipo_empresa)
@@ -111,12 +111,15 @@ class ObligationFactory:
             logger.warning(f"No active obligation types found for client {client.id}")
             return []
 
+        reference_label = f"Referência: {reference_month.strftime('%m/%Y')}"
+        type_ids = [ob_type.id for ob_type in obligation_types]
+
         # Check for duplicates
         existing_result = await self.db.execute(
             select(Obligation).where(
                 Obligation.client_id == client.id,
-                Obligation.due_date >= reference_month,
-                Obligation.due_date < self._next_month(reference_month),
+                Obligation.obligation_type_id.in_(type_ids),
+                Obligation.description == reference_label,
                 Obligation.deleted_at.is_(None)
             )
         )
@@ -128,13 +131,15 @@ class ObligationFactory:
         # Create obligations
         obligations = []
         for ob_type in obligation_types:
+            if not self._should_generate_for_recurrence(ob_type, reference_month):
+                continue
             # Skip if already exists
             if ob_type.id in existing_by_type:
                 logger.debug(f"Obligation already exists for client {client.id}, type {ob_type.code}")
                 continue
 
             # Calculate due date
-            due_date = strategy.calculate_due_date(ob_type, reference_month)
+            due_date = strategy.calculate_due_date(ob_type, reference_month, client)
 
             # Calculate priority
             priority = strategy.get_priority(ob_type, due_date)
@@ -147,7 +152,7 @@ class ObligationFactory:
                 due_date=due_date,
                 priority=priority,
                 status=ObligationStatus.PENDENTE,
-                description=f"Referência: {reference_month.strftime('%m/%Y')}"
+                description=reference_label
             )
             self.db.add(obligation)
             obligations.append(obligation)
@@ -232,9 +237,29 @@ class ObligationFactory:
             "errors": errors
         }
 
-    def _next_month(self, reference_month: date) -> date:
-        """Get the first day of next month."""
-        if reference_month.month == 12:
-            return date(reference_month.year + 1, 1, 1)
-        else:
-            return date(reference_month.year, reference_month.month + 1, 1)
+    def _should_generate_for_recurrence(
+        self,
+        obligation_type: ObligationType,
+        reference_month: date,
+    ) -> bool:
+        recurrence = getattr(obligation_type.recurrence, "value", obligation_type.recurrence)
+        month = reference_month.month
+
+        if recurrence == ObligationRecurrence.MENSAL.value:
+            return True
+        if recurrence == ObligationRecurrence.BIMESTRAL.value:
+            return month % 2 == 0
+        if recurrence == ObligationRecurrence.TRIMESTRAL.value:
+            return month in {3, 6, 9, 12}
+        if recurrence == ObligationRecurrence.SEMESTRAL.value:
+            return month in {6, 12}
+        if recurrence == ObligationRecurrence.ANUAL.value:
+            if not obligation_type.month_of_year:
+                logger.warning(
+                    "Skipping annual obligation without month_of_year: %s",
+                    obligation_type.code,
+                )
+                return False
+            return month == obligation_type.month_of_year
+
+        return True

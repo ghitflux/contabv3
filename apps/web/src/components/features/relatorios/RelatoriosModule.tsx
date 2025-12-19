@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Button, Card, CardBody, CardHeader, Tabs, Tab } from "@/heroui";
+import { Button, Card, CardBody, CardHeader, Tabs, Tab, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Select, SelectItem, Switch, Input } from "@/heroui";
 import { pageTransition, fadeIn } from "@/lib/animations";
 import {
   PlusIcon,
@@ -15,7 +15,15 @@ import {
 } from "@/lib/icons";
 import { Activity, Target } from "lucide-react";
 import { ReportBuilder } from "./ReportBuilder";
-import { SavedReports } from "./SavedReports";
+import { ReportDownloads } from "./ReportDownloads";
+import { ReportFormat, ReportType } from "@/types/report";
+import { reportsApi } from "@/lib/api/endpoints/reports";
+import { toast } from "@/lib/toast";
+import { startOfMonth, formatISO } from "date-fns";
+import { DatePickerField } from "@/components/ui/DatePickerField";
+import { useAuth } from "@/hooks/auth/AuthContext";
+import { clientsApi } from "@/lib/api/endpoints/clients";
+import type { ClientListItem } from "@/types/client";
 
 const financialReports = [
   {
@@ -70,14 +78,112 @@ const financialReports = [
 ];
 
 export function RelatoriosModule() {
+  const { user } = useAuth();
+  // Exibir controles avançados para todos exceto cliente; por padrão (user indefinido) mostrar.
+  const isAdminOrFunc = user?.role !== "cliente";
+  const OFFICE_CLIENT_ID = process.env.NEXT_PUBLIC_OFFICE_CLIENT_ID ?? "";
   const [activeTab, setActiveTab] = useState("essenciais");
   const [showBuilder, setShowBuilder] = useState(false);
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
+  const [isGeneratingId, setIsGeneratingId] = useState<string | null>(null);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [rangeModalOpen, setRangeModalOpen] = useState(false);
+  const [rangeStart, setRangeStart] = useState(formatISO(startOfMonth(new Date()), { representation: "date" }));
+  const [rangeEnd, setRangeEnd] = useState(formatISO(new Date(), { representation: "date" }));
+  const [selectedFormat, setSelectedFormat] = useState<ReportFormat>(ReportFormat.PDF);
+  const [clientSearch, setClientSearch] = useState("");
+  const [clientOptions, setClientOptions] = useState<ClientListItem[]>([]);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [isOfficeReport, setIsOfficeReport] = useState(false);
 
-  const handleGenerateReport = (reportId: string) => {
+  useEffect(() => {
+    if (!isAdminOrFunc || !rangeModalOpen) return;
+    let active = true;
+    (async () => {
+      try {
+        const res = await clientsApi.list({ query: clientSearch || undefined, size: 20 });
+        if (active) setClientOptions(res.items);
+      } catch (error) {
+        console.error("Erro ao buscar clientes para relatório", error);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [clientSearch, isAdminOrFunc, rangeModalOpen]);
+
+  const mapReportIdToType = (id: string): ReportType => {
+    switch (id) {
+      case "dre":
+        return ReportType.DRE;
+      case "fluxo-caixa":
+        return ReportType.FLUXO_CAIXA;
+      case "livro-caixa":
+        return ReportType.LIVRO_CAIXA;
+      case "receitas-cliente":
+        return ReportType.RECEITAS_CLIENTE;
+      case "despesas-categoria":
+        return ReportType.DESPESAS_CATEGORIA;
+      case "projecao-fluxo":
+        return ReportType.PROJECAO_FLUXO;
+      case "kpis":
+        return ReportType.KPIS;
+      default:
+        return ReportType.DRE;
+    }
+  };
+
+  const handleOpenRangeModal = (reportId: string) => {
     setSelectedReport(reportId);
-    // Aqui seria implementada a lógica de geração do relatório
-    console.log(`Gerando relatório: ${reportId}`);
+    setRangeModalOpen(true);
+  };
+
+  const handleGenerateWithRange = async () => {
+    if (!selectedReport) return;
+    setIsGeneratingId(selectedReport);
+
+    // Validate client selection for admin/func
+    let clientIds: string[] | undefined = undefined;
+    if (isAdminOrFunc) {
+      if (isOfficeReport && OFFICE_CLIENT_ID) {
+        clientIds = [OFFICE_CLIENT_ID];
+      } else if (!isOfficeReport && selectedClientId) {
+        clientIds = [selectedClientId];
+      } else if (!isOfficeReport) {
+        toast.error("Selecione um cliente ou marque como relatório do escritório.");
+        setIsGeneratingId(null);
+        return;
+      }
+    }
+
+    try {
+      const reportType = mapReportIdToType(selectedReport);
+      const response = await reportsApi.exportReport({
+        report_type: reportType,
+        format: selectedFormat,
+        filters: {
+          period_start: rangeStart,
+          period_end: rangeEnd,
+          report_type: reportType,
+          client_ids: clientIds,
+        },
+        customizations: {
+          include_summary: true,
+          include_charts: true,
+        },
+        filename: `${selectedReport}-${rangeEnd}`,
+      });
+
+      toast.success("Relatório gerado com sucesso. Baixando arquivo...");
+      await reportsApi.downloadReport(response.report_id, response.file_name);
+      setHistoryRefreshKey((prev) => prev + 1);
+      setRangeModalOpen(false);
+    } catch (error) {
+      console.error("Erro ao gerar relatório", error);
+      toast.error("Não foi possível gerar o relatório. Tente novamente.");
+    } finally {
+      setIsGeneratingId(null);
+    }
   };
 
   const getColorClasses = (color: string) => {
@@ -189,12 +295,14 @@ export function RelatoriosModule() {
                         {report.description}
                       </p>
                       <Button
-                        onClick={() => handleGenerateReport(report.id)}
+                        onClick={() => handleOpenRangeModal(report.id)}
                         variant="bordered"
                         size="sm"
                         className="w-full"
+                        isLoading={isGeneratingId === report.id}
+                        isDisabled={Boolean(isGeneratingId)}
                       >
-                        Gerar Relatório
+                        {isGeneratingId === report.id ? "Gerando..." : "Gerar Relatório"}
                       </Button>
                     </CardBody>
                   </Card>
@@ -284,27 +392,117 @@ export function RelatoriosModule() {
           </Tab>
 
           <Tab
-            key="saved"
+            key="downloads"
             title={
               <div className="flex items-center gap-2">
                 <FileTextIcon className="h-4 w-4" />
-                Relatórios Salvos
+                Downloads
               </div>
             }
           >
             <motion.div
-              key="saved"
+              key="downloads"
               initial="hidden"
               animate="visible"
               exit="exit"
               variants={fadeIn}
               className="mt-6"
             >
-              <SavedReports onEdit={() => setShowBuilder(true)} />
+              <ReportDownloads onEdit={() => setShowBuilder(true)} refreshKey={historyRefreshKey} />
             </motion.div>
           </Tab>
         </Tabs>
       )}
+
+      <Modal isOpen={rangeModalOpen} onOpenChange={(open) => setRangeModalOpen(open)}>
+        <ModalContent>
+          <ModalHeader>Selecionar período</ModalHeader>
+          <ModalBody className="space-y-4">
+            <div className="flex flex-col md:flex-row gap-4">
+              <DatePickerField
+                label="Início"
+                value={rangeStart}
+                onChange={setRangeStart}
+                size="md"
+                className="flex-1"
+                aria-label="Data de início"
+              />
+              <DatePickerField
+                label="Fim"
+                value={rangeEnd}
+                onChange={setRangeEnd}
+                size="md"
+                className="flex-1"
+                aria-label="Data de fim"
+              />
+            </div>
+            <Select
+              label="Formato"
+              selectedKeys={[selectedFormat]}
+              onSelectionChange={(keys) => {
+                const key = Array.from(keys)[0] as ReportFormat;
+                if (key) setSelectedFormat(key);
+              }}
+            >
+              <SelectItem key={ReportFormat.PDF} value={ReportFormat.PDF}>
+                PDF
+              </SelectItem>
+              <SelectItem key={ReportFormat.CSV} value={ReportFormat.CSV}>
+                CSV
+              </SelectItem>
+              <SelectItem key={ReportFormat.XLS} value={ReportFormat.XLS}>
+                XLS
+              </SelectItem>
+            </Select>
+            {isAdminOrFunc && (
+              <div className="space-y-3">
+                <Switch
+                  isSelected={isOfficeReport}
+                  onValueChange={(v) => {
+                    setIsOfficeReport(v);
+                    if (v) setSelectedClientId(null);
+                  }}
+                >
+                  Relatório do escritório
+                </Switch>
+                {!isOfficeReport && (
+                  <div className="space-y-2">
+                    <Input
+                      label="Cliente"
+                      placeholder="Buscar por nome/razão social"
+                      value={clientSearch}
+                      onChange={(e) => setClientSearch(e.target.value)}
+                    />
+                    <Select
+                      label="Selecionar cliente"
+                      selectedKeys={selectedClientId ? [selectedClientId] : []}
+                      onSelectionChange={(keys) => {
+                        const key = Array.from(keys)[0] as string;
+                        setSelectedClientId(key || null);
+                        setIsOfficeReport(false);
+                      }}
+                    >
+                      {clientOptions.map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.nome_fantasia || client.razao_social}
+                        </SelectItem>
+                      ))}
+                    </Select>
+                  </div>
+                )}
+              </div>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="light" onPress={() => setRangeModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button color="primary" onPress={handleGenerateWithRange} isLoading={Boolean(isGeneratingId)}>
+              Gerar
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </motion.div>
   );
 }

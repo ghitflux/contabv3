@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { motion } from "framer-motion"
 import { Tabs, Tab, Button } from "@/heroui"
 import { Plus } from "lucide-react"
@@ -8,10 +8,41 @@ import { AtividadesKanban } from "./AtividadesKanban"
 import { AtividadesCalendar } from "./AtividadesCalendar"
 import { AtividadesLista } from "./AtividadesLista"
 import { pageTransition, fadeIn } from "@/lib/animations"
+import { useActivities } from "@/hooks/useActivities"
+import type { ActivityCreate } from "@/types/activity"
+import { ActivityStatus, ActivityPriority } from "@/types/activity"
+import { useAuth } from "@/hooks/auth/AuthContext"
+import { toast } from "@/lib/toast"
 
 export function AtividadesModule() {
   const [activeTab, setActiveTab] = useState("kanban")
   const kanbanRef = useRef<{ openModal: () => void }>(null)
+  const { activities, isLoading, createActivity, fetchActivities } = useActivities()
+  const { user } = useAuth()
+
+  useEffect(() => {
+    fetchActivities({ page: 1, size: 200 })
+  }, [fetchActivities])
+
+  const handleCreateActivity = async (payload: ActivityCreate) => {
+    try {
+      await createActivity({
+        ...payload,
+        status: payload.status ?? ActivityStatus.TODO,
+        priority: payload.priority ?? ActivityPriority.MEDIUM,
+        assigned_to_id: payload.assigned_to_id || user?.id || "",
+      })
+      toast.success("Atividade criada com sucesso.")
+      // Refresh list to ensure consistency with server pagination
+      fetchActivities({ page: 1, size: 200 })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Não foi possível criar a atividade."
+      toast.error(message)
+      throw error
+    }
+  }
+
+  const activityItems = activities?.items ?? []
 
   return (
     <motion.div
@@ -59,7 +90,14 @@ export function AtividadesModule() {
               exit="exit"
               variants={fadeIn}
             >
-              <AtividadesKanban ref={kanbanRef} />
+              <AtividadesKanban
+                ref={kanbanRef}
+                activities={activityItems}
+                isLoading={isLoading}
+                onCreate={handleCreateActivity}
+                defaultAssigneeId={user?.id ?? undefined}
+                defaultAssigneeName={user?.name ?? null}
+              />
             </motion.div>
           )}
           {activeTab === "calendar" && (
@@ -70,7 +108,7 @@ export function AtividadesModule() {
               exit="exit"
               variants={fadeIn}
             >
-              <AtividadesCalendar />
+              <AtividadesCalendar activities={activityItems} isLoading={isLoading} />
             </motion.div>
           )}
           {activeTab === "lista" && (
@@ -81,7 +119,7 @@ export function AtividadesModule() {
               exit="exit"
               variants={fadeIn}
             >
-              <AtividadesLista />
+              <AtividadesLista activities={activityItems} isLoading={isLoading} />
             </motion.div>
           )}
         </div>
@@ -89,4 +127,3 @@ export function AtividadesModule() {
     </motion.div>
   )
 }
-

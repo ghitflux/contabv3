@@ -180,10 +180,17 @@ export function NotificationCenter() {
                       !notification.read ? 'shadow-sm' : ''
                     }`}
                   >
-                    <button
-                      type="button"
+                    <div
+                      role="button"
+                      tabIndex={0}
                       onClick={() => handleNotificationClick(notification)}
-                      className="w-full text-left"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleNotificationClick(notification);
+                        }
+                      }}
+                      className="w-full text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-xl"
                     >
                       <div className="flex items-start gap-3">
                         <span
@@ -221,7 +228,7 @@ export function NotificationCenter() {
                           </div>
                         </div>
                       </div>
-                    </button>
+                    </div>
                   </div>
                 );
               })}

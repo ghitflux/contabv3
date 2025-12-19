@@ -18,30 +18,38 @@ import {
   Badge,
 } from "@/heroui"
 import { Search, Filter, Calendar, User } from "lucide-react"
-import { mockActivities } from "@/lib/mocks/activities"
 import { fadeIn, staggerItem } from "@/lib/animations"
 import { StatusBadge } from "@/components/ui/StatusBadge"
 import { LabelChip } from "@/components/ui/LabelChip"
+import type { Activity } from "@/types/activity"
+import { ActivityPriority } from "@/types/activity"
 
-export function AtividadesLista() {
+type AtividadesListaProps = {
+  activities: Activity[]
+  isLoading?: boolean
+}
+
+export function AtividadesLista({ activities, isLoading = false }: AtividadesListaProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
   const [filterPriority, setFilterPriority] = useState("all")
 
   const filteredActivities = useMemo(() => {
-    return mockActivities.filter((activity) => {
+    return activities.filter((activity) => {
       const matchSearch =
         searchTerm === "" ||
         activity.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        activity.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        activity.assignedTo.toLowerCase().includes(searchTerm.toLowerCase())
+        (activity.description || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (activity.assigned_to_name || activity.assigned_to_id || "")
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase())
 
       const matchStatus = filterStatus === "all" || activity.status === filterStatus
       const matchPriority = filterPriority === "all" || activity.priority === filterPriority
 
       return matchSearch && matchStatus && matchPriority
     })
-  }, [searchTerm, filterStatus, filterPriority])
+  }, [activities, searchTerm, filterStatus, filterPriority])
 
   const getStatusLabel = (status: string) => {
     switch (status) {
@@ -58,33 +66,34 @@ export function AtividadesLista() {
     }
   }
 
-  const getPriorityLabel = (priority: string) => {
+  const getPriorityLabel = (priority: string | ActivityPriority) => {
     switch (priority) {
-      case "high":
+      case ActivityPriority.HIGH:
         return "Alta"
-      case "medium":
+      case ActivityPriority.MEDIUM:
         return "Média"
-      case "low":
+      case ActivityPriority.LOW:
         return "Baixa"
       default:
         return priority
     }
   }
 
-  const getPriorityColor = (priority: string) => {
+  const getPriorityColor = (priority: string | ActivityPriority) => {
     switch (priority) {
-      case "high":
+      case ActivityPriority.HIGH:
         return "bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-400"
-      case "medium":
+      case ActivityPriority.MEDIUM:
         return "bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-400"
-      case "low":
+      case ActivityPriority.LOW:
         return "bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400"
       default:
         return ""
     }
   }
 
-  const formatDate = (date: string) => {
+  const formatDate = (date: string | null | undefined) => {
+    if (!date) return "-"
     return new Date(date).toLocaleDateString("pt-BR")
   }
 
@@ -147,15 +156,16 @@ export function AtividadesLista() {
               <TableColumn>Vencimento</TableColumn>
               <TableColumn>Etiquetas</TableColumn>
             </TableHeader>
-            <TableBody
-              emptyContent="Nenhuma atividade encontrada."
-              items={filteredActivities}
-            >
-              {(activity) => (
-                <TableRow key={activity.id}>
-                  <TableCell>
-                    <div>
-                      <p className="font-medium">{activity.title}</p>
+          <TableBody
+            emptyContent="Nenhuma atividade encontrada."
+            items={filteredActivities}
+            isLoading={isLoading}
+          >
+            {(activity) => (
+              <TableRow key={activity.id}>
+                <TableCell>
+                  <div>
+                    <p className="font-medium">{activity.title}</p>
                       <p className="text-sm text-default-500 line-clamp-1">
                         {activity.description}
                       </p>
@@ -175,13 +185,13 @@ export function AtividadesLista() {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <User className="h-4 w-4 text-default-400" />
-                      <span>{activity.assignedTo}</span>
+                      <span>{activity.assigned_to_name || activity.assigned_to_id || "-"}</span>
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-default-400" />
-                      <span>{formatDate(activity.dueDate)}</span>
+                      <span>{formatDate(activity.due_date)}</span>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -200,4 +210,3 @@ export function AtividadesLista() {
     </motion.div>
   )
 }
-

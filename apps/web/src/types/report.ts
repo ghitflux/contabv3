@@ -23,6 +23,7 @@ export enum ReportType {
 export enum ReportFormat {
   PDF = "pdf",
   CSV = "csv",
+  XLS = "xls",
 }
 
 export enum ReportStatus {
@@ -361,4 +362,3 @@ export function getReportStatusColor(status: ReportStatus): "default" | "primary
   };
   return colors[status];
 }
-

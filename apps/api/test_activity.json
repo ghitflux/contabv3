@@ -1,0 +1,10 @@
+{
+  "title": "Revisar declaração IRPF",
+  "description": "Revisar e validar declaração do cliente",
+  "status": "todo",
+  "priority": "high",
+  "assigned_to_id": "4f9a11d9-f167-4ad7-92a3-903339d57996",
+  "due_date": "2025-12-20",
+  "labels": ["Fiscal", "Urgente"],
+  "reminders": true
+}

@@ -37,7 +37,7 @@ class TipoEmpresa(str, Enum):
     COMERCIO = "comercio"
     SERVICO = "servico"
     INDUSTRIA = "industria"
-    MISTO = "misto"
+    FINANCEIRO = "financeiro"
 
 
 class Client(Base, UUIDMixin, TimestampMixin):
@@ -101,6 +101,7 @@ class Client(Base, UUIDMixin, TimestampMixin):
 
     # System access credentials (encrypted)
     cpf_empresa: Mapped[Optional[str]] = mapped_column(String(14), nullable=True)
+    senha_sistema: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     senha_gov: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     senha_prefeitura: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     login_seg_desemp: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

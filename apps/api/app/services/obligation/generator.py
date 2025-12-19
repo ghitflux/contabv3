@@ -14,6 +14,7 @@ from app.db.models.obligation_event import ObligationEvent, ObligationEventType
 from app.db.repositories.obligation import ObligationRepository
 from app.db.repositories.obligation_event import ObligationEventRepository
 from app.patterns.factories.obligation_factory import ObligationFactory
+from app.services.obligation.seed_types import ensure_obligation_types
 
 
 class ObligationGenerator:
@@ -44,6 +45,7 @@ class ObligationGenerator:
         Returns:
             List of created obligations
         """
+        await ensure_obligation_types(self.db)
         # Create reference month date (first day of the month)
         from datetime import date as date_type
         reference_month = date_type(year, month, 1)
@@ -78,6 +80,7 @@ class ObligationGenerator:
         Returns:
             Dictionary with statistics about generation
         """
+        await ensure_obligation_types(self.db)
         # Get all active clients
         stmt = select(Client).where(Client.status == "ativo")
         result = await self.db.execute(stmt)

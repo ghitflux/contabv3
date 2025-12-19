@@ -5,7 +5,7 @@ Obligation rules for industry companies.
 from typing import List
 
 from app.db.models.client import Client, RegimeTributario
-from app.patterns.strategies.base import ObligationRule
+from app.patterns.strategies.base import DEPARTAMENTO_PESSOAL_CODES, ObligationRule
 
 
 class IndustryRule(ObligationRule):
@@ -30,31 +30,37 @@ class IndustryRule(ObligationRule):
         # Simples Nacional
         if client.regime_tributario == RegimeTributario.SIMPLES_NACIONAL:
             codes.extend([
+                "PGDAS_MENSAL",
                 "DAS_MENSAL",
-                "DEFIS_ANUAL",
+                "EFD_CONTRIBUICOES",
+                "EFD_ICMS_IPI_MENSAL",
+                "DIEF_MENSAL",
             ])
 
         # Lucro Presumido
         elif client.regime_tributario == RegimeTributario.LUCRO_PRESUMIDO:
             codes.extend([
-                "DCTF_MENSAL",
                 "PIS_COFINS_MENSAL",
                 "EFD_CONTRIBUICOES",
-                "IRPJ_TRIMESTRAL",
-                "CSLL_TRIMESTRAL",
-                "IPI_MENSAL",           # Imposto sobre Produtos Industrializados
+                "EFD_ICMS_IPI_MENSAL",
+                "ICMS_NORMAL_MENSAL",
+                "IPI_MENSAL",
+                "IRPJ_CSLL_TRIMESTRAL",
+                "ECD_ANUAL",
+                "ECF_ANUAL",
             ])
 
         # Lucro Real
         elif client.regime_tributario == RegimeTributario.LUCRO_REAL:
             codes.extend([
-                "DCTF_MENSAL",
                 "PIS_COFINS_MENSAL",
                 "EFD_CONTRIBUICOES",
-                "IRPJ_MENSAL",
-                "CSLL_MENSAL",
-                "LALUR_ANUAL",
+                "EFD_ICMS_IPI_MENSAL",
                 "IPI_MENSAL",
+                "IRPJ_CSLL_TRIMESTRAL",
+                "ECD_ANUAL",
+                "ECF_ANUAL",
+                "LALUR_ANUAL",
             ])
 
         # MEI (indústria não pode ser MEI, mas por completude)
@@ -64,29 +70,6 @@ class IndustryRule(ObligationRule):
                 "DASN_SIMEI_ANUAL",
             ])
 
-        # Obrigações estaduais (ICMS e IPI)
-        if client.regime_tributario != RegimeTributario.MEI:
-            codes.append("SPED_FISCAL")  # SPED Fiscal (ICMS/IPI)
-
-        # GIA (alguns estados)
-        if client.uf in ["SP"]:
-            codes.append("GIA_MENSAL")
-
-        # Bloco K (específico para indústria)
-        codes.append("BLOCO_K_MENSAL")  # Controle de Estoque e Produção
-
-        # Obrigações trabalhistas e previdenciárias
-        codes.extend([
-            "ESOCIAL_MENSAL",
-            "FGTS_MENSAL",
-            "CAGED_MENSAL",
-        ])
-
-        # Obrigações anuais comuns
-        codes.extend([
-            "DIRPJ_ANUAL",
-            "DIRF_ANUAL",
-            "RAIS_ANUAL",
-        ])
+        codes.extend(DEPARTAMENTO_PESSOAL_CODES)
 
         return codes

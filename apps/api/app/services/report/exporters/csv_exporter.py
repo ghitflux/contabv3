@@ -26,11 +26,9 @@ class CSVExporter:
             Tuple of (csv_bytes, file_path)
         """
         # Generate CSV in memory with UTF-8 BOM for Excel compatibility
-        buffer = io.BytesIO()
-        buffer.write("\ufeff".encode("utf-8"))  # BOM for Excel
-
+        text_buffer = io.StringIO()
         writer = csv.writer(
-            buffer, delimiter=";", quoting=csv.QUOTE_NONNUMERIC, lineterminator="\n"
+            text_buffer, delimiter=";", quoting=csv.QUOTE_NONNUMERIC, lineterminator="\n"
         )
 
         # Write header/metadata
@@ -67,9 +65,8 @@ class CSVExporter:
                 for row in section_data:
                     writer.writerow(row)
 
-        # Get CSV bytes
-        buffer.seek(0)
-        csv_bytes = buffer.read()
+        # Get CSV bytes (prepend BOM)
+        csv_bytes = ("\ufeff" + text_buffer.getvalue()).encode("utf-8")
 
         # Save to file
         file_path = self._save_to_file(csv_bytes, filename)
@@ -103,8 +100,9 @@ class CSVExporter:
         today = datetime.now().strftime("%Y%m%d")
         subdir = self._ensure_directory(today)
 
-        # Ensure .csv extension
-        if not filename.endswith(".csv"):
+        # Ensure a valid extension (.csv or .xls)
+        lower = filename.lower()
+        if not (lower.endswith(".csv") or lower.endswith(".xls")):
             filename += ".csv"
 
         file_path = subdir / filename
@@ -117,4 +115,3 @@ class CSVExporter:
         dir_path = self.output_dir / subdirectory
         dir_path.mkdir(parents=True, exist_ok=True)
         return dir_path
-

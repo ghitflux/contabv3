@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { pageTransition, fadeIn } from "@/lib/animations";
 import {
   Button,
   Card,
   CardBody,
-  CardHeader,
   Chip,
   Divider,
   Modal,
@@ -31,106 +30,24 @@ import {
   LicenseRenewal,
   LicenseStatus,
   LicenseType,
+  LicenseFilters,
   LICENSE_STATUS_LABELS,
   LICENSE_TYPE_LABELS,
   getLicenseStatusColor,
+  getExpirationBadgeColor,
+  formatExpirationStatus,
   normalizeLicenseStatus,
   normalizeLicenseType,
 } from "@/types/license";
 import { DatePickerField } from "@/components/ui/DatePickerField";
-import { AlertTriangle, Award, CheckCircle, Clock, Plus, Search, XCircle } from "lucide-react";
+import { AlertTriangle, Award, CheckCircle, Clock, Eye, Plus, RefreshCcw, Search, Trash2, XCircle } from "lucide-react";
+import { useLicenses } from "@/hooks/useLicenses";
+import { clientsApi } from "@/lib/api/endpoints/clients";
+import { toast } from "@/lib/toast";
 
 type TabKey = "clients" | "office";
 
-const mockClientLicenses: License[] = [
-  {
-    id: "mock-client-1",
-    client_id: "client-1",
-    client_name: "Tech Solutions Ltda",
-    license_type: LicenseType.LIC_SANITARIA,
-    issuing_authority: "Vigilância Sanitária",
-    registration_number: "LS-2023-001",
-    issue_date: "2023-05-31",
-    expiration_date: "2024-05-31",
-    fee: 500,
-    fee_paid: true,
-    status: LicenseStatus.ACTIVE,
-    notes: null,
-  },
-  {
-    id: "mock-client-2",
-    client_id: "client-2",
-    client_name: "Indústria XYZ Ltda",
-    license_type: LicenseType.AVCB_BOMBEIROS,
-    issuing_authority: "Corpo de Bombeiros",
-    registration_number: "AVCB-2022-102",
-    issue_date: "2023-01-09",
-    expiration_date: "2024-01-09",
-    fee: 450,
-    fee_paid: false,
-    status: LicenseStatus.RENEWING,
-    notes: null,
-  },
-  {
-    id: "mock-client-3",
-    client_id: "client-3",
-    client_name: "Comércio ABC S.A.",
-    license_type: LicenseType.LIC_AMBIENTAL,
-    issuing_authority: "Secretaria Meio Ambiente",
-    registration_number: "AMB-2021-808",
-    issue_date: "2022-03-14",
-    expiration_date: "2023-03-14",
-    fee: 800,
-    fee_paid: false,
-    status: LicenseStatus.EXPIRED,
-    notes: null,
-  },
-];
-
-const mockOfficeLicenses: License[] = [
-  {
-    id: "mock-office-1",
-    client_id: "office",
-    client_name: "Contábil Consult",
-    license_type: LicenseType.ALVARA_FUNC,
-    issuing_authority: "Prefeitura de São Paulo",
-    registration_number: "ALV-2023-550",
-    issue_date: "2023-02-01",
-    expiration_date: "2024-02-01",
-    fee: 350,
-    fee_paid: true,
-    status: LicenseStatus.ACTIVE,
-    notes: null,
-  },
-  {
-    id: "mock-office-2",
-    client_id: "office",
-    client_name: "Contábil Consult",
-    license_type: LicenseType.IE_ICMS,
-    issuing_authority: "Secretaria da Fazenda",
-    registration_number: "IE-2020-112",
-    issue_date: "2020-06-20",
-    expiration_date: "2025-06-20",
-    fee: null,
-    fee_paid: true,
-    status: LicenseStatus.ACTIVE,
-    notes: null,
-  },
-  {
-    id: "mock-office-3",
-    client_id: "office",
-    client_name: "Contábil Consult",
-    license_type: LicenseType.LIC_SANITARIA,
-    issuing_authority: "Vigilância Sanitária",
-    registration_number: "LS-2022-078",
-    issue_date: "2022-09-10",
-    expiration_date: "2024-09-10",
-    fee: 260,
-    fee_paid: false,
-    status: LicenseStatus.PENDING,
-    notes: null,
-  },
-];
+const DEFAULT_PAGE_SIZE = 50;
 
 function formatDatePtBR(dateString: string | null | undefined) {
   if (!dateString) return "-";
@@ -148,16 +65,21 @@ function formatCurrencyBRL(value: number | null | undefined) {
 }
 
 function getLicenseMeta(license: License) {
+  const hasServerInfo =
+    license.days_until_expiration !== undefined &&
+    license.days_until_expiration !== null;
+
   const expiration = license.expiration_date ? new Date(license.expiration_date) : null;
   const today = new Date();
-  let daysUntilExpiration: number | null = null;
-  if (expiration) {
-    const diffTime = expiration.getTime() - today.getTime();
-    daysUntilExpiration = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  }
+  const computedDays = expiration ? Math.ceil((expiration.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : null;
+  const daysUntilExpiration = hasServerInfo ? license.days_until_expiration! : computedDays;
 
-  const isExpired = daysUntilExpiration !== null && daysUntilExpiration < 0;
-  const isExpiringSoon = daysUntilExpiration !== null && daysUntilExpiration >= 0 && daysUntilExpiration <= 30;
+  const isExpired =
+    license.is_expired ??
+    (daysUntilExpiration !== null && daysUntilExpiration < 0);
+  const isExpiringSoon =
+    license.is_expiring_soon ??
+    (daysUntilExpiration !== null && daysUntilExpiration >= 0 && daysUntilExpiration <= 30);
 
   return { daysUntilExpiration, isExpired, isExpiringSoon };
 }
@@ -178,62 +100,72 @@ function getStatusIcon(status: LicenseStatus | string) {
   }
 }
 
-function filterMockLicenses(
-  list: License[],
-  search: string,
-  typeFilter: string,
-  statusFilter: string,
-) {
-  const query = search.trim().toLowerCase();
-
-  return list.filter((license) => {
-    const normalizedType = normalizeLicenseType(license.license_type);
-    const normalizedStatus = normalizeLicenseStatus(license.status);
-    const matchesSearch =
-      !query ||
-      (license.client_name ?? "").toLowerCase().includes(query) ||
-      LICENSE_TYPE_LABELS[normalizedType].toLowerCase().includes(query);
-
-    const matchesType =
-      typeFilter === "all" || normalizedType === normalizeLicenseType(typeFilter as LicenseType);
-
-    const matchesStatus =
-      statusFilter === "all" || normalizedStatus === normalizeLicenseStatus(statusFilter as LicenseStatus);
-
-    return matchesSearch && matchesType && matchesStatus;
-  });
+function formatClientLabel(license: License, officeClientId?: string | null) {
+  if (license.client_name) return license.client_name;
+  if (officeClientId && license.client_id === officeClientId) return "Escritório";
+  if (license.client_id) return `Cliente ${license.client_id.slice(0, 8)}`;
+  return "Cliente";
 }
 
 const OFFICE_CLIENT_ID = process.env.NEXT_PUBLIC_OFFICE_CLIENT_ID ?? null;
 
-type LicenseListFilters = {
-  query?: string;
-  license_type?: LicenseType | string;
-  status?: LicenseStatus | string;
-  expiring_soon?: boolean;
-  expired?: boolean;
-  page?: number;
-  size?: number;
-};
-
 export function LicencasModule() {
-  const [selectedLicense, setSelectedLicense] = useState<License | null>(null);
+  const {
+    licenses,
+    selectedLicense,
+    isLoading,
+    fetchLicenses,
+    fetchLicenseById,
+    createLicense,
+    updateLicense,
+    deleteLicense,
+    renewLicense,
+    setSelectedLicense,
+  } = useLicenses();
+
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [activeTab, setActiveTab] = useState<TabKey>("clients");
   const [cardSearch, setCardSearch] = useState("");
   const [cardTypeFilter, setCardTypeFilter] = useState<string>("all");
   const [cardStatusFilter, setCardStatusFilter] = useState<string>("all");
+  const [clientNames, setClientNames] = useState<Record<string, string>>({});
+  const [formData, setFormData] = useState<LicenseCreate>({
+    client_id: "",
+    license_type: LicenseType.ALVARA_FUNC,
+    registration_number: "",
+    issuing_authority: "",
+    issue_date: new Date().toISOString().split("T")[0]!,
+    expiration_date: null,
+    notes: null,
+  });
+  const [renewalData, setRenewalData] = useState<LicenseRenewal>({
+    new_issue_date: new Date().toISOString().split("T")[0]!,
+    new_expiration_date: null,
+    new_registration_number: null,
+    notes: null,
+  });
 
-  const filteredClientLicenses = useMemo(
-    () => filterMockLicenses(mockClientLicenses, cardSearch, cardTypeFilter, cardStatusFilter),
-    [cardSearch, cardStatusFilter, cardTypeFilter],
-  );
-
-  const filteredOfficeLicenses = useMemo(
-     () => filterMockLicenses(mockOfficeLicenses, cardSearch, cardTypeFilter, cardStatusFilter),
-     [cardSearch, cardStatusFilter, cardTypeFilter],
-   );
+  const {
+    isOpen: isDetailsOpen,
+    onOpen: onDetailsOpen,
+    onClose: onDetailsClose,
+  } = useDisclosure();
+  const {
+    isOpen: isEditOpen,
+    onOpen: onEditOpen,
+    onClose: onEditClose,
+  } = useDisclosure();
+  const {
+    isOpen: isRenewOpen,
+    onOpen: onRenewOpen,
+    onClose: onRenewClose,
+  } = useDisclosure();
+  const {
+    isOpen: isDeleteOpen,
+    onOpen: onDeleteOpen,
+    onClose: onDeleteClose,
+  } = useDisclosure();
 
   const cardTypeItems = useMemo(
     () => [
@@ -257,49 +189,72 @@ export function LicencasModule() {
     [],
   );
 
-  const {
-    isOpen: isDetailsOpen,
-    onOpen: onDetailsOpen,
-    onClose: onDetailsClose,
-  } = useDisclosure();
-  const {
-    isOpen: isEditOpen,
-    onOpen: onEditOpen,
-    onClose: onEditClose,
-  } = useDisclosure();
-  const {
-    isOpen: isRenewOpen,
-    onOpen: onRenewOpen,
-    onClose: onRenewClose,
-  } = useDisclosure();
-  const {
-    isOpen: isDeleteOpen,
-    onOpen: onDeleteOpen,
-    onClose: onDeleteClose,
-  } = useDisclosure();
+  useEffect(() => {
+    const filters: LicenseFilters = {
+      search: cardSearch || undefined,
+      license_type: cardTypeFilter !== "all" ? cardTypeFilter : undefined,
+      status: cardStatusFilter !== "all" ? cardStatusFilter : undefined,
+      page: 1,
+      size: DEFAULT_PAGE_SIZE,
+    };
 
-  const [formData, setFormData] = useState<LicenseCreate>({
-    client_id: "",
-    license_type: LicenseType.ALVARA_FUNC,
-    registration_number: "",
-    issuing_authority: "",
-    issue_date: new Date().toISOString().split("T")[0]!,
-    expiration_date: null,
-    notes: null,
-  });
+    const timer = setTimeout(() => {
+      fetchLicenses(filters);
+    }, 300);
 
-  const [renewalData, setRenewalData] = useState<LicenseRenewal>({
-    new_issue_date: new Date().toISOString().split("T")[0]!,
-    new_expiration_date: null,
-    new_registration_number: null,
-    notes: null,
-  });
+    return () => clearTimeout(timer);
+  }, [cardSearch, cardStatusFilter, cardTypeFilter, fetchLicenses, refreshKey]);
 
+  const licensesList = licenses?.items ?? [];
+  const officeClientId = OFFICE_CLIENT_ID;
+
+  useEffect(() => {
+    const uniqueIds = Array.from(new Set(licensesList.map((license) => license.client_id).filter(Boolean)));
+    const idsToFetch = uniqueIds.filter((id) => !clientNames[id]);
+
+    if (!idsToFetch.length) return;
+
+    const fetchClientNames = async () => {
+      const updates: Record<string, string> = {};
+      for (const id of idsToFetch) {
+        try {
+          const client = await clientsApi.getById(id);
+          updates[id] = client.nome_fantasia || client.razao_social || `Cliente ${id.slice(0, 8)}`;
+        } catch (error) {
+          updates[id] = `Cliente ${id.slice(0, 8)}`;
+        }
+      }
+      if (Object.keys(updates).length) {
+        setClientNames((prev) => ({ ...prev, ...updates }));
+      }
+    };
+
+    fetchClientNames();
+  }, [licensesList, clientNames]);
+
+  const licensesWithNames = useMemo(
+    () =>
+      licensesList.map((license) => ({
+        ...license,
+        client_name: license.client_name ?? clientNames[license.client_id],
+      })),
+    [licensesList, clientNames],
+  );
+
+  const clientLicenses = useMemo(() => {
+    if (!officeClientId) return licensesWithNames;
+    return licensesWithNames.filter((license) => license.client_id !== officeClientId);
+  }, [licensesWithNames, officeClientId]);
+
+  const officeLicenses = useMemo(() => {
+    if (!officeClientId) return [];
+    return licensesWithNames.filter((license) => license.client_id === officeClientId);
+  }, [licensesWithNames, officeClientId]);
 
   const handleViewDetails = async (license: License) => {
     try {
-      const data = await licensesApi.get(license.id);
-      setSelectedLicense(data);
+      const data = await fetchLicenseById(license.id);
+      setSelectedLicense(data ?? license);
     } catch (err) {
       console.error(err);
       setSelectedLicense(license);
@@ -307,11 +262,16 @@ export function LicencasModule() {
     onDetailsOpen();
   };
 
-  const handleCreateSubmit = async (payload: any) => {
-    await licensesApi.create(payload);
-    setIsCreateOpen(false);
-    await fetchLicenses();
-    setRefreshKey((prev) => prev + 1);
+  const handleCreateSubmit = async (payload: LicenseCreate) => {
+    try {
+      await createLicense(payload);
+      toast.success("Licença criada com sucesso.");
+      setIsCreateOpen(false);
+      setRefreshKey((prev) => prev + 1);
+    } catch (err) {
+      console.error(err);
+      toast.error("Não foi possível criar a licença.");
+    }
   };
 
   const handleEdit = (license: License) => {
@@ -331,7 +291,7 @@ export function LicencasModule() {
   const handleEditSubmit = async () => {
     if (!selectedLicense) return;
     try {
-      await licensesApi.update(selectedLicense.id, {
+      await updateLicense(selectedLicense.id, {
         license_type: formData.license_type,
         registration_number: formData.registration_number,
         issuing_authority: formData.issuing_authority,
@@ -340,11 +300,11 @@ export function LicencasModule() {
         notes: formData.notes,
       });
       onEditClose();
-      await fetchLicenses();
       setRefreshKey((prev) => prev + 1);
+      toast.success("Licença atualizada com sucesso.");
     } catch (err) {
       console.error(err);
-      alert("Não foi possível atualizar a licença.");
+      toast.error("Não foi possível atualizar a licença.");
     }
   };
 
@@ -362,13 +322,13 @@ export function LicencasModule() {
   const handleRenewSubmit = async () => {
     if (!selectedLicense) return;
     try {
-      await licensesApi.renew(selectedLicense.id, renewalData);
+      await renewLicense(selectedLicense.id, renewalData);
       onRenewClose();
-      await fetchLicenses();
       setRefreshKey((prev) => prev + 1);
+      toast.success("Licença renovada com sucesso.");
     } catch (err) {
       console.error(err);
-      alert("Não foi possível renovar a licença.");
+      toast.error("Não foi possível renovar a licença.");
     }
   };
 
@@ -380,13 +340,15 @@ export function LicencasModule() {
   const handleDeleteSubmit = async () => {
     if (!selectedLicense) return;
     try {
-      await licensesApi.delete(selectedLicense.id);
+      await deleteLicense(selectedLicense.id);
       onDeleteClose();
-      await fetchLicenses();
+      onDetailsClose();
       setRefreshKey((prev) => prev + 1);
+      setSelectedLicense(null);
+      toast.success("Licença excluída com sucesso.");
     } catch (err) {
       console.error(err);
-      alert("Não foi possível excluir a licença.");
+      toast.error("Não foi possível excluir a licença.");
     }
   };
 
@@ -401,11 +363,20 @@ export function LicencasModule() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Licenças e Certificações</h1>
-          <p className="text-default-500 mt-1">Visualize rapidamente as licenças mockadas por cliente ou escritório</p>
+          <p className="text-default-500 mt-1">Visualize rapidamente as licenças emitidas para clientes ou para o escritório.</p>
         </div>
-        <Button color="primary" onPress={() => setIsCreateOpen(true)} startContent={<Plus className="h-4 w-4" />}>
-          Nova licença
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="flat"
+            startContent={<RefreshCcw className="h-4 w-4" />}
+            onPress={() => setRefreshKey((prev) => prev + 1)}
+          >
+            Atualizar
+          </Button>
+          <Button color="primary" onPress={() => setIsCreateOpen(true)} startContent={<Plus className="h-4 w-4" />}>
+            Nova licença
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 lg:flex-row">
@@ -439,7 +410,7 @@ export function LicencasModule() {
       <Card>
         <CardBody>
           <Tabs selectedKey={activeTab} onSelectionChange={(key) => setActiveTab(key as TabKey)} color="primary">
-            <Tab key="clients" title={`Licenças de Clientes (${filteredClientLicenses.length})`}>
+            <Tab key="clients" title={`Licenças de Clientes (${clientLicenses.length})`}>
               <motion.div
                 key="clients"
                 initial="hidden"
@@ -447,10 +418,18 @@ export function LicencasModule() {
                 exit="exit"
                 variants={fadeIn}
               >
-                <LicenseCardGrid licenses={filteredClientLicenses} />
+                <LicenseCardGrid
+                  licenses={clientLicenses}
+                  officeClientId={officeClientId}
+                  onViewDetails={handleViewDetails}
+                  onRenew={handleRenew}
+                  onDelete={handleDelete}
+                  isLoading={isLoading}
+                  emptyMessage="Nenhuma licença encontrada para os filtros selecionados."
+                />
               </motion.div>
             </Tab>
-            <Tab key="office" title={`Licenças do Escritório (${filteredOfficeLicenses.length})`}>
+            <Tab key="office" title={`Licenças do Escritório (${officeLicenses.length})`}>
               <motion.div
                 key="office"
                 initial="hidden"
@@ -458,7 +437,19 @@ export function LicencasModule() {
                 exit="exit"
                 variants={fadeIn}
               >
-                <LicenseCardGrid licenses={filteredOfficeLicenses} />
+                <LicenseCardGrid
+                  licenses={officeLicenses}
+                  officeClientId={officeClientId}
+                  onViewDetails={handleViewDetails}
+                  onRenew={handleRenew}
+                  onDelete={handleDelete}
+                  isLoading={isLoading}
+                  emptyMessage={
+                    officeClientId
+                      ? "Nenhuma licença do escritório encontrada."
+                      : "Informe NEXT_PUBLIC_OFFICE_CLIENT_ID para listar as licenças do escritório."
+                  }
+                />
               </motion.div>
             </Tab>
           </Tabs>
@@ -473,7 +464,14 @@ export function LicencasModule() {
         selectedClientId=""
       />
 
-      <Modal isOpen={isDetailsOpen} onClose={onDetailsClose} size="3xl">
+      <Modal
+        isOpen={isDetailsOpen}
+        onClose={() => {
+          setSelectedLicense(null);
+          onDetailsClose();
+        }}
+        size="3xl"
+      >
         <ModalContent>
           <ModalHeader>Detalhes da Licença</ModalHeader>
           <ModalBody>
@@ -483,7 +481,7 @@ export function LicencasModule() {
                   <div>
                     <p className="text-sm text-default-500">Cliente</p>
                     <p className="font-semibold">
-                      {selectedLicense.client_name || selectedLicense.client_id}
+                      {formatClientLabel(selectedLicense, officeClientId)}
                     </p>
                   </div>
                   <div>
@@ -520,6 +518,12 @@ export function LicencasModule() {
                       {LICENSE_STATUS_LABELS[normalizeLicenseStatus(selectedLicense.status)]}
                     </Chip>
                   </div>
+                  <div>
+                    <p className="text-sm text-default-500">Validade</p>
+                    <Chip size="sm" variant="flat" color={getExpirationBadgeColor(selectedLicense)}>
+                      {formatExpirationStatus(selectedLicense)}
+                    </Chip>
+                  </div>
                   {selectedLicense.notes && (
                     <div className="col-span-2">
                       <p className="text-sm text-default-500">Notas</p>
@@ -535,9 +539,21 @@ export function LicencasModule() {
             )}
           </ModalBody>
           <ModalFooter>
-            <Button variant="light" onPress={onDetailsClose}>
-              Fechar
-            </Button>
+            <div className="flex w-full items-center justify-between gap-3">
+              <Button variant="light" onPress={() => { setSelectedLicense(null); onDetailsClose(); }}>
+                Fechar
+              </Button>
+              {selectedLicense && (
+                <div className="flex items-center gap-2">
+                  <Button variant="flat" color="primary" onPress={() => { handleRenew(selectedLicense); onDetailsClose(); }}>
+                    Renovar
+                  </Button>
+                  <Button variant="light" color="danger" onPress={() => { handleDelete(selectedLicense); onDetailsClose(); }}>
+                    Excluir
+                  </Button>
+                </div>
+              )}
+            </div>
           </ModalFooter>
         </ModalContent>
       </Modal>
@@ -666,7 +682,13 @@ export function LicencasModule() {
         </ModalContent>
       </Modal>
 
-      <Modal isOpen={isDeleteOpen} onClose={onDeleteClose}>
+      <Modal
+        isOpen={isDeleteOpen}
+        onClose={() => {
+          onDeleteClose();
+          setSelectedLicense(null);
+        }}
+      >
         <ModalContent>
           <ModalHeader>Excluir Licença</ModalHeader>
           <ModalBody>
@@ -688,11 +710,35 @@ export function LicencasModule() {
   );
 }
 
-function LicenseCardGrid({ licenses }: { licenses: License[] }) {
+function LicenseCardGrid({
+  licenses,
+  officeClientId,
+  onViewDetails,
+  onRenew,
+  onDelete,
+  isLoading,
+  emptyMessage,
+}: {
+  licenses: License[];
+  officeClientId?: string | null;
+  onViewDetails: (license: License) => void;
+  onRenew: (license: License) => void;
+  onDelete: (license: License) => void;
+  isLoading?: boolean;
+  emptyMessage?: string;
+}) {
+  if (isLoading && !licenses.length) {
+    return (
+      <div className="flex h-40 items-center justify-center rounded-medium border border-default-200">
+        <Spinner size="sm" color="primary" />
+      </div>
+    );
+  }
+
   if (!licenses.length) {
     return (
       <div className="flex h-40 items-center justify-center rounded-medium border border-dashed border-default-200 text-default-400">
-        Nenhuma licença encontrada com os filtros selecionados.
+        {emptyMessage ?? "Nenhuma licença encontrada com os filtros selecionados."}
       </div>
     );
   }
@@ -700,38 +746,84 @@ function LicenseCardGrid({ licenses }: { licenses: License[] }) {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {licenses.map((license) => (
-        <LicenseCard key={license.id} license={license} />
+        <LicenseCard
+          key={license.id}
+          license={license}
+          officeClientId={officeClientId}
+          onViewDetails={onViewDetails}
+          onRenew={onRenew}
+          onDelete={onDelete}
+        />
       ))}
     </div>
   );
 }
 
-function LicenseCard({ license }: { license: License }) {
+function LicenseCard({
+  license,
+  officeClientId,
+  onViewDetails,
+  onRenew,
+  onDelete,
+}: {
+  license: License;
+  officeClientId?: string | null;
+  onViewDetails?: (license: License) => void;
+  onRenew?: (license: License) => void;
+  onDelete?: (license: License) => void;
+}) {
   const { daysUntilExpiration, isExpired, isExpiringSoon } = getLicenseMeta(license);
   const status = normalizeLicenseStatus(license.status);
   const statusLabel = LICENSE_STATUS_LABELS[status];
   const statusColor = getLicenseStatusColor(status) as any;
-  const highlightClass = isExpired
-    ? "border border-red-200"
-    : isExpiringSoon
-      ? "border border-amber-200"
-      : "border border-transparent";
-
+  const expirationColor = getExpirationBadgeColor(license);
+  const expirationLabel = formatExpirationStatus(license);
   const feePaid = license.fee_paid ?? false;
+  const isOffice = officeClientId && license.client_id === officeClientId;
+
+  const accentBar =
+    status === LicenseStatus.ACTIVE
+      ? "from-emerald-500/60 via-emerald-400/30 to-emerald-300/10"
+      : status === LicenseStatus.RENEWING
+        ? "from-amber-400/60 via-amber-300/40 to-amber-200/20"
+        : status === LicenseStatus.EXPIRED
+          ? "from-rose-500/70 via-rose-400/40 to-rose-300/20"
+          : "from-slate-500/50 via-slate-400/30 to-slate-300/10";
+
+  const highlightClass = isExpired
+    ? "border border-danger-200/70"
+    : isExpiringSoon
+      ? "border border-warning-200/70"
+      : "border border-default-100";
 
   return (
-    <Card className={`shadow-sm ${highlightClass}`}>
+    <Card className={`relative overflow-hidden bg-content1/80 shadow-medium backdrop-blur ${highlightClass}`}>
+      <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${accentBar}`} />
       <CardBody className="space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-teal-100 text-teal-500">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-teal-100 text-teal-500 ring-4 ring-teal-100/60">
               <Award className="h-6 w-6" />
             </div>
-            <div>
-              <h3 className="text-lg font-semibold">
-                {LICENSE_TYPE_LABELS[normalizeLicenseType(license.license_type)]}
-              </h3>
-              <p className="text-sm text-default-500">{license.client_name}</p>
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-lg font-semibold leading-tight">
+                  {LICENSE_TYPE_LABELS[normalizeLicenseType(license.license_type)]}
+                </h3>
+                <Chip size="sm" variant="flat" color={expirationColor} className="capitalize">
+                  {expirationLabel}
+                </Chip>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-default-500">
+                <span className="font-medium text-default-600">
+                  {formatClientLabel(license, officeClientId)}
+                </span>
+                {isOffice && (
+                  <Chip size="sm" variant="flat" color="secondary">
+                    Escritório
+                  </Chip>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -739,57 +831,92 @@ function LicenseCard({ license }: { license: License }) {
             <Chip size="sm" color={statusColor} variant="flat">
               {statusLabel}
             </Chip>
+            {onDelete && (
+              <Button
+                isIconOnly
+                size="sm"
+                variant="light"
+                color="danger"
+                aria-label="Excluir licença"
+                onPress={() => onDelete(license)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
 
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-default-500">Emissão:</span>
-            <span className="font-medium">{formatDatePtBR(license.issue_date)}</span>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="flex flex-col gap-1 rounded-medium bg-default-50/70 p-3">
+            <span className="text-default-500">Emissão</span>
+            <span className="font-semibold">{formatDatePtBR(license.issue_date)}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-default-500">Vencimento:</span>
-            <span
-              className={`font-medium ${isExpired ? "text-danger" : isExpiringSoon ? "text-warning" : ""}`}
-            >
+          <div className="flex flex-col gap-1 rounded-medium bg-default-50/70 p-3">
+            <span className="text-default-500">Vencimento</span>
+            <span className={`font-semibold ${isExpired ? "text-danger" : isExpiringSoon ? "text-warning" : ""}`}>
               {formatDatePtBR(license.expiration_date)}
             </span>
           </div>
+          <div className="flex flex-col gap-1 rounded-medium bg-default-50/70 p-3">
+            <span className="text-default-500">Registro</span>
+            <span className="font-mono text-sm font-semibold text-default-700">
+              {license.registration_number || "—"}
+            </span>
+          </div>
+          <div className="flex flex-col gap-1 rounded-medium bg-default-50/70 p-3">
+            <span className="text-default-500">Órgão emissor</span>
+            <span className="font-semibold truncate" title={license.issuing_authority}>
+              {license.issuing_authority || "—"}
+            </span>
+          </div>
+        </div>
 
-          {(isExpired || isExpiringSoon) && daysUntilExpiration !== null && (
-            <div
-              className={`flex items-center gap-2 rounded-medium border px-3 py-2 text-xs font-medium ${isExpired ? "border-red-100 bg-red-50 text-danger" : "border-amber-100 bg-amber-50 text-warning"}`}
+        {(isExpired || isExpiringSoon) && daysUntilExpiration !== null && (
+          <div
+            className={`flex items-center gap-2 rounded-medium border px-3 py-2 text-xs font-medium ${isExpired ? "border-danger-100 bg-danger-50 text-danger" : "border-warning-100 bg-warning-50 text-warning"}`}
+          >
+            <AlertTriangle className="h-4 w-4" />
+            <span>
+              {isExpired
+                ? `Venceu há ${Math.abs(daysUntilExpiration)} dias`
+                : `Vence em ${daysUntilExpiration} dias`}
+            </span>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between rounded-medium border border-default-100 px-3 py-2">
+          <div className="flex items-center gap-2 text-default-500">
+            <Clock className="h-4 w-4" />
+            <span>Taxa</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold">{formatCurrencyBRL(license.fee ?? null)}</span>
+            <Chip
+              size="sm"
+              variant="flat"
+              color={feePaid ? "success" : "warning"}
+              className="uppercase"
             >
-              <AlertTriangle className="h-4 w-4" />
-              <span>
-                {isExpired
-                  ? `Venceu há ${Math.abs(daysUntilExpiration)} dias`
-                  : `Vence em ${daysUntilExpiration} dias`}
-              </span>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between">
-            <span className="text-default-500">Taxa:</span>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold">{formatCurrencyBRL(license.fee ?? null)}</span>
-              <Chip
-                size="sm"
-                variant="flat"
-                color={feePaid ? "success" : "danger"}
-                className="uppercase"
-              >
-                {feePaid ? "Paga" : "Pendente"}
-              </Chip>
-            </div>
+              {feePaid ? "Paga" : "Pendente"}
+            </Chip>
           </div>
         </div>
 
         <div className="flex gap-3">
-          <Button className="flex-1" variant="flat">
+          <Button
+            className="flex-1"
+            variant="flat"
+            startContent={<Eye className="h-4 w-4" />}
+            onPress={() => onViewDetails?.(license)}
+          >
             Ver Detalhes
           </Button>
-          <Button className="flex-1" color="primary">
+          <Button
+            className="flex-1"
+            color="primary"
+            startContent={<RefreshCcw className="h-4 w-4" />}
+            onPress={() => onRenew?.(license)}
+          >
             Renovar
           </Button>
         </div>
@@ -815,4 +942,3 @@ function InputField({
     />
   );
 }
-

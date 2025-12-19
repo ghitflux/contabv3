@@ -1,8 +1,7 @@
 'use client';
 
-import { Button, Calendar, Popover, PopoverContent, PopoverTrigger } from '@/heroui';
+import { Button, Popover, PopoverContent, PopoverTrigger, Select, SelectItem } from '@/heroui';
 import { CalendarIcon, XIcon } from '@/lib/icons';
-import { CalendarDate } from '@internationalized/date';
 import { useMemo, useState } from 'react';
 
 interface MonthYearPickerProps {
@@ -27,44 +26,57 @@ export function MonthYearPicker({
   'aria-label': ariaLabel,
 }: MonthYearPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const now = useMemo(() => new Date(), []);
+  const monthNames = useMemo(
+    () => [
+      'janeiro',
+      'fevereiro',
+      'março',
+      'abril',
+      'maio',
+      'junho',
+      'julho',
+      'agosto',
+      'setembro',
+      'outubro',
+      'novembro',
+      'dezembro',
+    ],
+    []
+  );
 
-  const calendarValue = useMemo(() => {
+  const parsedValue = useMemo(() => {
     if (!value) return null;
     try {
       const [year, month] = value.split('-');
       if (!year || !month) return null;
-      return new CalendarDate(parseInt(year, 10), parseInt(month, 10), 1);
+      const parsedYear = parseInt(year, 10);
+      const parsedMonth = parseInt(month, 10);
+      if (!parsedYear || !parsedMonth) return null;
+      return { year: parsedYear, month: parsedMonth };
     } catch {
       return null;
     }
-  }, [value]);
+  }, [monthNames, value]);
 
-  const handleChange = (date: CalendarDate | null) => {
-    if (!date) return;
-    const year = date.year.toString();
-    const month = date.month.toString().padStart(2, '0');
-    onChange(`${year}-${month}`);
-    setIsOpen(false);
-  };
+  const selectedYear = parsedValue?.year ?? now.getFullYear();
+  const selectedMonth = parsedValue?.month ?? now.getMonth() + 1;
+
+  const years = useMemo(() => {
+    const pivot = selectedYear || now.getFullYear();
+    const start = pivot - 5;
+    const end = pivot + 5;
+    const list: number[] = [];
+    for (let year = start; year <= end; year += 1) {
+      list.push(year);
+    }
+    return list;
+  }, [now, selectedYear]);
 
   const displayValue = useMemo(() => {
     if (!value) return '';
     try {
       const [year, month] = value.split('-');
-      const monthNames = [
-        'janeiro',
-        'fevereiro',
-        'março',
-        'abril',
-        'maio',
-        'junho',
-        'julho',
-        'agosto',
-        'setembro',
-        'outubro',
-        'novembro',
-        'dezembro',
-      ];
       const monthIndex = parseInt(month, 10) - 1;
       if (monthIndex < 0 || monthIndex > 11) return value;
       return `${monthNames[monthIndex]} de ${year}`;
@@ -84,43 +96,79 @@ export function MonthYearPicker({
         </label>
       )}
       <Popover isOpen={isOpen} onOpenChange={setIsOpen} placement="bottom-start">
-        <PopoverTrigger>
-          <Button
-            id={ariaLabel ?? label}
-            variant="bordered"
-            size={size}
-            className={`w-full justify-between text-left font-normal ${
-              value ? 'text-foreground' : 'text-default-400'
-            }`}
-            aria-label={ariaLabel || label || 'Selecionar mês e ano'}
-          >
-            <CalendarIcon className="h-4 w-4 text-default-400 mr-2" />
-            <span className="truncate">{displayValue || placeholder}</span>
-            {isClearable && value ? (
-              <Button
-                isIconOnly
-                size="sm"
-                variant="light"
-                radius="sm"
-                onPress={(event) => {
-                  event.stopPropagation();
-                  onChange('');
-                }}
-                aria-label="Limpar mês selecionado"
-              >
-                <XIcon className="h-4 w-4" />
-              </Button>
-            ) : null}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0">
-          <Calendar
-            value={calendarValue}
-            onChange={handleChange}
-            showMonthAndYearPickers
-            aria-label={ariaLabel || label || 'Calendário'}
-            calendarWidth={280}
-          />
+        <div className="relative w-full">
+          <PopoverTrigger>
+            <Button
+              id={ariaLabel ?? label}
+              variant="bordered"
+              size={size}
+              className={`w-full justify-between text-left font-normal ${
+                value ? 'text-foreground' : 'text-default-400'
+              } ${isClearable && value ? 'pr-10' : ''}`}
+              aria-label={ariaLabel || label || 'Selecionar mês e ano'}
+            >
+              <div className="flex-1 flex items-center gap-2 overflow-hidden">
+                <CalendarIcon className="h-4 w-4 text-default-400" />
+                <span className="truncate">{displayValue || placeholder}</span>
+              </div>
+            </Button>
+          </PopoverTrigger>
+          {isClearable && value ? (
+            <Button
+              isIconOnly
+              size="sm"
+              variant="light"
+              radius="sm"
+              className="absolute right-1 top-1/2 -translate-y-1/2 z-10"
+              onPress={() => onChange('')}
+              aria-label="Limpar mês selecionado"
+            >
+              <XIcon className="h-4 w-4" />
+            </Button>
+          ) : null}
+        </div>
+        <PopoverContent className="w-[280px] p-4">
+          <div className="grid grid-cols-2 gap-3">
+            <Select
+              label="Mês"
+              selectedKeys={[String(selectedMonth)]}
+              onSelectionChange={(keys) => {
+                const selected = Array.from(keys)[0] as string | undefined;
+                if (!selected) return;
+                const month = parseInt(selected, 10);
+                if (!month) return;
+                const monthValue = String(month).padStart(2, '0');
+                onChange(`${selectedYear}-${monthValue}`);
+              }}
+              size="sm"
+            >
+              {monthNames.map((name, index) => (
+                <SelectItem key={String(index + 1)}>{name}</SelectItem>
+              ))}
+            </Select>
+            <Select
+              label="Ano"
+              selectedKeys={[String(selectedYear)]}
+              onSelectionChange={(keys) => {
+                const selected = Array.from(keys)[0] as string | undefined;
+                if (!selected) return;
+                const year = parseInt(selected, 10);
+                if (!year) return;
+                const monthValue = String(selectedMonth).padStart(2, '0');
+                onChange(`${year}-${monthValue}`);
+              }}
+              size="sm"
+            >
+              {years.map((year) => (
+                <SelectItem key={String(year)}>{year}</SelectItem>
+              ))}
+            </Select>
+          </div>
+          <div className="flex justify-end pt-3">
+            <Button size="sm" variant="light" onPress={() => setIsOpen(false)}>
+              Fechar
+            </Button>
+          </div>
         </PopoverContent>
       </Popover>
     </div>

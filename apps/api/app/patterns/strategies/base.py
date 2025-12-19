@@ -3,12 +3,26 @@ Base strategy for obligation rules.
 """
 
 from abc import ABC, abstractmethod
+import calendar
 from datetime import date
 from typing import List
 
-from app.db.models.client import Client
+from app.db.models.client import Client, RegimeTributario
 from app.db.models.obligation_type import ObligationType
-from app.schemas.obligation import ObligationPriority
+from app.schemas.obligation import ObligationPriority, ObligationRecurrence
+
+DEPARTAMENTO_PESSOAL_CODES = [
+    "FOLHA_PAGAMENTO_MENSAL",
+    "ESOCIAL_MENSAL",
+    "DCTF_WEB_MENSAL",
+    "FGTS_MENSAL",
+    "EFD_REINF_MENSAL",
+    "MIT_MENSAL",
+    "DECIMO_TERCEIRO_1_ANUAL",
+    "DECIMO_TERCEIRO_2_ANUAL",
+    "DCTF_WEB_13_ANUAL",
+    "PARCELAMENTOS_MENSAL",
+]
 
 
 class ObligationRule(ABC):
@@ -35,7 +49,8 @@ class ObligationRule(ABC):
     def calculate_due_date(
         self,
         obligation_type: ObligationType,
-        reference_month: date
+        reference_month: date,
+        client: Client,
     ) -> date:
         """
         Calculate due date for given type and month.
@@ -46,31 +61,35 @@ class ObligationRule(ABC):
         Args:
             obligation_type: ObligationType instance
             reference_month: Reference month (first day)
+            client: Client model instance
 
         Returns:
             Calculated due date
         """
         day = obligation_type.day_of_month or 20  # Default to 20th
+        recurrence = getattr(obligation_type.recurrence, "value", obligation_type.recurrence)
 
-        # Due date is in the next month
-        if reference_month.month == 12:
-            year = reference_month.year + 1
-            month = 1
-        else:
+        if obligation_type.code == "EFD_ICMS_IPI_MENSAL":
+            regime = getattr(client.regime_tributario, "value", client.regime_tributario)
+            if regime == RegimeTributario.SIMPLES_NACIONAL.value:
+                day = 25
+
+        if recurrence == ObligationRecurrence.ANUAL.value:
             year = reference_month.year
-            month = reference_month.month + 1
-
-        # Ensure day is valid for the month
-        if month == 2:
-            max_day = 28  # February
-        elif month in [4, 6, 9, 11]:
-            max_day = 30  # 30-day months
+            month = obligation_type.month_of_year or reference_month.month
         else:
-            max_day = 31  # 31-day months
+            year, month = self._next_month(reference_month)
 
+        max_day = calendar.monthrange(year, month)[1]
         day = min(day, max_day)
 
         return date(year, month, day)
+
+    def _next_month(self, reference_month: date) -> tuple[int, int]:
+        """Return year/month for the next month."""
+        if reference_month.month == 12:
+            return reference_month.year + 1, 1
+        return reference_month.year, reference_month.month + 1
 
     def get_priority(
         self,

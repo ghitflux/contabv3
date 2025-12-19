@@ -111,3 +111,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency for database session."""
     async for session in db_manager.get_session():
         yield session
+
+
+# Backward compatibility for older imports (tests)
+get_session = get_db

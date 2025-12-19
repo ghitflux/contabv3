@@ -103,20 +103,30 @@ export const reportsApi = {
   /**
    * Download a generated report file
    */
-  async downloadReport(reportId: string): Promise<Blob> {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/reports/download/${reportId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("access_token")}`,
-        },
-      }
-    );
+  async downloadReport(reportId: string, fileName?: string): Promise<{ blob: Blob; filename: string }> {
+    const apiBase =
+      process.env.NEXT_PUBLIC_API_URL ||
+      (typeof window !== "undefined" ? `${window.location.origin}/api/v1` : "");
+    const url = `${apiBase}/reports/download/${reportId}`;
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("access_token") || ""}`,
+      },
+    });
 
     if (!response.ok) {
-      throw new Error("Failed to download report");
+      const detail = await response.text();
+      throw new Error(`Failed to download report (${response.status}) ${detail}`);
     }
 
-    return response.blob();
+    const contentDisposition = response.headers.get("content-disposition");
+    const headerFileNameMatch = contentDisposition?.match(/filename=\"?([^\";]+)\"?/i);
+    const resolvedName =
+      fileName ||
+      headerFileNameMatch?.[1] ||
+      `report_${reportId}.${contentDisposition?.includes("pdf") ? "pdf" : "csv"}`;
+
+    return { blob: await response.blob(), filename: resolvedName };
   },
 };

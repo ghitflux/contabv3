@@ -130,17 +130,11 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
                 {/* Contato */}
                 <section>
                   <h3 className="text-lg font-semibold mb-3">Contato</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                     <div>
                       <p className="text-xs text-gray-600 mb-1">Email</p>
                       <Snippet symbol="" size="sm">{client.email}</Snippet>
                     </div>
-                    {client.telefone && (
-                      <div>
-                        <p className="text-xs text-gray-600 mb-1">Telefone</p>
-                        <Snippet symbol="" size="sm">{formatPhone(client.telefone) || client.telefone}</Snippet>
-                      </div>
-                    )}
                     {client.celular && (
                       <div>
                         <p className="text-xs text-gray-600 mb-1">Celular</p>
@@ -326,16 +320,29 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
                 )}
 
                 {/* Credenciais de Acesso */}
-                {(client.cpf_empresa || client.senha_gov || client.login_seg_desemp || client.senha_seg_desemp || client.email_seg_desemp || client.senha_nfse || client.senha_certificado_digital) && (
+                {(client.cpf_empresa ||
+                  client.senha_sistema ||
+                  client.senha_gov ||
+                  client.login_seg_desemp ||
+                  client.senha_seg_desemp ||
+                  client.email_seg_desemp ||
+                  client.senha_nfse ||
+                  client.senha_certificado_digital) && (
                   <>
                     <Divider />
                     <section>
                       <h3 className="text-lg font-semibold mb-3">Credenciais de Acesso</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                         {client.cpf_empresa && (
                           <div className="bg-primary-50 dark:bg-primary-950 p-3 rounded-lg">
                             <p className="text-xs text-primary-600 dark:text-primary-400 mb-1 font-medium">CPF da Empresa</p>
                             <SnippetCopy text={client.cpf_empresa} />
+                          </div>
+                        )}
+                        {client.senha_sistema && (
+                          <div className="bg-primary-50 dark:bg-primary-950 p-3 rounded-lg">
+                            <p className="text-xs text-primary-600 dark:text-primary-400 mb-1 font-medium">Senha de Acesso</p>
+                            <SnippetCopy text={client.senha_sistema} hideByDefault />
                           </div>
                         )}
                         {client.senha_gov && (

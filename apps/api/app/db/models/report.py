@@ -35,6 +35,7 @@ class ReportFormat(str, enum.Enum):
 
     PDF = "pdf"
     CSV = "csv"
+    XLS = "xls"
 
 
 class ReportStatus(str, enum.Enum):
@@ -53,7 +54,12 @@ class ReportTemplate(Base, UUIDMixin, TimestampMixin):
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     report_type: Mapped[ReportType] = mapped_column(
-        SQLEnum(ReportType, name="report_type", create_type=True),
+        SQLEnum(
+            ReportType,
+            name="report_type",
+            create_type=True,
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
         nullable=False,
         index=True,
     )
@@ -89,7 +95,12 @@ class ReportHistory(Base, UUIDMixin):
     )
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     report_type: Mapped[ReportType] = mapped_column(
-        SQLEnum(ReportType, name="report_type", create_type=False),
+        SQLEnum(
+            ReportType,
+            name="report_type",
+            create_type=False,
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
         nullable=False,
         index=True,
     )
@@ -99,7 +110,12 @@ class ReportHistory(Base, UUIDMixin):
         comment="Filters used when generating this report",
     )
     format: Mapped[ReportFormat] = mapped_column(
-        SQLEnum(ReportFormat, name="report_format", create_type=True),
+        SQLEnum(
+            ReportFormat,
+            name="report_format",
+            create_type=True,
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
         nullable=False,
         index=True,
     )
@@ -118,7 +134,12 @@ class ReportHistory(Base, UUIDMixin):
         comment="File expiration datetime (default: 7 days after generation)",
     )
     status: Mapped[ReportStatus] = mapped_column(
-        SQLEnum(ReportStatus, name="report_status", create_type=True),
+        SQLEnum(
+            ReportStatus,
+            name="report_status",
+            create_type=True,
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
         nullable=False,
         default=ReportStatus.PENDING,
         index=True,
@@ -139,4 +160,3 @@ class ReportHistory(Base, UUIDMixin):
 
 # Note: ReportSchedule can be implemented in the future for automated report generation
 # For now, it's a placeholder in the model structure
-
