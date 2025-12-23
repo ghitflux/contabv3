@@ -18,14 +18,20 @@ interface DatePickerFieldProps {
 
 const formatDisplayValue = (value?: string | null) => {
   if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('pt-BR').format(date);
+  const [datePart] = value.split('T');
+  const [year, month, day] = datePart.split('-');
+  if (!year || !month || !day) return value;
+  const parsedYear = Number.parseInt(year, 10);
+  const parsedMonth = Number.parseInt(month, 10);
+  const parsedDay = Number.parseInt(day, 10);
+  if (!parsedYear || !parsedMonth || !parsedDay) return value;
+  return `${String(parsedDay).padStart(2, '0')}/${String(parsedMonth).padStart(2, '0')}/${String(parsedYear).padStart(4, '0')}`;
 };
 
 const parseCalendarDate = (value?: string | null) => {
   if (!value) return null;
-  const [year, month, day] = value.split('-').map((part) => Number.parseInt(part, 10));
+  const [datePart] = value.split('T');
+  const [year, month, day] = datePart.split('-').map((part) => Number.parseInt(part, 10));
   if (!year || !month || !day) return null;
   try {
     return new CalendarDate(year, month, day);
@@ -60,7 +66,7 @@ export function DatePickerField({
     <div className={className}>
       {label && (
         <label
-          className="text-sm font-medium text-default-600 mb-1 block"
+          className="text-sm font-medium text-default-600 mb-2 block"
           htmlFor={ariaLabel ?? label}
         >
           {label}
@@ -73,7 +79,7 @@ export function DatePickerField({
               id={ariaLabel ?? label}
               variant="bordered"
               size={size}
-              className={`w-full justify-between text-left font-normal ${
+              className={`w-full justify-between text-left font-normal gap-2 py-2.5 ${
                 value ? 'text-foreground' : 'text-default-400'
               } ${isClearable && value ? 'pr-10' : ''}`}
               aria-label={ariaLabel || label || 'Selecionar data'}

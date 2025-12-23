@@ -59,6 +59,8 @@ export const licensesApi = {
 
   get: (id: string) => apiGet<License>(`${API_PREFIX}/${id}`),
 
+  getById: (id: string) => apiGet<License>(`${API_PREFIX}/${id}`),
+
   getEvents: (id: string) => apiGet<any[]>(`${API_PREFIX}/${id}/events`),
 
   uploadDocument: async (id: string, file: File) => {
@@ -67,4 +69,3 @@ export const licensesApi = {
     return apiClient.upload(`${API_PREFIX}/${id}/documents`, form);
   },
 };
-

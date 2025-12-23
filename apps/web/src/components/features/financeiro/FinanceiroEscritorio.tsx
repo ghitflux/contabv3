@@ -24,15 +24,25 @@ import {
   Textarea,
 } from '@/heroui';
 import { DollarSign, Download, Plus, Repeat, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FinanceiroKPIs, type FinanceiroKpi } from './FinanceiroKPIs';
+import { useTransactions } from '@/hooks/useTransactions';
+import {
+  PaymentMethod,
+  PaymentStatus,
+  TransactionType,
+  getPaymentMethodLabel,
+} from '@/types/finance';
+import { toast } from '@/lib/toast';
+import { endOfMonth, formatISO, startOfMonth, subMonths } from 'date-fns';
+import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
 
-type TransactionType = 'Entrada' | 'Saída';
+type DisplayTransactionType = 'Entrada' | 'Saída';
 
-type Transaction = {
+type DisplayTransaction = {
   id: string;
   date: string;
-  type: TransactionType;
+  type: DisplayTransactionType;
   bank: string;
   history: string;
   observation?: string;
@@ -58,7 +68,7 @@ type StandardHistory = {
 
 type NewTransactionState = {
   date: string;
-  type: TransactionType;
+  type: DisplayTransactionType;
   bank: string;
   history: string;
   observation: string;
@@ -98,39 +108,8 @@ const initialHistories: StandardHistory[] = [
   { id: '4', description: 'Internet', accountingAccount: '2.1.1.02', type: 'expense' },
 ];
 
-const initialTransactions: Transaction[] = [
-  {
-    id: '1',
-    date: '2025-10-27',
-    type: 'Entrada',
-    bank: '1',
-    history: 'Honorários do mês',
-    value: 3500.0,
-  },
-  {
-    id: '2',
-    date: '2025-10-27',
-    type: 'Saída',
-    bank: '1',
-    history: 'Aluguel',
-    value: 1800.0,
-    isRecurring: true,
-    recurringDay: 27,
-  },
-  {
-    id: '3',
-    date: '2025-10-27',
-    type: 'Saída',
-    bank: '2',
-    history: 'Internet',
-    value: 120.0,
-    isRecurring: true,
-    recurringDay: 27,
-  },
-];
-
-const defaultNewTransaction: NewTransactionState = {
-  date: '2025-10-27',
+const buildDefaultTransaction = (): NewTransactionState => ({
+  date: formatISO(new Date(), { representation: 'date' }),
   type: 'Entrada',
   bank: '1',
   history: '',
@@ -138,7 +117,7 @@ const defaultNewTransaction: NewTransactionState = {
   value: '',
   isRecurring: false,
   recurringDay: 1,
-};
+});
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', {
@@ -146,9 +125,14 @@ const formatCurrency = (value: number) =>
     currency: 'BRL',
   }).format(value);
 
-export function FinanceiroEscritorio() {
-  const [startDate, setStartDate] = useState('2025-10-01');
-  const [endDate, setEndDate] = useState('2025-10-31');
+export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => void }) {
+  const [monthFilter, setMonthFilter] = useState(formatISO(new Date(), { representation: 'date' }).slice(0, 7));
+  const [startDate, setStartDate] = useState(
+    formatISO(startOfMonth(new Date()), { representation: 'date' })
+  );
+  const [endDate, setEndDate] = useState(
+    formatISO(endOfMonth(new Date()), { representation: 'date' })
+  );
   const [banks, setBanks] = useState<Bank[]>(initialBanks);
   const [standardHistories, setStandardHistories] = useState<StandardHistory[]>(initialHistories);
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
@@ -164,18 +148,121 @@ export function FinanceiroEscritorio() {
     accountingAccount: '',
     type: 'income' as 'income' | 'expense',
   });
-  const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
-  const [newTransaction, setNewTransaction] = useState<NewTransactionState>(defaultNewTransaction);
+  const [newTransaction, setNewTransaction] = useState<NewTransactionState>(buildDefaultTransaction());
+  const OFFICE_CLIENT_ID = process.env.NEXT_PUBLIC_OFFICE_CLIENT_ID ?? '';
+
+  const { transactions, createTransaction, deleteTransaction, refresh } = useTransactions({
+    filters: {
+      client_id: OFFICE_CLIENT_ID || undefined,
+      due_date_from: startDate,
+      due_date_to: endDate,
+      page: 1,
+      size: 200,
+    },
+    autoFetch: true,
+  });
+
+  const paidTransactions = useMemo(
+    () =>
+      transactions.filter(
+        (transaction) =>
+          transaction.payment_status === PaymentStatus.PAGO || Boolean(transaction.paid_date)
+      ),
+    [transactions]
+  );
+
+  const displayTransactions = useMemo<DisplayTransaction[]>(() => {
+    return transactions.map((transaction) => ({
+      id: transaction.id,
+      date: transaction.paid_date || transaction.due_date,
+      type: transaction.transaction_type === TransactionType.RECEITA ? 'Entrada' : 'Saída',
+      bank: transaction.payment_method
+        ? getPaymentMethodLabel(transaction.payment_method) || transaction.payment_method
+        : '-',
+      history: transaction.description,
+      observation: transaction.notes || undefined,
+      value: transaction.amount,
+      isRecurring: false,
+    }));
+  }, [transactions]);
 
   const receita = useMemo(
-    () => transactions.filter((t) => t.type === 'Entrada').reduce((sum, t) => sum + t.value, 0),
-    [transactions]
+    () =>
+      paidTransactions
+        .filter((transaction) => transaction.transaction_type === TransactionType.RECEITA)
+        .reduce((sum, transaction) => sum + transaction.amount, 0),
+    [paidTransactions]
   );
   const despesa = useMemo(
-    () => transactions.filter((t) => t.type === 'Saída').reduce((sum, t) => sum + t.value, 0),
-    [transactions]
+    () =>
+      paidTransactions
+        .filter((transaction) => transaction.transaction_type === TransactionType.DESPESA)
+        .reduce((sum, transaction) => sum + transaction.amount, 0),
+    [paidTransactions]
   );
   const lucro = receita - despesa;
+
+  const setRangeForMonth = (monthValue: string) => {
+    if (!monthValue) return;
+    const [year, month] = monthValue.split('-');
+    const parsedYear = Number.parseInt(year, 10);
+    const parsedMonth = Number.parseInt(month, 10);
+    if (!parsedYear || !parsedMonth) return;
+    const monthLabel = String(parsedMonth).padStart(2, '0');
+    const lastDay = new Date(parsedYear, parsedMonth, 0).getDate();
+    setStartDate(`${parsedYear}-${monthLabel}-01`);
+    setEndDate(`${parsedYear}-${monthLabel}-${String(lastDay).padStart(2, '0')}`);
+  };
+
+  const setCurrentMonthRange = () => {
+    const currentMonth = formatISO(new Date(), { representation: 'date' }).slice(0, 7);
+    setMonthFilter(currentMonth);
+    setRangeForMonth(currentMonth);
+  };
+
+  const setPreviousMonthRange = () => {
+    const previous = subMonths(new Date(), 1);
+    const previousMonth = formatISO(previous, { representation: 'date' }).slice(0, 7);
+    setMonthFilter(previousMonth);
+    setRangeForMonth(previousMonth);
+  };
+
+  const handleMonthChange = (value: string) => {
+    setMonthFilter(value);
+    if (value) {
+      setRangeForMonth(value);
+    }
+  };
+
+  const normalizeMonthFilter = (startValue: string, endValue: string) => {
+    const [startYear, startMonth, startDay] = startValue.split('-');
+    const [endYear, endMonth, endDay] = endValue.split('-');
+    if (!startYear || !startMonth || !startDay || !endYear || !endMonth || !endDay) {
+      return '';
+    }
+    if (startYear !== endYear || startMonth !== endMonth) {
+      return '';
+    }
+    if (startDay !== '01') {
+      return '';
+    }
+    const lastDay = new Date(Number(startYear), Number(startMonth), 0).getDate();
+    const expectedEndDay = String(lastDay).padStart(2, '0');
+    if (endDay !== expectedEndDay) {
+      return '';
+    }
+    return `${startYear}-${startMonth}`;
+  };
+
+  useEffect(() => {
+    const normalized = normalizeMonthFilter(startDate, endDate);
+    if (normalized && normalized !== monthFilter) {
+      setMonthFilter(normalized);
+    }
+    if (!normalized && monthFilter) {
+      setMonthFilter('');
+    }
+  }, [startDate, endDate, monthFilter]);
 
   const kpis: FinanceiroKpi[] = [
     {
@@ -207,29 +294,65 @@ export function FinanceiroEscritorio() {
     },
   ];
 
-  const handleAddTransaction = () => {
+  const handleAddTransaction = async () => {
     if (!newTransaction.history || !newTransaction.value) {
+      toast.error('Preencha o histórico e o valor para lançar.');
+      return;
+    }
+    if (!OFFICE_CLIENT_ID) {
+      toast.error('Configure o ID do escritório (NEXT_PUBLIC_OFFICE_CLIENT_ID) para lançar receitas/despesas.');
       return;
     }
 
-    const transaction: Transaction = {
-      id: String(transactions.length + 1),
-      date: newTransaction.date,
-      type: newTransaction.type,
-      bank: newTransaction.bank,
-      history: newTransaction.history,
-      observation: newTransaction.observation || undefined,
-      value: Number.parseFloat(newTransaction.value),
-      isRecurring: newTransaction.isRecurring,
-      recurringDay: newTransaction.isRecurring ? newTransaction.recurringDay : undefined,
-    };
+    const amount = Number.parseFloat(newTransaction.value);
+    if (Number.isNaN(amount) || amount <= 0) {
+      toast.error('Informe um valor válido.');
+      return;
+    }
 
-    setTransactions((prev) => [...prev, transaction]);
-    setNewTransaction(defaultNewTransaction);
+    const bankName = banks.find((bank) => bank.id === newTransaction.bank)?.name;
+    const notesParts = [];
+    if (bankName) notesParts.push(`Banco: ${bankName}`);
+    if (newTransaction.observation) notesParts.push(`Obs: ${newTransaction.observation}`);
+    const notes = notesParts.length ? notesParts.join(' | ') : undefined;
+    const paidDate = new Date(`${newTransaction.date}T12:00:00`).toISOString();
+    const referenceMonth = `${newTransaction.date.slice(0, 7)}-01`;
+
+    try {
+      await createTransaction({
+        client_id: OFFICE_CLIENT_ID,
+        transaction_type:
+          newTransaction.type === 'Entrada' ? TransactionType.RECEITA : TransactionType.DESPESA,
+        amount,
+        payment_method: bankName
+          ? bankName.toLowerCase().includes('pix')
+            ? PaymentMethod.PIX
+            : PaymentMethod.TRANSFERENCIA
+          : undefined,
+        payment_status: PaymentStatus.PAGO,
+        due_date: newTransaction.date,
+        paid_date: paidDate,
+        reference_month: referenceMonth,
+        description: newTransaction.history,
+        notes,
+      });
+      await refresh();
+      setNewTransaction(buildDefaultTransaction());
+      toast.success('Lançamento registrado com sucesso.');
+    } catch (error) {
+      console.error(error);
+      toast.error('Não foi possível registrar o lançamento.');
+    }
   };
 
-  const handleDeleteTransaction = (id: string) => {
-    setTransactions((prev) => prev.filter((t) => t.id !== id));
+  const handleDeleteTransaction = async (id: string) => {
+    try {
+      await deleteTransaction(id);
+      toast.success('Lançamento removido.');
+    } catch (error) {
+      console.error(error);
+      toast.error('Não foi possível remover o lançamento.');
+    }
   };
 
   const handleAddBank = () => {
@@ -267,6 +390,16 @@ export function FinanceiroEscritorio() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-end gap-4">
         <div className="space-y-2">
+          <MonthYearPicker
+            label="Mês de referência"
+            value={monthFilter}
+            onChange={handleMonthChange}
+            size="sm"
+            className="w-[180px]"
+            aria-label="Mês de referência"
+          />
+        </div>
+        <div className="space-y-2">
           <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Início</label>
           <DatePickerField
             value={startDate}
@@ -287,9 +420,14 @@ export function FinanceiroEscritorio() {
           />
         </div>
         <div className="md:ml-auto flex gap-2">
-          <Button variant="bordered">Mês atual</Button>
-          <Button variant="bordered">Mês anterior</Button>
-          <Button color="primary" startContent={<Download className="h-4 w-4" />}>
+          <Button variant="bordered" onPress={setCurrentMonthRange}>Mês atual</Button>
+          <Button variant="bordered" onPress={setPreviousMonthRange}>Mês anterior</Button>
+          <Button
+            color="primary"
+            startContent={<Download className="h-4 w-4" />}
+            onPress={onExportLivro}
+            isDisabled={!onExportLivro}
+          >
             Exportar Livro
           </Button>
         </div>
@@ -476,12 +614,12 @@ export function FinanceiroEscritorio() {
               <TableColumn className="text-right">Ações</TableColumn>
             </TableHeader>
             <TableBody emptyContent="Nenhum lançamento cadastrado">
-              {transactions.map((transaction) => (
+              {displayTransactions.map((transaction) => (
                 <TableRow key={transaction.id}>
                   <TableCell>{new Date(transaction.date).toLocaleDateString('pt-BR')}</TableCell>
                   <TableCell>{transaction.type}</TableCell>
                   <TableCell>
-                    {banks.find((bank) => bank.id === transaction.bank)?.name ?? '-'}
+                    {transaction.bank || '-'}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">

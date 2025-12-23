@@ -127,6 +127,10 @@ export function LicenseCreateModal({
       toast.error("Informe o órgão emissor.");
       return;
     }
+    if (!form.issue_date) {
+      toast.error("Informe a data de emissão.");
+      return;
+    }
 
     try {
       setIsSaving(true);

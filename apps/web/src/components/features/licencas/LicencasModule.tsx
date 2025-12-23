@@ -24,6 +24,7 @@ import {
   useDisclosure,
 } from "@/heroui";
 import { LicenseCreateModal } from "./LicenseCreateModal";
+import { LicenseTimeline } from "./LicenseTimeline";
 import {
   License,
   LicenseCreate,
@@ -321,6 +322,10 @@ export function LicencasModule() {
 
   const handleRenewSubmit = async () => {
     if (!selectedLicense) return;
+    if (!renewalData.new_issue_date) {
+      toast.error("Informe a nova data de emissão.");
+      return;
+    }
     try {
       await renewLicense(selectedLicense.id, renewalData);
       onRenewClose();

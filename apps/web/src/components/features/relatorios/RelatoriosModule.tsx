@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Button, Card, CardBody, CardHeader, Tabs, Tab, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Select, SelectItem, Switch, Input } from "@/heroui";
+import { Button, Card, CardBody, CardHeader, Chip, Tabs, Tab, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Select, SelectItem, Switch, Input } from "@/heroui";
 import { pageTransition, fadeIn } from "@/lib/animations";
 import {
   PlusIcon,
@@ -27,49 +27,51 @@ import type { ClientListItem } from "@/types/client";
 
 const financialReports = [
   {
-    id: "dre",
+    type: ReportType.DRE,
     title: "DRE Simplificada",
     description: "Demonstrativo de Resultados - Receita total menos Despesas operacionais",
     icon: TrendingUpIcon,
     color: "teal",
   },
   {
-    id: "fluxo-caixa",
+    type: ReportType.FLUXO_CAIXA,
     title: "Fluxo de Caixa",
     description: "Entradas e saídas de dinheiro mês a mês",
     icon: Activity,
     color: "blue",
   },
   {
-    id: "livro-caixa",
+    type: ReportType.LIVRO_CAIXA,
     title: "Livro Caixa",
-    description: "Todas as movimentações financeiras - receitas, despesas e saldo",
+    description: "Todas as movimentações financeiras em ordem cronológica",
     icon: FileTextIcon,
     color: "slate",
+    highlight: true,
+    features: ["Saldo acumulado por movimento", "Filtro por cliente ou escritório", "Ideal para conciliação diária"],
   },
   {
-    id: "receitas-cliente",
+    type: ReportType.RECEITAS_CLIENTE,
     title: "Receitas por Cliente",
     description: "Quanto cada cliente gerou em receita no período",
     icon: DollarSignIcon,
     color: "green",
   },
   {
-    id: "despesas-categoria",
+    type: ReportType.DESPESAS_CATEGORIA,
     title: "Despesas por Categoria",
     description: "Despesas classificadas em grupos (folha, marketing, aluguel, etc.)",
     icon: PieChartIcon,
     color: "amber",
   },
   {
-    id: "projecao-fluxo",
+    type: ReportType.PROJECAO_FLUXO,
     title: "Projeção de Fluxo de Caixa",
     description: "Previsão de entradas e saídas futuras com base no histórico",
     icon: CalendarIcon,
     color: "purple",
   },
   {
-    id: "kpis",
+    type: ReportType.KPIS,
     title: "Indicadores Financeiros (KPIs)",
     description: "Margem de lucro, despesas fixas, índice de inadimplência",
     icon: Target,
@@ -84,7 +86,7 @@ export function RelatoriosModule() {
   const OFFICE_CLIENT_ID = process.env.NEXT_PUBLIC_OFFICE_CLIENT_ID ?? "";
   const [activeTab, setActiveTab] = useState("essenciais");
   const [showBuilder, setShowBuilder] = useState(false);
-  const [selectedReport, setSelectedReport] = useState<string | null>(null);
+  const [selectedReport, setSelectedReport] = useState<ReportType | null>(null);
   const [isGeneratingId, setIsGeneratingId] = useState<string | null>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [rangeModalOpen, setRangeModalOpen] = useState(false);
@@ -112,35 +114,20 @@ export function RelatoriosModule() {
     };
   }, [clientSearch, isAdminOrFunc, rangeModalOpen]);
 
-  const mapReportIdToType = (id: string): ReportType => {
-    switch (id) {
-      case "dre":
-        return ReportType.DRE;
-      case "fluxo-caixa":
-        return ReportType.FLUXO_CAIXA;
-      case "livro-caixa":
-        return ReportType.LIVRO_CAIXA;
-      case "receitas-cliente":
-        return ReportType.RECEITAS_CLIENTE;
-      case "despesas-categoria":
-        return ReportType.DESPESAS_CATEGORIA;
-      case "projecao-fluxo":
-        return ReportType.PROJECAO_FLUXO;
-      case "kpis":
-        return ReportType.KPIS;
-      default:
-        return ReportType.DRE;
-    }
-  };
-
-  const handleOpenRangeModal = (reportId: string) => {
-    setSelectedReport(reportId);
+  const handleOpenRangeModal = (reportType: ReportType) => {
+    setSelectedReport(reportType);
     setRangeModalOpen(true);
   };
 
   const handleGenerateWithRange = async () => {
     if (!selectedReport) return;
     setIsGeneratingId(selectedReport);
+
+    if (rangeStart > rangeEnd) {
+      toast.error("A data inicial deve ser anterior à data final.");
+      setIsGeneratingId(null);
+      return;
+    }
 
     // Validate client selection for admin/func
     let clientIds: string[] | undefined = undefined;
@@ -157,7 +144,7 @@ export function RelatoriosModule() {
     }
 
     try {
-      const reportType = mapReportIdToType(selectedReport);
+      const reportType = selectedReport;
       const response = await reportsApi.exportReport({
         report_type: reportType,
         format: selectedFormat,
@@ -171,11 +158,19 @@ export function RelatoriosModule() {
           include_summary: true,
           include_charts: true,
         },
-        filename: `${selectedReport}-${rangeEnd}`,
+        filename: `${reportType}-${rangeEnd}`,
       });
 
       toast.success("Relatório gerado com sucesso. Baixando arquivo...");
-      await reportsApi.downloadReport(response.report_id, response.file_name);
+      const { blob, filename } = await reportsApi.downloadReport(response.report_id, response.file_name);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
       setHistoryRefreshKey((prev) => prev + 1);
       setRangeModalOpen(false);
     } catch (error) {
@@ -275,9 +270,16 @@ export function RelatoriosModule() {
                 const Icon = report.icon;
                 const bgClasses = getColorClasses(report.color);
                 const textClasses = getTextColorClasses(report.color);
+                const isHighlight = Boolean(report.highlight);
 
                 return (
-                  <Card key={report.id} className={`${bgClasses} border`}>
+                  <Card
+                    key={report.type}
+                    className={`${bgClasses} border relative overflow-hidden ${isHighlight ? "md:col-span-2" : ""}`}
+                  >
+                    {isHighlight && (
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0.18),_transparent_60%)] pointer-events-none" />
+                    )}
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
@@ -286,6 +288,11 @@ export function RelatoriosModule() {
                             <h3 className={`text-lg font-semibold ${textClasses}`}>
                               {report.title}
                             </h3>
+                            {isHighlight && (
+                              <Chip size="sm" variant="flat" color="primary">
+                                Destaque
+                              </Chip>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -294,15 +301,25 @@ export function RelatoriosModule() {
                       <p className={`text-sm mb-4 opacity-90 ${textClasses}`}>
                         {report.description}
                       </p>
+                      {report.features && report.features.length > 0 && (
+                        <div className="mb-4 space-y-1 text-xs text-default-600">
+                          {report.features.map((feature) => (
+                            <div key={feature} className="flex items-center gap-2">
+                              <span className="h-1.5 w-1.5 rounded-full bg-current opacity-60" />
+                              <span>{feature}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <Button
-                        onClick={() => handleOpenRangeModal(report.id)}
+                        onClick={() => handleOpenRangeModal(report.type)}
                         variant="bordered"
                         size="sm"
                         className="w-full"
-                        isLoading={isGeneratingId === report.id}
+                        isLoading={isGeneratingId === report.type}
                         isDisabled={Boolean(isGeneratingId)}
                       >
-                        {isGeneratingId === report.id ? "Gerando..." : "Gerar Relatório"}
+                        {isGeneratingId === report.type ? "Gerando..." : "Gerar Relatório"}
                       </Button>
                     </CardBody>
                   </Card>

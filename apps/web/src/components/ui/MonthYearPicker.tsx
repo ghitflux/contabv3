@@ -89,7 +89,7 @@ export function MonthYearPicker({
     <div className={className}>
       {label && (
         <label
-          className="text-sm font-medium text-default-600 mb-1 block"
+          className="text-sm font-medium text-default-600 mb-2 block"
           htmlFor={ariaLabel ?? label}
         >
           {label}
@@ -102,7 +102,7 @@ export function MonthYearPicker({
               id={ariaLabel ?? label}
               variant="bordered"
               size={size}
-              className={`w-full justify-between text-left font-normal ${
+              className={`w-full justify-between text-left font-normal gap-2 py-2.5 ${
                 value ? 'text-foreground' : 'text-default-400'
               } ${isClearable && value ? 'pr-10' : ''}`}
               aria-label={ariaLabel || label || 'Selecionar mês e ano'}
@@ -127,47 +127,49 @@ export function MonthYearPicker({
             </Button>
           ) : null}
         </div>
-        <PopoverContent className="w-[280px] p-4">
-          <div className="grid grid-cols-2 gap-3">
-            <Select
-              label="Mês"
-              selectedKeys={[String(selectedMonth)]}
-              onSelectionChange={(keys) => {
-                const selected = Array.from(keys)[0] as string | undefined;
-                if (!selected) return;
-                const month = parseInt(selected, 10);
-                if (!month) return;
-                const monthValue = String(month).padStart(2, '0');
-                onChange(`${selectedYear}-${monthValue}`);
-              }}
-              size="sm"
-            >
-              {monthNames.map((name, index) => (
-                <SelectItem key={String(index + 1)}>{name}</SelectItem>
-              ))}
-            </Select>
-            <Select
-              label="Ano"
-              selectedKeys={[String(selectedYear)]}
-              onSelectionChange={(keys) => {
-                const selected = Array.from(keys)[0] as string | undefined;
-                if (!selected) return;
-                const year = parseInt(selected, 10);
-                if (!year) return;
-                const monthValue = String(selectedMonth).padStart(2, '0');
-                onChange(`${year}-${monthValue}`);
-              }}
-              size="sm"
-            >
-              {years.map((year) => (
-                <SelectItem key={String(year)}>{year}</SelectItem>
-              ))}
-            </Select>
-          </div>
-          <div className="flex justify-end pt-3">
-            <Button size="sm" variant="light" onPress={() => setIsOpen(false)}>
-              Fechar
-            </Button>
+        <PopoverContent className="w-[320px] p-4">
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <Select
+                label="Mês"
+                selectedKeys={[String(selectedMonth)]}
+                onSelectionChange={(keys) => {
+                  const selected = Array.from(keys)[0] as string | undefined;
+                  if (!selected) return;
+                  const month = parseInt(selected, 10);
+                  if (!month) return;
+                  const monthValue = String(month).padStart(2, '0');
+                  onChange(`${selectedYear}-${monthValue}`);
+                }}
+                size="sm"
+              >
+                {monthNames.map((name, index) => (
+                  <SelectItem key={String(index + 1)}>{name}</SelectItem>
+                ))}
+              </Select>
+              <Select
+                label="Ano"
+                selectedKeys={[String(selectedYear)]}
+                onSelectionChange={(keys) => {
+                  const selected = Array.from(keys)[0] as string | undefined;
+                  if (!selected) return;
+                  const year = parseInt(selected, 10);
+                  if (!year) return;
+                  const monthValue = String(selectedMonth).padStart(2, '0');
+                  onChange(`${year}-${monthValue}`);
+                }}
+                size="sm"
+              >
+                {years.map((year) => (
+                  <SelectItem key={String(year)}>{year}</SelectItem>
+                ))}
+              </Select>
+            </div>
+            <div className="flex justify-end">
+              <Button size="sm" variant="light" onPress={() => setIsOpen(false)}>
+                Fechar
+              </Button>
+            </div>
           </div>
         </PopoverContent>
       </Popover>

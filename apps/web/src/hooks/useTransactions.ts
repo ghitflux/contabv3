@@ -3,7 +3,12 @@
  */
 
 import { financeApi } from "@/lib/api/endpoints/finance";
-import type { FinancialTransaction, TransactionFilters } from "@/types/finance";
+import type {
+  Transaction,
+  TransactionCreate,
+  TransactionUpdate,
+  TransactionFilters,
+} from "@/types/finance";
 import { useCallback, useEffect, useState } from "react";
 
 interface UseTransactionsOptions {
@@ -13,10 +18,15 @@ interface UseTransactionsOptions {
 
 export function useTransactions(options: UseTransactionsOptions = {}) {
   const { filters, autoFetch = true } = options;
-  const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
+
+  const normalizeTransaction = useCallback((transaction: Transaction): Transaction => {
+    const amount = typeof transaction.amount === "string" ? Number(transaction.amount) : transaction.amount;
+    return { ...transaction, amount };
+  }, []);
 
   /**
    * Fetch transactions from API.
@@ -31,9 +41,10 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
         ...customFilters,
       });
 
-      setTransactions(response.items);
+      const normalizedItems = response.items.map(normalizeTransaction);
+      setTransactions(normalizedItems);
       setTotal(response.total);
-      return response;
+      return { ...response, items: normalizedItems };
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to fetch transactions";
@@ -42,14 +53,14 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
     } finally {
       setIsLoading(false);
     }
-  }, [filters]);
+  }, [filters, normalizeTransaction]);
 
   /**
    * Create a new transaction.
    */
-  const createTransaction = useCallback(async (data: Partial<FinancialTransaction>) => {
+  const createTransaction = useCallback(async (data: TransactionCreate) => {
     try {
-      const created = await financeApi.createTransaction(data);
+      const created = normalizeTransaction(await financeApi.createTransaction(data));
       setTransactions((prev) => [created, ...prev]);
       setTotal((prev) => prev + 1);
       return created;
@@ -59,17 +70,17 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
       setError(message);
       throw err;
     }
-  }, []);
+  }, [normalizeTransaction]);
 
   /**
    * Update a transaction.
    */
   const updateTransaction = useCallback(async (
     id: string,
-    data: Partial<FinancialTransaction>
+    data: TransactionUpdate
   ) => {
     try {
-      const updated = await financeApi.updateTransaction(id, data);
+      const updated = normalizeTransaction(await financeApi.updateTransaction(id, data));
       setTransactions((prev) =>
         prev.map((t) => (t.id === id ? updated : t))
       );
@@ -80,7 +91,7 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
       setError(message);
       throw err;
     }
-  }, []);
+  }, [normalizeTransaction]);
 
   /**
    * Delete a transaction.
