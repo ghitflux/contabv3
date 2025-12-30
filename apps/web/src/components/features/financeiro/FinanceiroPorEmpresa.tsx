@@ -37,6 +37,7 @@ export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => 
   const [clients, setClients] = useState<ClientListItem[]>([]);
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [clientDetails, setClientDetails] = useState<Client | null>(null);
+  const [isLoadingClients, setIsLoadingClients] = useState(true);
   const [monthFilter, setMonthFilter] = useState(formatISO(new Date(), { representation: "date" }).slice(0, 7));
   const [startDate, setStartDate] = useState(formatISO(startOfMonth(new Date()), { representation: "date" }));
   const [endDate, setEndDate] = useState(formatISO(endOfMonth(new Date()), { representation: "date" }));
@@ -45,11 +46,17 @@ export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => 
     let active = true;
     (async () => {
       try {
+        setIsLoadingClients(true);
         const response = await clientsApi.list({ size: 100 });
-        if (active) setClients(response.items);
+        if (active) {
+          setClients(response.items);
+          console.log("Clientes carregados:", response.items.length);
+        }
       } catch (error) {
         console.error("Erro ao buscar clientes", error);
         toast.error("Não foi possível carregar os clientes.");
+      } finally {
+        if (active) setIsLoadingClients(false);
       }
     })();
     return () => {
@@ -59,9 +66,10 @@ export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => 
 
   useEffect(() => {
     if (!selectedClient && clients.length > 0) {
+      // Auto-select first client
       setSelectedClient(clients[0].id);
     }
-  }, [clients, selectedClient]);
+  }, [clients]); // Remove selectedClient from dependencies to avoid loop
 
   const setRangeForMonth = (monthValue: string) => {
     if (!monthValue) return;
@@ -227,18 +235,23 @@ export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => 
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Selecione a empresa</label>
               <Select
-                selectedKeys={selectedClient ? [selectedClient] : []}
+                selectedKeys={selectedClient ? new Set([selectedClient]) : new Set()}
                 onSelectionChange={(keys) => {
-                  const value = Array.from(keys)[0] as string | undefined;
+                  const selectedKeys = Array.from(keys);
+                  const value = selectedKeys[0] as string | undefined;
                   if (value) {
                     setSelectedClient(value);
                   }
                 }}
+                placeholder={isLoadingClients ? "Carregando empresas..." : "Selecione uma empresa..."}
                 aria-label="Selecionar empresa"
                 className="max-w-[420px]"
+                isDisabled={isLoadingClients || clients.length === 0}
+                isLoading={isLoadingClients}
+                disallowEmptySelection
               >
                 {clients.map((client) => (
-                  <SelectItem key={client.id} value={client.id}>
+                  <SelectItem key={client.id} value={client.id} textValue={`${client.nome_fantasia || client.razao_social} — ${client.cnpj}`}>
                     {(client.nome_fantasia || client.razao_social) ?? "-"} — {client.cnpj}
                   </SelectItem>
                 ))}

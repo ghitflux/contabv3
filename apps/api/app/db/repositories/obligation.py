@@ -12,6 +12,8 @@ from app.db.models.obligation import Obligation, ObligationStatus
 from app.db.models.obligation_event import ObligationEvent
 from app.db.repositories.base import BaseRepository
 
+_UNSET = object()
+
 
 class ObligationRepository(BaseRepository[Obligation]):
     """Repository for Obligation operations."""
@@ -82,7 +84,7 @@ class ObligationRepository(BaseRepository[Obligation]):
             select(Obligation)
             .where(
                 and_(
-                    Obligation.status == ObligationStatus.PENDING,
+                    Obligation.status == ObligationStatus.PENDENTE,
                     Obligation.due_date <= until_date,
                 )
             )
@@ -104,7 +106,7 @@ class ObligationRepository(BaseRepository[Obligation]):
             select(Obligation)
             .where(
                 and_(
-                    Obligation.status == ObligationStatus.PENDING,
+                    Obligation.status == ObligationStatus.PENDENTE,
                     Obligation.due_date < reference_date,
                 )
             )
@@ -140,9 +142,9 @@ class ObligationRepository(BaseRepository[Obligation]):
         self,
         obligation_id: UUID,
         status: ObligationStatus,
-        completed_at: Optional[datetime] = None,
-        receipt_url: Optional[str] = None,
-        processed_by_id: Optional[UUID] = None,
+        completed_at: Optional[datetime] | object = _UNSET,
+        receipt_url: Optional[str] | object = _UNSET,
+        processed_by_id: Optional[UUID] | object = _UNSET,
     ) -> Optional[Obligation]:
         """Update obligation status and related fields."""
         obligation = await self.get(obligation_id)
@@ -151,14 +153,14 @@ class ObligationRepository(BaseRepository[Obligation]):
 
         obligation.status = status
 
-        if completed_at:
+        if completed_at is not _UNSET:
             obligation.completed_at = completed_at
 
-        if receipt_url:
+        if receipt_url is not _UNSET:
             obligation.receipt_url = receipt_url
 
-        if processed_by_id:
-            obligation.processed_by_id = processed_by_id
+        if processed_by_id is not _UNSET:
+            obligation.completed_by = processed_by_id
 
         await self.db.flush()
         await self.db.refresh(obligation)

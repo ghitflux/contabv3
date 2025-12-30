@@ -128,7 +128,21 @@ export function UploadReceiptModal({
       setPreview(null);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao fazer upload");
+      console.error("Erro ao fazer upload:", err);
+
+      // Extract error message from API error
+      let errorMessage = "Erro ao fazer upload";
+      if (err instanceof Error) {
+        errorMessage = err.message;
+        // Check if error has data property (from API)
+        if ((err as any).data?.detail) {
+          errorMessage = (err as any).data.detail;
+        }
+      } else if (typeof err === "string") {
+        errorMessage = err;
+      }
+
+      setError(errorMessage);
     } finally {
       setIsUploading(false);
     }

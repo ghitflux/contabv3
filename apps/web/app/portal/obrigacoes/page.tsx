@@ -140,6 +140,35 @@ export default function PortalObrigacoesPage() {
     onDetailsOpen();
   };
 
+  const handleDownloadReceipt = async (receiptUrl: string) => {
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+      const normalizedBase = apiBase.endsWith("/") ? apiBase.slice(0, -1) : apiBase;
+      const normalizedReceipt = receiptUrl.startsWith("/uploads/receipts/")
+        ? receiptUrl.replace("/uploads/receipts/", "/obligations/receipts/")
+        : receiptUrl;
+      const absoluteUrl = normalizedReceipt.startsWith("http")
+        ? normalizedReceipt
+        : `${normalizedBase}${normalizedReceipt.startsWith("/") ? "" : "/"}${normalizedReceipt}`;
+
+      const token = localStorage.getItem("access_token");
+      const response = await fetch(absoluteUrl, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erro ao baixar comprovante (${response.status})`);
+      }
+
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    } catch (error) {
+      console.error("Erro ao baixar comprovante:", error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -342,11 +371,9 @@ export default function PortalObrigacoesPage() {
                   <div>
                     <p className="text-sm text-default-500 mb-2">Comprovante</p>
                     <Button
-                      as="a"
-                      href={selectedObligation.receipt_url}
-                      target="_blank"
                       color="primary"
                       variant="flat"
+                      onPress={() => handleDownloadReceipt(selectedObligation.receipt_url!)}
                     >
                       Ver Comprovante
                     </Button>

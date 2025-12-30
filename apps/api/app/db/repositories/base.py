@@ -44,6 +44,10 @@ class BaseRepository(Generic[ModelType]):
         )
         return result.scalar_one_or_none()
 
+    async def get(self, id: UUID) -> ModelType | None:
+        """Alias for get_by_id (used by services)."""
+        return await self.get_by_id(id)
+
     async def get_all(self, skip: int = 0, limit: int = 100) -> list[ModelType]:
         """
         Get all records with pagination.

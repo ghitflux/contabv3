@@ -58,13 +58,13 @@ class ObligationProcessor:
             )
 
         # Validate current status
-        if obligation.status == ObligationStatus.COMPLETED:
+        if obligation.status == ObligationStatus.CONCLUIDA:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Obligation already completed",
             )
 
-        if obligation.status == ObligationStatus.CANCELLED:
+        if obligation.status == ObligationStatus.CANCELADA:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot process receipt for cancelled obligation",
@@ -74,7 +74,7 @@ class ObligationProcessor:
         now = datetime.utcnow()
         obligation = await self.obligation_repo.update_status(
             obligation_id=obligation_id,
-            status=ObligationStatus.COMPLETED,
+            status=ObligationStatus.CONCLUIDA,
             completed_at=now,
             receipt_url=receipt_url,
             processed_by_id=processed_by_id,
@@ -85,8 +85,8 @@ class ObligationProcessor:
             obligation_id=obligation_id,
             event_type=ObligationEventType.RECEIPT_UPLOADED,
             description=f"Receipt uploaded and obligation marked as completed{f': {notes}' if notes else ''}",
-            performed_by_id=processed_by_id,
-            metadata={
+            user_id=processed_by_id,
+            extra_data={
                 "receipt_url": receipt_url,
                 "completed_at": now.isoformat(),
                 "notes": notes,
@@ -120,7 +120,7 @@ class ObligationProcessor:
         # Update to pending
         obligation = await self.obligation_repo.update_status(
             obligation_id=obligation_id,
-            status=ObligationStatus.PENDING,
+            status=ObligationStatus.PENDENTE,
             completed_at=None,
             receipt_url=None,
             processed_by_id=None,
@@ -131,9 +131,9 @@ class ObligationProcessor:
             obligation_id=obligation_id,
             event_type=ObligationEventType.STATUS_CHANGED,
             description=f"Obligation marked as pending{f': {notes}' if notes else ''}",
-            performed_by_id=performed_by_id,
-            metadata={
-                "new_status": ObligationStatus.PENDING.value,
+            user_id=performed_by_id,
+            extra_data={
+                "new_status": ObligationStatus.PENDENTE.value,
                 "notes": notes,
             },
         )
@@ -158,7 +158,7 @@ class ObligationProcessor:
                 detail="Obligation not found",
             )
 
-        if obligation.status == ObligationStatus.COMPLETED:
+        if obligation.status == ObligationStatus.CONCLUIDA:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot cancel completed obligation",
@@ -167,16 +167,16 @@ class ObligationProcessor:
         # Update to cancelled
         obligation = await self.obligation_repo.update_status(
             obligation_id=obligation_id,
-            status=ObligationStatus.CANCELLED,
+            status=ObligationStatus.CANCELADA,
         )
 
         # Create event
         event = ObligationEvent(
             obligation_id=obligation_id,
-            event_type=ObligationEventType.CANCELLED,
+            event_type=ObligationEventType.CANCELED,
             description=f"Obligation cancelled: {reason}",
-            performed_by_id=performed_by_id,
-            metadata={
+            user_id=performed_by_id,
+            extra_data={
                 "reason": reason,
             },
         )
@@ -202,7 +202,7 @@ class ObligationProcessor:
                 detail="Obligation not found",
             )
 
-        if obligation.status == ObligationStatus.COMPLETED:
+        if obligation.status == ObligationStatus.CONCLUIDA:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot update due date of completed obligation",
@@ -216,8 +216,8 @@ class ObligationProcessor:
             obligation_id=obligation_id,
             event_type=ObligationEventType.DUE_DATE_CHANGED,
             description=f"Due date changed from {old_due_date.strftime('%Y-%m-%d')} to {new_due_date.strftime('%Y-%m-%d')}: {reason}",
-            performed_by_id=performed_by_id,
-            metadata={
+            user_id=performed_by_id,
+            extra_data={
                 "old_due_date": old_due_date.isoformat(),
                 "new_due_date": new_due_date.isoformat(),
                 "reason": reason,

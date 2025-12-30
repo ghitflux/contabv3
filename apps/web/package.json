@@ -13,16 +13,19 @@
     "@heroui/react": "^2.8.5",
     "@heroui/theme": "^2.4.23",
     "@hookform/resolvers": "^5.2.2",
+    "@internationalized/date": "^3.5.0",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.23.24",
+    "jspdf": "^3.0.4",
+    "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.552.0",
     "next": "16.0.10",
     "next-themes": "^0.4.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-hook-form": "^7.66.0",
-    "@internationalized/date": "^3.5.0",
     "recharts": "^2.12.7",
+    "xlsx": "^0.18.5",
     "zod": "^4.1.12"
   },
   "devDependencies": {
@@ -34,6 +37,6 @@
     "heroui-cli": "^1.2.3",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.9.3"
   }
 }

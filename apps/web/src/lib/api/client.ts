@@ -4,7 +4,8 @@
 
 import type { RefreshResponse } from "@/types/auth";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+const DEFAULT_API_BASE_URL = "http://localhost:8000/api/v1";
+const SAME_ORIGIN_API_BASE_URL = "/api/v1";
 
 const REFRESH_TOKEN_COOKIE = "refresh_token";
 
@@ -48,6 +49,52 @@ function setCookie(name: string, value: string, maxAgeSeconds?: number) {
 function deleteCookie(name: string) {
   if (typeof document === "undefined") return;
   document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax`;
+}
+
+function normalizeBaseUrl(value: string): string {
+  return value.endsWith("/") ? value.slice(0, -1) : value;
+}
+
+function ensureApiVersion(value: string): string {
+  if (!value.startsWith("http")) {
+    return value;
+  }
+
+  try {
+    const url = new URL(value);
+    if (!url.pathname || url.pathname === "/") {
+      return `${url.origin}/api/v1`;
+    }
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return value;
+  }
+}
+
+function resolveApiBaseUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_API_URL;
+  if (!configured) {
+    return DEFAULT_API_BASE_URL;
+  }
+
+  const normalized = ensureApiVersion(normalizeBaseUrl(configured));
+  if (typeof window === "undefined") {
+    return normalized.startsWith("http") ? normalized : DEFAULT_API_BASE_URL;
+  }
+
+  if (normalized.startsWith("http")) {
+    try {
+      const url = new URL(normalized);
+      if (url.origin !== window.location.origin) {
+        return SAME_ORIGIN_API_BASE_URL;
+      }
+      return `${url.origin}${url.pathname}`;
+    } catch {
+      return SAME_ORIGIN_API_BASE_URL;
+    }
+  }
+
+  return normalized.startsWith("/") ? normalized : `/${normalized}`;
 }
 
 function decodeJwtExp(token: string): number | null {
@@ -121,7 +168,7 @@ export class ApiClient {
       throw new Error("No refresh token available");
     }
 
-    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+    const response = await fetch(`${resolveApiBaseUrl()}/auth/refresh`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -143,7 +190,7 @@ export class ApiClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    const url = `${API_BASE_URL}${endpoint}`;
+    const url = `${resolveApiBaseUrl()}${endpoint}`;
 
     // Add Authorization header if token is available
     const headers = new Headers(options.headers);
@@ -285,7 +332,7 @@ export class ApiClient {
     formData: FormData,
     options: RequestInit = {}
   ): Promise<T> {
-    const url = `${API_BASE_URL}${endpoint}`;
+    const url = `${resolveApiBaseUrl()}${endpoint}`;
 
     // Add Authorization header if token is available
     const headers = new Headers(options.headers);

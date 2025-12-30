@@ -64,6 +64,7 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3001,"
         "http://localhost"
     )
+    CORS_ORIGIN_REGEX: str | None = None
 
     @field_validator("CORS_ORIGINS", mode="after")
     @classmethod
@@ -72,6 +73,17 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [i.strip() for i in v.split(",")]
         return v
+
+    @field_validator("CORS_ORIGIN_REGEX", mode="before")
+    @classmethod
+    def default_cors_origin_regex(cls, v: str | None, info: Any) -> str | None:
+        """Allow any localhost port in development unless explicitly configured."""
+        if v:
+            return v
+        env = str(info.data.get("ENVIRONMENT", "")).lower()
+        if env == "development":
+            return r"^https?://(localhost|127\\.0\\.0\\.1)(:\\d+)?$"
+        return None
 
     # Logging
     LOG_LEVEL: str = "INFO"

@@ -6,13 +6,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from app.services.report.exporters.base import BaseExporter
 
-class CSVExporter:
+
+class CSVExporter(BaseExporter):
     """CSV exporter for reports."""
-
-    def __init__(self):
-        self.output_dir = Path("uploads/reports")
-        self.output_dir.mkdir(parents=True, exist_ok=True)
 
     async def export(self, data: dict[str, Any], filename: str) -> tuple[bytes, Path]:
         """
@@ -109,9 +107,3 @@ class CSVExporter:
         file_path.write_bytes(csv_bytes)
 
         return file_path
-
-    def _ensure_directory(self, subdirectory: str) -> Path:
-        """Ensure a subdirectory exists."""
-        dir_path = self.output_dir / subdirectory
-        dir_path.mkdir(parents=True, exist_ok=True)
-        return dir_path

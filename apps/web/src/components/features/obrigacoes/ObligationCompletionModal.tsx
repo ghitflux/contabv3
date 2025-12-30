@@ -35,7 +35,7 @@ export function ObligationCompletionModal({
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       // Validar tipo e tamanho
-      if (!selectedFile.type.match(/^(application\/pdf|image\/(jpeg|png))$/)) {
+      if (!selectedFile.type.match(/^(application\/pdf|image\/(jpeg|jpg|png))$/)) {
         setError('Apenas PDF, JPEG ou PNG são aceitos');
         return;
       }
@@ -61,8 +61,20 @@ export function ObligationCompletionModal({
       await obligationsApi.uploadReceipt(obligation.id, file, notes);
       onSuccess();
       onClose();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Erro ao fazer upload');
+    } catch (err) {
+      console.error('Erro ao fazer upload:', err);
+
+      let errorMessage = 'Erro ao fazer upload';
+      if (err instanceof Error) {
+        errorMessage = err.message;
+        if ((err as any).data?.detail) {
+          errorMessage = (err as any).data.detail;
+        }
+      } else if (typeof err === 'string') {
+        errorMessage = err;
+      }
+
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }

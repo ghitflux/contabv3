@@ -194,8 +194,33 @@ export function ObrigacoesModule() {
     }
   };
 
-  const handleDownloadReceipt = (receiptUrl: string) => {
-    window.open(receiptUrl, '_blank');
+  const handleDownloadReceipt = async (receiptUrl: string) => {
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      const normalizedBase = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
+      const normalizedReceipt = receiptUrl.startsWith('/uploads/receipts/')
+        ? receiptUrl.replace('/uploads/receipts/', '/obligations/receipts/')
+        : receiptUrl;
+      const absoluteUrl = normalizedReceipt.startsWith('http')
+        ? normalizedReceipt
+        : `${normalizedBase}${normalizedReceipt.startsWith('/') ? '' : '/'}${normalizedReceipt}`;
+
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(absoluteUrl, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erro ao baixar comprovante (${response.status})`);
+      }
+
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank', 'noopener,noreferrer');
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    } catch (err) {
+      console.error('Erro ao baixar comprovante:', err);
+    }
   };
 
   return (

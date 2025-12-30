@@ -314,21 +314,26 @@ async def upload_receipt(
         )
 
     # Save file (simplified - in production use proper storage service)
-    import os
     from pathlib import Path
 
-    upload_dir = Path("/var/uploads/receipts")
+    # Use relative path that works on Windows and Linux
+    upload_dir = Path("uploads/receipts")
     upload_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create subdirectory by date for organization
+    today = datetime.utcnow().strftime("%Y%m%d")
+    date_dir = upload_dir / today
+    date_dir.mkdir(parents=True, exist_ok=True)
 
     # Generate unique filename
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     filename = f"{obligation_id}_{timestamp}_{file.filename}"
-    file_path = upload_dir / filename
+    file_path = date_dir / filename
 
     with open(file_path, "wb") as f:
         f.write(contents)
 
-    receipt_url = f"/uploads/receipts/{filename}"
+    receipt_url = f"/obligations/receipts/{today}/{filename}"
 
     # Process receipt
     processor = ObligationProcessor(db, websocket_manager)
@@ -635,8 +640,8 @@ async def complete_obligation(
         obligation_id=obligation_id,
         event_type=ObligationEventType.STATUS_CHANGED,
         description="Obligation marked as completed",
-        performed_by_id=current_user.id,
-        metadata={"completed_at": now.isoformat()},
+        user_id=current_user.id,
+        extra_data={"completed_at": now.isoformat()},
     )
     await event_repo.create(event)
 
@@ -752,3 +757,77 @@ async def list_obligations_simple(
         })
 
     return obligations_list
+
+
+@router.get("/receipts/{date}/{filename}")
+async def download_receipt(
+    date: str,
+    filename: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """
+    Download/view obligation receipt file.
+
+    Admin/Func can download any receipt.
+    Clients can only download receipts for their own obligations.
+    """
+    from pathlib import Path
+    from fastapi.responses import FileResponse
+
+    # Construct file path
+    file_path = Path("uploads/receipts") / date / filename
+
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Receipt file not found",
+        )
+
+    # Verify access (extract obligation_id from filename)
+    # Filename format: {obligation_id}_{timestamp}_{original_filename}
+    try:
+        obligation_id_str = filename.split("_")[0]
+        obligation_id = UUID(obligation_id_str)
+
+        # Check if user has access to this obligation
+        repo = ObligationRepository(db)
+        obligation = await repo.get_by_id(obligation_id)
+
+        if not obligation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Obligation not found",
+            )
+
+        # Check access: clients can only see their own
+        if current_user.role == UserRole.CLIENTE:
+            client_repo = ClientRepository(db)
+            client = await client_repo.get_by_user_id(current_user.id, current_user.email)
+            if not client or obligation.client_id != client.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not authorized to access this receipt",
+                )
+    except (IndexError, ValueError):
+        # If filename format is invalid, only allow admin
+        if current_user.role != UserRole.ADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid receipt filename",
+            )
+
+    # Determine media type based on file extension
+    media_type = "application/octet-stream"
+    if filename.lower().endswith(".pdf"):
+        media_type = "application/pdf"
+    elif filename.lower().endswith((".jpg", ".jpeg")):
+        media_type = "image/jpeg"
+    elif filename.lower().endswith(".png"):
+        media_type = "image/png"
+
+    return FileResponse(
+        str(file_path),
+        media_type=media_type,
+        filename=filename,
+    )
