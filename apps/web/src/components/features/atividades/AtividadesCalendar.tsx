@@ -10,9 +10,14 @@ import { ActivityPriority, type Activity } from "@/types/activity"
 type AtividadesCalendarProps = {
   activities: Activity[]
   isLoading?: boolean
+  onSelectActivity?: (activity: Activity) => void
 }
 
-export function AtividadesCalendar({ activities, isLoading = false }: AtividadesCalendarProps) {
+export function AtividadesCalendar({
+  activities,
+  isLoading = false,
+  onSelectActivity,
+}: AtividadesCalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [view, setView] = useState<"month" | "week" | "day">("month")
   const activitiesByDate = useMemo(() => {
@@ -64,11 +69,59 @@ export function AtividadesCalendar({ activities, isLoading = false }: Atividades
     return activitiesByDate[dateStr] ?? []
   }
 
-  const navigateMonth = (direction: number) => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + direction, 1))
+  const getDaysInWeek = (date: Date) => {
+    const start = new Date(date)
+    start.setDate(date.getDate() - date.getDay())
+    return Array.from({ length: 7 }, (_, index) => {
+      const day = new Date(start)
+      day.setDate(start.getDate() + index)
+      return day
+    })
   }
 
-  const days = getDaysInMonth(currentDate)
+  const getDaysForView = () => {
+    if (view === "month") return getDaysInMonth(currentDate)
+    if (view === "week") return getDaysInWeek(currentDate)
+    return [currentDate]
+  }
+
+  const navigateDate = (direction: number) => {
+    if (view === "month") {
+      setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + direction, 1))
+      return
+    }
+    const next = new Date(currentDate)
+    next.setDate(currentDate.getDate() + (view === "week" ? 7 * direction : direction))
+    setCurrentDate(next)
+  }
+
+  const days = getDaysForView()
+  const dayHeaders = view === "day" ? [dayNames[currentDate.getDay()]] : dayNames
+  const gridColsClass = view === "day" ? "grid-cols-1" : "grid-cols-7"
+
+  const headerLabel = useMemo(() => {
+    if (view === "day") {
+      return currentDate.toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      })
+    }
+    if (view === "week") {
+      const weekDays = getDaysInWeek(currentDate)
+      const firstDay = weekDays[0]
+      const lastDay = weekDays[6]
+      return `${firstDay.toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "short",
+      })} - ${lastDay.toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })}`
+    }
+    return `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`
+  }, [currentDate, view])
 
   return (
     <motion.div initial="hidden" animate="visible" variants={fadeIn}>
@@ -77,9 +130,7 @@ export function AtividadesCalendar({ activities, isLoading = false }: Atividades
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2">
               <Calendar className="h-5 w-5" />
-              <h3 className="text-lg font-semibold">
-                {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
-              </h3>
+              <h3 className="text-lg font-semibold">{headerLabel}</h3>
             </div>
             <div className="flex items-center gap-2">
               <div className="flex gap-1">
@@ -113,7 +164,7 @@ export function AtividadesCalendar({ activities, isLoading = false }: Atividades
                   isIconOnly
                   size="sm"
                   variant="bordered"
-                  onPress={() => navigateMonth(-1)}
+                  onPress={() => navigateDate(-1)}
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
@@ -121,7 +172,7 @@ export function AtividadesCalendar({ activities, isLoading = false }: Atividades
                   isIconOnly
                   size="sm"
                   variant="bordered"
-                  onPress={() => navigateMonth(1)}
+                  onPress={() => navigateDate(1)}
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -135,8 +186,8 @@ export function AtividadesCalendar({ activities, isLoading = false }: Atividades
               <Spinner size="sm" color="primary" />
             </div>
           )}
-          <div className="grid grid-cols-7 gap-2">
-            {dayNames.map((day) => (
+          <div className={`grid ${gridColsClass} gap-2`}>
+            {dayHeaders.map((day) => (
               <div
                 key={day}
                 className="text-center font-semibold text-sm text-default-500 py-2"
@@ -166,7 +217,8 @@ export function AtividadesCalendar({ activities, isLoading = false }: Atividades
                       </div>
                       <div className="space-y-1">
                         {activities.slice(0, 2).map((activity) => (
-                          <div
+                          <button
+                            type="button"
                             key={activity.id}
                             className={`text-xs p-1 rounded truncate ${
                               activity.priority === ActivityPriority.HIGH
@@ -175,9 +227,10 @@ export function AtividadesCalendar({ activities, isLoading = false }: Atividades
                                   ? "bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-400"
                                   : "bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400"
                             }`}
+                            onClick={() => onSelectActivity?.(activity)}
                           >
                             {activity.title}
-                          </div>
+                          </button>
                         ))}
                         {activities.length > 2 && (
                           <div className="text-xs text-default-500">

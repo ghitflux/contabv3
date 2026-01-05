@@ -9,6 +9,7 @@ import { motion } from 'framer-motion';
 import { pageTransition } from '@/lib/animations';
 import { useState, useCallback } from 'react';
 import { toast } from '@/lib/toast';
+import { PasswordChangeForm } from '@/components/features/configuracoes/PasswordChangeForm';
 
 export default function PerfilPage() {
   const { user } = useAuth();
@@ -286,22 +287,7 @@ export default function PerfilPage() {
         </div>
       </Card>
 
-      {/* Password Change Section */}
-      <Card className="p-6 space-y-4">
-        <div>
-          <h3 className="text-xl font-semibold mb-2">Segurança</h3>
-          <p className="text-default-500 text-sm">Atualize sua senha regularmente para manter sua conta segura</p>
-        </div>
-        <Divider />
-
-        {/* Password Change Form - Imported Component */}
-        <div className="space-y-4">
-          <p className="text-sm text-default-600 font-semibold">Alterar Senha</p>
-          <div className="bg-default-100 p-4 rounded-lg text-center text-sm text-default-500">
-            Componente de mudança de senha disponível em uma próxima atualização
-          </div>
-        </div>
-      </Card>
+      <PasswordChangeForm />
     </motion.div>
   );
 }

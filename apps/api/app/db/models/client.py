@@ -115,6 +115,10 @@ class Client(Base, UUIDMixin, TimestampMixin):
     servicos_contratados: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True, server_default="[]")
     licencas_necessarias: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True, server_default="[]")
 
+    # Obligation types (IDs of ObligationType that apply to this client)
+    # This allows selective generation of obligations instead of automatic generation
+    obligation_types_ids: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True, server_default="[]")
+
     # Notes
     observacoes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 

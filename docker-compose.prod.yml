@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: contabil-postgres-prod
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - contabil_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - contabil-network
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: production
+    container_name: contabil-api-prod
+    env_file:
+      - .env.prod
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      LOG_LEVEL: INFO
+    command: >-
+      sh -c "alembic upgrade head && uvicorn app.main:app
+      --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - contabil_api_uploads:/var/uploads
+    ports:
+      - "127.0.0.1:8000:8000"
+    networks:
+      - contabil-network
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.web.prod
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://testecic.ghitflux.com}
+    container_name: contabil-web-prod
+    env_file:
+      - .env.prod
+    environment:
+      NODE_ENV: production
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - contabil-network
+    restart: unless-stopped
+
+volumes:
+  contabil_postgres_data:
+    driver: local
+  contabil_api_uploads:
+    driver: local
+
+networks:
+  contabil-network:
+    driver: bridge

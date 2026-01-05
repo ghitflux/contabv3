@@ -20,6 +20,25 @@ from app.schemas.activity import (
 router = APIRouter()
 
 
+def _build_activity_response(activity: Activity) -> ActivityResponse:
+    return ActivityResponse(
+        id=activity.id,
+        title=activity.title,
+        description=activity.description,
+        status=activity.status.value,
+        priority=activity.priority.value,
+        assigned_to_id=activity.assigned_to_id,
+        assigned_to_name=activity.assigned_to.name if activity.assigned_to else None,
+        due_date=activity.due_date,
+        labels=activity.labels.split(",") if activity.labels else [],
+        recurrence=activity.recurrence.value if activity.recurrence else None,
+        reminders=activity.reminders,
+        created_by_id=activity.created_by_id,
+        created_at=activity.created_at,
+        updated_at=activity.updated_at,
+    )
+
+
 @router.get("", response_model=ActivityListResponse)
 async def list_activities(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -50,25 +69,7 @@ async def list_activities(
         assigned_to_id=assigned_to_id,
     )
 
-    # Convert labels from comma-separated string to list
-    items = []
-    for activity in activities:
-        activity_dict = {
-            "id": activity.id,
-            "title": activity.title,
-            "description": activity.description,
-            "status": activity.status.value,
-            "priority": activity.priority.value,
-            "assigned_to_id": activity.assigned_to_id,
-            "due_date": activity.due_date,
-            "labels": activity.labels.split(",") if activity.labels else [],
-            "recurrence": activity.recurrence.value if activity.recurrence else None,
-            "reminders": activity.reminders,
-            "created_by_id": activity.created_by_id,
-            "created_at": activity.created_at,
-            "updated_at": activity.updated_at,
-        }
-        items.append(ActivityResponse(**activity_dict))
+    items = [_build_activity_response(activity) for activity in activities]
 
     pages = (total + limit - 1) // limit if limit > 0 else 0
     page = (skip // limit) + 1 if limit > 0 else 1
@@ -98,21 +99,7 @@ async def get_activity(
             detail="Activity not found",
         )
 
-    return ActivityResponse(
-        id=activity.id,
-        title=activity.title,
-        description=activity.description,
-        status=activity.status.value,
-        priority=activity.priority.value,
-        assigned_to_id=activity.assigned_to_id,
-        due_date=activity.due_date,
-        labels=activity.labels.split(",") if activity.labels else [],
-        recurrence=activity.recurrence.value if activity.recurrence else None,
-        reminders=activity.reminders,
-        created_by_id=activity.created_by_id,
-        created_at=activity.created_at,
-        updated_at=activity.updated_at,
-    )
+    return _build_activity_response(activity)
 
 
 @router.post("", response_model=ActivityResponse, status_code=http_status.HTTP_201_CREATED)
@@ -142,22 +129,8 @@ async def create_activity(
 
     repo = ActivityRepository(db)
     created = await repo.create(activity)
-
-    return ActivityResponse(
-        id=created.id,
-        title=created.title,
-        description=created.description,
-        status=created.status.value,
-        priority=created.priority.value,
-        assigned_to_id=created.assigned_to_id,
-        due_date=created.due_date,
-        labels=created.labels.split(",") if created.labels else [],
-        recurrence=created.recurrence.value if created.recurrence else None,
-        reminders=created.reminders,
-        created_by_id=created.created_by_id,
-        created_at=created.created_at,
-        updated_at=created.updated_at,
-    )
+    refreshed = await repo.get_by_id(created.id)
+    return _build_activity_response(refreshed or created)
 
 
 @router.put("/{activity_id}", response_model=ActivityResponse)
@@ -196,22 +169,8 @@ async def update_activity(
             setattr(activity, key, update_data[key])
 
     updated = await repo.update(activity)
-
-    return ActivityResponse(
-        id=updated.id,
-        title=updated.title,
-        description=updated.description,
-        status=updated.status.value,
-        priority=updated.priority.value,
-        assigned_to_id=updated.assigned_to_id,
-        due_date=updated.due_date,
-        labels=updated.labels.split(",") if updated.labels else [],
-        recurrence=updated.recurrence.value if updated.recurrence else None,
-        reminders=updated.reminders,
-        created_by_id=updated.created_by_id,
-        created_at=updated.created_at,
-        updated_at=updated.updated_at,
-    )
+    refreshed = await repo.get_by_id(updated.id)
+    return _build_activity_response(refreshed or updated)
 
 
 @router.delete("/{activity_id}", status_code=http_status.HTTP_204_NO_CONTENT)

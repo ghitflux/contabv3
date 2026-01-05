@@ -3,7 +3,7 @@
 import { Card, Input, Button, Divider } from '@heroui/react';
 import { useState, useCallback } from 'react';
 import { toast } from '@/lib/toast';
-import { apiClient } from '@/lib/api/client';
+import { authApi } from '@/lib/api/endpoints/auth';
 
 export function PasswordChangeForm() {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -48,7 +48,7 @@ export function PasswordChangeForm() {
 
     setIsLoading(true);
     try {
-      await apiClient.put('/users/me/password', {
+      await authApi.updateMyPassword({
         current_password: currentPassword,
         new_password: newPassword,
       });
@@ -72,7 +72,7 @@ export function PasswordChangeForm() {
   }, [currentPassword, newPassword, confirmPassword, validatePasswords]);
 
   return (
-    <Card className="p-6 space-y-6 max-w-lg">
+    <Card className="p-6 space-y-6">
       <div>
         <h2 className="text-2xl font-bold mb-2">Alterar Senha</h2>
         <p className="text-default-500">Atualize sua senha regularmente para manter sua conta segura</p>

@@ -12,6 +12,28 @@ import type {
   ActivityUpdate,
 } from "@/types/activity";
 
+function normalizeDate(value: unknown): string | null {
+  if (!value) return null;
+  if (typeof value === "string") {
+    const [datePart] = value.split("T");
+    return datePart || null;
+  }
+  const parsed = value instanceof Date ? value : new Date(value as any);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().split("T")[0]!;
+}
+
+function sortActivities(items: Activity[]): Activity[] {
+  return [...items].sort((a, b) => {
+    const dueA = a.due_date ? new Date(a.due_date).getTime() : Number.POSITIVE_INFINITY;
+    const dueB = b.due_date ? new Date(b.due_date).getTime() : Number.POSITIVE_INFINITY;
+    if (dueA !== dueB) return dueA - dueB;
+    const createdA = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const createdB = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return createdB - createdA;
+  });
+}
+
 function normalizeActivity(activity: any): Activity {
   const labels =
     Array.isArray(activity?.labels)
@@ -24,7 +46,7 @@ function normalizeActivity(activity: any): Activity {
     ...activity,
     labels,
     reminders: Boolean(activity?.reminders),
-    due_date: activity?.due_date ?? null,
+    due_date: normalizeDate(activity?.due_date),
     assigned_to_name:
       activity?.assigned_to_name ??
       activity?.assigned_to?.name ??
@@ -50,7 +72,7 @@ export function useActivities() {
         const data = await activitiesApi.list(filters);
         const normalized: ActivityListResponse = {
           ...data,
-          items: data.items.map(normalizeActivity),
+          items: sortActivities(data.items.map(normalizeActivity)),
         };
         setActivities(normalized);
         return normalized;
@@ -101,7 +123,7 @@ export function useActivities() {
           }
           return {
             ...prev,
-            items: [created, ...prev.items],
+            items: sortActivities([created, ...prev.items]),
             total: prev.total + 1,
           };
         });
@@ -128,7 +150,9 @@ export function useActivities() {
           if (!prev) return prev;
           return {
             ...prev,
-            items: prev.items.map((item) => (item.id === id ? updated : item)),
+            items: sortActivities(
+              prev.items.map((item) => (item.id === id ? updated : item)),
+            ),
           };
         });
         if (selectedActivity?.id === id) {

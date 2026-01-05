@@ -24,7 +24,36 @@ export interface ObligationResponse {
   updated_at: string;
 }
 
+export interface ObligationTypeResponse {
+  id: string;
+  name: string;
+  code: string;
+  description?: string;
+  applies_to_commerce: boolean;
+  applies_to_service: boolean;
+  applies_to_industry: boolean;
+  applies_to_mei: boolean;
+  applies_to_simples: boolean;
+  applies_to_presumido: boolean;
+  applies_to_real: boolean;
+  recurrence: string;
+  day_of_month?: number;
+  month_of_year?: number;
+  is_active: boolean;
+}
+
 export const obligationsApi = {
+  /**
+   * Get all obligation types (for selecting which obligations to generate)
+   */
+  async getObligationTypes(isActive?: boolean): Promise<ObligationTypeResponse[]> {
+    const params = new URLSearchParams();
+    if (isActive !== undefined) {
+      params.append("is_active", isActive.toString());
+    }
+    return apiClient.get<ObligationTypeResponse[]>(`/obligations/types${params.toString() ? `?${params}` : ''}`);
+  },
+
   /**
    * Get obligations matrix for minimalist panel
    */

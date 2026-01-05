@@ -48,6 +48,7 @@ class ActivityResponse(BaseSchema):
     status: str
     priority: str
     assigned_to_id: UUID
+    assigned_to_name: Optional[str] = None
     due_date: Optional[date]
     labels: list[str]
     recurrence: Optional[str]

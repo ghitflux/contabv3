@@ -91,6 +91,9 @@ export interface ClientBase {
   servicos_contratados: string[];
   licencas_necessarias: string[];
 
+  // Obligation types (IDs of ObligationType that apply to this client)
+  obligation_types_ids: string[];
+
   // Notes
   observacoes: string | null;
 }

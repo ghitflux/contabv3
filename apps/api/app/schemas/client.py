@@ -78,6 +78,9 @@ class ClientBase(BaseSchema):
     servicos_contratados: Optional[list[str]] = None
     licencas_necessarias: Optional[list[str]] = None
 
+    # Obligation types (IDs of ObligationType that apply to this client)
+    obligation_types_ids: Optional[list[str]] = None
+
     # Responsible person
     responsavel_nome: Optional[str] = Field(None, max_length=255)
     responsavel_cpf: Optional[str] = Field(None, max_length=14)

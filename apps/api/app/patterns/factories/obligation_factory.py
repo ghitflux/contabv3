@@ -99,12 +99,24 @@ class ObligationFactory:
         type_codes = strategy.get_applicable_type_codes(client)
 
         # Fetch ObligationType models
-        result = await self.db.execute(
-            select(ObligationType).where(
-                ObligationType.code.in_(type_codes),
-                ObligationType.is_active == True
-            )
+        query = select(ObligationType).where(
+            ObligationType.code.in_(type_codes),
+            ObligationType.is_active == True
         )
+
+        # If client has specific obligation types selected, filter by those
+        if client.obligation_types_ids:
+            # Convert string IDs to UUIDs for comparison
+            try:
+                from uuid import UUID as UUID_TYPE
+                selected_ids = [UUID_TYPE(str_id) for str_id in client.obligation_types_ids]
+                query = query.where(ObligationType.id.in_(selected_ids))
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Invalid obligation type IDs for client {client.id}: {e}")
+                # If IDs are invalid, continue with all applicable types
+                pass
+
+        result = await self.db.execute(query)
         obligation_types = result.scalars().all()
 
         if not obligation_types:

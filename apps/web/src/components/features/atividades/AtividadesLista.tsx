@@ -1,71 +1,37 @@
 "use client"
 
-import { useState, useMemo } from "react"
 import { motion } from "framer-motion"
 import {
+  Badge,
+  Button,
   Card,
   CardBody,
   CardHeader,
-  Input,
-  Select,
-  SelectItem,
   Table,
   TableBody,
   TableCell,
   TableColumn,
   TableHeader,
   TableRow,
-  Badge,
 } from "@/heroui"
-import { Search, Filter, Calendar, User } from "lucide-react"
-import { fadeIn, staggerItem } from "@/lib/animations"
+import { Calendar, Pencil, User } from "lucide-react"
+import { fadeIn } from "@/lib/animations"
 import { StatusBadge } from "@/components/ui/StatusBadge"
 import { LabelChip } from "@/components/ui/LabelChip"
 import type { Activity } from "@/types/activity"
-import { ActivityPriority } from "@/types/activity"
+import { ActivityPriority, ActivityStatus } from "@/types/activity"
 
 type AtividadesListaProps = {
   activities: Activity[]
   isLoading?: boolean
+  onSelectActivity?: (activity: Activity) => void
 }
 
-export function AtividadesLista({ activities, isLoading = false }: AtividadesListaProps) {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [filterStatus, setFilterStatus] = useState("all")
-  const [filterPriority, setFilterPriority] = useState("all")
-
-  const filteredActivities = useMemo(() => {
-    return activities.filter((activity) => {
-      const matchSearch =
-        searchTerm === "" ||
-        activity.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (activity.description || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (activity.assigned_to_name || activity.assigned_to_id || "")
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase())
-
-      const matchStatus = filterStatus === "all" || activity.status === filterStatus
-      const matchPriority = filterPriority === "all" || activity.priority === filterPriority
-
-      return matchSearch && matchStatus && matchPriority
-    })
-  }, [activities, searchTerm, filterStatus, filterPriority])
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case "todo":
-        return "A Fazer"
-      case "in-progress":
-        return "Em Andamento"
-      case "review":
-        return "Revisão"
-      case "done":
-        return "Concluído"
-      default:
-        return status
-    }
-  }
-
+export function AtividadesLista({
+  activities,
+  isLoading = false,
+  onSelectActivity,
+}: AtividadesListaProps) {
   const getPriorityLabel = (priority: string | ActivityPriority) => {
     switch (priority) {
       case ActivityPriority.HIGH:
@@ -97,56 +63,26 @@ export function AtividadesLista({ activities, isLoading = false }: AtividadesLis
     return new Date(date).toLocaleDateString("pt-BR")
   }
 
+  const isOverdue = (activity: Activity) => {
+    if (!activity.due_date) return false
+    if (activity.status === ActivityStatus.DONE) return false
+    const today = new Date().toISOString().split("T")[0]
+    return activity.due_date < today
+  }
+
   return (
     <motion.div initial="hidden" animate="visible" variants={fadeIn}>
       <Card>
         <CardHeader>
-          <h3 className="text-lg font-semibold">Lista de Atividades</h3>
-        </CardHeader>
-        <CardBody className="space-y-6">
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="flex-1">
-              <Input
-                placeholder="Buscar atividades..."
-                value={searchTerm}
-                onValueChange={setSearchTerm}
-                startContent={<Search className="h-4 w-4 text-default-400" />}
-                size="sm"
-              />
-            </div>
-            <Select
-              label="Status"
-              selectedKeys={filterStatus === "all" ? [] : [filterStatus]}
-              onSelectionChange={(keys) => {
-                const value = Array.from(keys)[0] as string | undefined
-                setFilterStatus(value || "all")
-              }}
-              size="sm"
-              className="w-full lg:w-[180px]"
-            >
-              <SelectItem key="all">Todos os status</SelectItem>
-              <SelectItem key="todo">A Fazer</SelectItem>
-              <SelectItem key="in-progress">Em Andamento</SelectItem>
-              <SelectItem key="review">Revisão</SelectItem>
-              <SelectItem key="done">Concluído</SelectItem>
-            </Select>
-            <Select
-              label="Prioridade"
-              selectedKeys={filterPriority === "all" ? [] : [filterPriority]}
-              onSelectionChange={(keys) => {
-                const value = Array.from(keys)[0] as string | undefined
-                setFilterPriority(value || "all")
-              }}
-              size="sm"
-              className="w-full lg:w-[180px]"
-            >
-              <SelectItem key="all">Todas</SelectItem>
-              <SelectItem key="high">Alta</SelectItem>
-              <SelectItem key="medium">Média</SelectItem>
-              <SelectItem key="low">Baixa</SelectItem>
-            </Select>
+          <div>
+            <h3 className="text-lg font-semibold">Lista de Atividades</h3>
+            <p className="text-sm text-default-500">
+              {activities.length} atividade{activities.length !== 1 ? "s" : ""} encontrada
+              {activities.length !== 1 ? "s" : ""}.
+            </p>
           </div>
-
+        </CardHeader>
+        <CardBody>
           <Table aria-label="Lista de atividades" removeWrapper>
             <TableHeader>
               <TableColumn>Atividade</TableColumn>
@@ -155,17 +91,18 @@ export function AtividadesLista({ activities, isLoading = false }: AtividadesLis
               <TableColumn>Responsável</TableColumn>
               <TableColumn>Vencimento</TableColumn>
               <TableColumn>Etiquetas</TableColumn>
+              <TableColumn>Ações</TableColumn>
             </TableHeader>
-          <TableBody
-            emptyContent="Nenhuma atividade encontrada."
-            items={filteredActivities}
-            isLoading={isLoading}
-          >
-            {(activity) => (
-              <TableRow key={activity.id}>
-                <TableCell>
-                  <div>
-                    <p className="font-medium">{activity.title}</p>
+            <TableBody
+              emptyContent="Nenhuma atividade encontrada."
+              items={activities}
+              isLoading={isLoading}
+            >
+              {(activity) => (
+                <TableRow key={activity.id}>
+                  <TableCell>
+                    <div>
+                      <p className="font-medium">{activity.title}</p>
                       <p className="text-sm text-default-500 line-clamp-1">
                         {activity.description}
                       </p>
@@ -191,7 +128,13 @@ export function AtividadesLista({ activities, isLoading = false }: AtividadesLis
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-default-400" />
-                      <span>{formatDate(activity.due_date)}</span>
+                      <span
+                        className={
+                          isOverdue(activity) ? "text-danger-600 font-medium" : ""
+                        }
+                      >
+                        {formatDate(activity.due_date)}
+                      </span>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -200,6 +143,16 @@ export function AtividadesLista({ activities, isLoading = false }: AtividadesLis
                         <LabelChip key={label} label={label} size="sm" />
                       ))}
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      size="sm"
+                      variant="flat"
+                      startContent={<Pencil className="h-3.5 w-3.5" />}
+                      onPress={() => onSelectActivity?.(activity)}
+                    >
+                      Editar
+                    </Button>
                   </TableCell>
                 </TableRow>
               )}

@@ -160,7 +160,7 @@ export default function ClientesPage() {
       </Can>
 
       <Card>
-        <CardHeader className="flex flex-col items-start gap-4 px-6 pt-6">
+        <CardHeader className="flex flex-col items-start gap-3 px-4 pt-4 sm:gap-4 sm:px-6 sm:pt-6">
           <div className="flex w-full items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold">Lista de Clientes</h2>
@@ -255,10 +255,19 @@ export default function ClientesPage() {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <Table aria-label="Tabela de clientes" removeWrapper>
+                <Table
+                  aria-label="Tabela de clientes"
+                  removeWrapper
+                  className="text-[11px] sm:text-xs"
+                  classNames={{
+                    th: "px-2 py-2 sm:px-3 sm:py-2.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-default-500 whitespace-nowrap",
+                    td: "px-2 py-2 sm:px-3 sm:py-2.5 text-[11px] sm:text-xs whitespace-nowrap",
+                    table: "min-w-full",
+                  }}
+                >
                   <TableHeader>
                     <TableColumn>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
                         RAZÃO SOCIAL
                         <ColumnFilter
                           type="text"
@@ -269,7 +278,7 @@ export default function ClientesPage() {
                       </div>
                     </TableColumn>
                     <TableColumn>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
                         CNPJ
                         <ColumnFilter
                           type="text"
@@ -279,33 +288,23 @@ export default function ClientesPage() {
                         />
                       </div>
                     </TableColumn>
-                    <TableColumn className="min-w-[180px]">
+                    <TableColumn>
                       <div className="flex items-center gap-1">
-                        <Chip size="sm" variant="flat" color="primary" className="text-xs">CPF</Chip>
-                      </div>
-                    </TableColumn>
-                    <TableColumn className="min-w-[180px]">
-                      <div className="flex items-center gap-1">
-                        <Chip size="sm" variant="flat" color="secondary" className="text-xs">SENHA GOV</Chip>
-                      </div>
-                    </TableColumn>
-                    <TableColumn className="min-w-[200px]">
-                      <div className="flex items-center gap-1">
-                        <Chip size="sm" variant="flat" color="success" className="text-xs">EMAIL SEG. DESEMPREGO</Chip>
-                      </div>
-                    </TableColumn>
-                    <TableColumn className="min-w-[180px]">
-                      <div className="flex items-center gap-1">
-                        <Chip size="sm" variant="flat" color="warning" className="text-xs">SENHA NFS-e</Chip>
-                      </div>
-                    </TableColumn>
-                    <TableColumn className="min-w-[200px]">
-                      <div className="flex items-center gap-1">
-                        <Chip size="sm" variant="flat" color="danger" className="text-xs">SENHA CERT. DIGITAL</Chip>
+                        <Chip size="sm" variant="flat" color="secondary" className="text-[10px] sm:text-xs">SENHA GOV</Chip>
                       </div>
                     </TableColumn>
                     <TableColumn>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
+                        <Chip size="sm" variant="flat" color="success" className="text-[10px] sm:text-xs">LOGIN SEG. DESEMPREGO</Chip>
+                      </div>
+                    </TableColumn>
+                    <TableColumn>
+                      <div className="flex items-center gap-1">
+                        <Chip size="sm" variant="flat" color="warning" className="text-[10px] sm:text-xs">SENHA SEG. DESEMPREGO</Chip>
+                      </div>
+                    </TableColumn>
+                    <TableColumn>
+                      <div className="flex items-center gap-1">
                         REGIME
                         <ColumnFilter
                           type="select"
@@ -322,7 +321,7 @@ export default function ClientesPage() {
                       </div>
                     </TableColumn>
                     <TableColumn>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
                         HONORÁRIOS
                         <ColumnFilter
                           type="range"
@@ -351,13 +350,6 @@ export default function ClientesPage() {
                           <code className="text-xs">{formatCNPJ(client.cnpj)}</code>
                         </TableCell>
                         <TableCell>
-                          {client.cpf_empresa ? (
-                            <SnippetCopy text={client.cpf_empresa} />
-                          ) : (
-                            <span className="text-default-400 text-xs">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
                           {client.senha_gov ? (
                             <SnippetCopy text={client.senha_gov} hideByDefault />
                           ) : (
@@ -365,22 +357,15 @@ export default function ClientesPage() {
                           )}
                         </TableCell>
                         <TableCell>
-                          {client.email_seg_desemp ? (
-                            <SnippetCopy text={client.email_seg_desemp} />
+                          {client.login_seg_desemp ? (
+                            <SnippetCopy text={client.login_seg_desemp} />
                           ) : (
                             <span className="text-default-400 text-xs">-</span>
                           )}
                         </TableCell>
                         <TableCell>
-                          {client.senha_nfse ? (
-                            <SnippetCopy text={client.senha_nfse} hideByDefault />
-                          ) : (
-                            <span className="text-default-400 text-xs">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {client.senha_certificado_digital ? (
-                            <SnippetCopy text={client.senha_certificado_digital} hideByDefault />
+                          {client.senha_seg_desemp ? (
+                            <SnippetCopy text={client.senha_seg_desemp} hideByDefault />
                           ) : (
                             <span className="text-default-400 text-xs">-</span>
                           )}
@@ -420,7 +405,7 @@ export default function ClientesPage() {
 
               {/* Pagination */}
               {clients && clients.pages > 1 && (
-                <div className="flex justify-center p-4">
+                <div className="flex justify-center py-4">
                   <Pagination
                     total={clients.pages}
                     page={page}

@@ -46,6 +46,11 @@ export interface PasswordResetConfirm {
   new_password: string;
 }
 
+export interface UpdatePasswordRequest {
+  current_password: string;
+  new_password: string;
+}
+
 /**
  * Auth state interface.
  */

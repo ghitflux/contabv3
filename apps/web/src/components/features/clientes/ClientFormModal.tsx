@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
@@ -24,6 +24,7 @@ import { EyeIcon, EyeOffIcon, RefreshIcon, SaveIcon } from "@/lib/icons";
 import { toast } from "@/lib/toast";
 import { maskCNPJ, maskCPF, onlyNumbers } from "@/lib/masks";
 import type { Client, ClientCreate } from "@/types/client";
+import { obligationsApi, type ObligationTypeResponse } from "@/lib/api/endpoints/obligations";
 import {
   RegimeTributario,
   TipoEmpresa,
@@ -124,6 +125,8 @@ const clientFormSchema = z.object({
   servicos_contratados: z.array(z.string()),
   licencas_necessarias: z.array(z.string()),
 
+  obligation_types_ids: z.array(z.string()),
+
   observacoes: nullableString,
 });
 
@@ -139,11 +142,37 @@ interface ClientFormModalProps {
 export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormModalProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [visibleFields, setVisibleFields] = React.useState<Record<string, boolean>>({});
+  const [obligationTypes, setObligationTypes] = React.useState<ObligationTypeResponse[]>([]);
+  const [loadingObligationTypes, setLoadingObligationTypes] = React.useState(false);
 
   const isFieldVisible = (key: string) => Boolean(visibleFields[key]);
   const toggleFieldVisibility = (key: string) => {
     setVisibleFields((prev) => ({ ...prev, [key]: !prev[key] }));
   };
+
+  // Load obligation types when modal opens
+  React.useEffect(() => {
+    if (isOpen) {
+      console.log("🔍 [DEBUG] Modal aberto, carregando obligation types...");
+      setLoadingObligationTypes(true);
+      obligationsApi
+        .getObligationTypes(true) // Only active types
+        .then((types) => {
+          console.log("✅ [DEBUG] Obligation types carregados:", types.length, "tipos");
+          console.log("📋 [DEBUG] Primeiros 3 tipos:", types.slice(0, 3));
+          setObligationTypes(types);
+        })
+        .catch((error) => {
+          console.error("❌ [DEBUG] Erro ao carregar tipos de obrigações:", error);
+          toast.error("Erro ao carregar tipos de obrigações");
+        })
+        .finally(() => {
+          setLoadingObligationTypes(false);
+          console.log("🏁 [DEBUG] Carregamento finalizado");
+        });
+    }
+  }, [isOpen]);
+
   const {
     control,
     handleSubmit,
@@ -159,6 +188,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
           tipos_empresa: client.tipos_empresa || [],
           servicos_contratados: client.servicos_contratados || [],
           licencas_necessarias: client.licencas_necessarias || [],
+          obligation_types_ids: client.obligation_types_ids || [],
         }
       : {
           razao_social: "",
@@ -199,9 +229,53 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
           senha_gcw_resp: null,
           servicos_contratados: [],
           licencas_necessarias: [],
+          obligation_types_ids: [],
           observacoes: null,
         },
   });
+
+  // Watch regime and tipo_empresa to filter obligations
+  const regimeTributario = useWatch({ control, name: "regime_tributario" });
+  const tipoEmpresa = useWatch({ control, name: "tipo_empresa" });
+
+  // Filter obligation types based on selected regime and tipo_empresa
+  const filteredObligationTypes = React.useMemo(() => {
+    console.log("🔎 [DEBUG] Filtrando obrigações. Regime:", regimeTributario, "Tipo:", tipoEmpresa);
+
+    if (!regimeTributario || !tipoEmpresa) {
+      console.log("⚠️ [DEBUG] Regime ou tipo não selecionado, mostrando todas:", obligationTypes.length);
+      return obligationTypes;
+    }
+
+    const filtered = obligationTypes.filter((ot) => {
+      // Check regime
+      let regimeMatch = false;
+      if (regimeTributario === RegimeTributario.MEI) {
+        regimeMatch = ot.applies_to_mei;
+      } else if (regimeTributario === RegimeTributario.SIMPLES_NACIONAL) {
+        regimeMatch = ot.applies_to_simples;
+      } else if (regimeTributario === RegimeTributario.LUCRO_PRESUMIDO) {
+        regimeMatch = ot.applies_to_presumido;
+      } else if (regimeTributario === RegimeTributario.LUCRO_REAL) {
+        regimeMatch = ot.applies_to_real;
+      }
+
+      // Check tipo empresa
+      let tipoMatch = false;
+      if (tipoEmpresa === TipoEmpresa.COMERCIO) {
+        tipoMatch = ot.applies_to_commerce;
+      } else if (tipoEmpresa === TipoEmpresa.SERVICO || tipoEmpresa === TipoEmpresa.FINANCEIRO) {
+        tipoMatch = ot.applies_to_service;
+      } else if (tipoEmpresa === TipoEmpresa.INDUSTRIA) {
+        tipoMatch = ot.applies_to_industry;
+      }
+
+      return regimeMatch && tipoMatch;
+    });
+
+    console.log("✨ [DEBUG] Obrigações filtradas:", filtered.length, "de", obligationTypes.length);
+    return filtered;
+  }, [obligationTypes, regimeTributario, tipoEmpresa]);
 
   const generateSystemPassword = React.useCallback(() => {
     const length = 16;
@@ -936,6 +1010,89 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
                         )}
                       </>
                     )}
+                  />
+                </section>
+
+                <Divider />
+
+                {/* Obrigações */}
+                <section>
+                  <h3 className="text-lg font-semibold mb-3">Obrigações Fiscais, Contábeis e Pessoais</h3>
+                  <p className="text-sm text-default-500 mb-4">
+                    Selecione as obrigações que serão geradas automaticamente para este cliente.
+                    As obrigações são filtradas automaticamente de acordo com o regime tributário e tipo de empresa selecionados.
+                  </p>
+                  <Controller
+                    name="obligation_types_ids"
+                    control={control}
+                    render={({ field }) => {
+                      console.log("🎨 [DEBUG] Renderizando obrigações:", {
+                        loading: loadingObligationTypes,
+                        total: filteredObligationTypes.length,
+                        totalUnfiltered: obligationTypes.length,
+                        selected: field.value.length
+                      });
+                      return (
+                      <>
+                        {loadingObligationTypes ? (
+                          <p className="text-sm text-default-400">Carregando obrigações...</p>
+                        ) : filteredObligationTypes.length === 0 ? (
+                          <p className="text-sm text-default-400">
+                            Nenhuma obrigação disponível para o regime e tipo de empresa selecionados.
+                          </p>
+                        ) : (
+                          <>
+                            <CheckboxGroup
+                              value={field.value}
+                              onValueChange={field.onChange}
+                              orientation="vertical"
+                              classNames={{
+                                wrapper: "grid grid-cols-1 md:grid-cols-2 gap-2",
+                              }}
+                            >
+                              {filteredObligationTypes.map((obligationType) => (
+                                <Checkbox key={obligationType.id} value={obligationType.id}>
+                                  <div>
+                                    <p className="font-medium text-sm">{obligationType.name}</p>
+                                    {obligationType.description && (
+                                      <p className="text-xs text-default-400">{obligationType.description}</p>
+                                    )}
+                                    <p className="text-xs text-default-500">
+                                      {obligationType.recurrence.charAt(0).toUpperCase() + obligationType.recurrence.slice(1)}
+                                    </p>
+                                  </div>
+                                </Checkbox>
+                              ))}
+                            </CheckboxGroup>
+
+                            {/* Chips para feedback visual */}
+                            {field.value && field.value.length > 0 && (
+                              <div className="flex flex-wrap gap-2 mt-3">
+                                <p className="text-sm font-medium w-full">
+                                  {field.value.length} {field.value.length === 1 ? 'obrigação selecionada' : 'obrigações selecionadas'}
+                                </p>
+                                {field.value.map((id) => {
+                                  const type = filteredObligationTypes.find((t) => t.id === id);
+                                  return type ? (
+                                    <Chip
+                                      key={id}
+                                      color="secondary"
+                                      variant="flat"
+                                      onClose={() => {
+                                        field.onChange(field.value.filter((typeId: string) => typeId !== id));
+                                      }}
+                                    >
+                                      {type.name}
+                                    </Chip>
+                                  ) : null;
+                                })}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </>
+                      );
+                    }}
                   />
                 </section>
 

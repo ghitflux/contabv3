@@ -111,12 +111,14 @@ export function ClientsTable({ clients, isLoading = false }: ClientsTableProps) 
   );
 
   return (
-    <DataTable
-      columns={columns}
-      data={clients}
-      isLoading={isLoading}
-      getRowKey={(client) => client.id}
-      emptyContent="Nenhum cliente encontrado"
-    />
+    <div className="w-full overflow-x-auto">
+      <DataTable
+        columns={columns}
+        data={clients}
+        isLoading={isLoading}
+        getRowKey={(client) => client.id}
+        emptyContent="Nenhum cliente encontrado"
+      />
+    </div>
   );
 }

@@ -104,7 +104,12 @@
       "Bash(__NEW_LINE__ echo -e \"\\n\\n=== 2. Criando uma atividade ===\")",
       "Bash(__NEW_LINE__ echo -e \"\\n\\n=== 3. Listando novamente ===\")",
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0ZjlhMTFkOS1mMTY3LTRhZDctOTJhMy05MDMzMzlkNTc5OTYiLCJyb2xlIjoiYWRtaW4iLCJleHAiOjE3NjU2NTEwOTUsImlhdCI6MTc2NTY0OTI5NX0.1yV-DXbxZkPYoN9gTqMHois4hnxHIgwQjvlsWHl-b0M\")",
-      "Bash(echo \"=== 1. GET /activities (lista vazia inicial) ===\" curl -s -H \"Authorization: Bearer $TOKEN\" http://localhost:8000/api/v1/activities)"
+      "Bash(echo \"=== 1. GET /activities (lista vazia inicial) ===\" curl -s -H \"Authorization: Bearer $TOKEN\" http://localhost:8000/api/v1/activities)",
+      "Bash(if exist node_modules rmdir /s /q node_modules)",
+      "Bash(pnpm store:*)",
+      "Bash(pnpm run dev)",
+      "Bash(git restore:*)",
+      "Bash(git reset:*)"
     ],
     "deny": [],
     "ask": []

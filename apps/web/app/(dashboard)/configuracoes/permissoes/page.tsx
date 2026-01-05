@@ -3,40 +3,81 @@
 import { Card, Button, Select, SelectItem, Checkbox, Divider, Skeleton, Spinner } from '@heroui/react';
 import { motion } from 'framer-motion';
 import { pageTransition } from '@/lib/animations';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { toast } from '@/lib/toast';
 import { permissionsApi } from '@/lib/api/endpoints/settings';
+import type { Permission } from '@/types/settings';
+
+const DEFAULT_PERMISSION_CATEGORIES = [
+  'users',
+  'clients',
+  'finance',
+  'obligations',
+  'licenses',
+  'reports',
+  'settings',
+  'audit',
+] as const;
+
+const CATEGORY_LABELS: Record<string, string> = {
+  users: 'Usuários',
+  clients: 'Clientes',
+  finance: 'Financeiro',
+  obligations: 'Obrigações',
+  licenses: 'Licenças',
+  reports: 'Relatórios',
+  settings: 'Configurações',
+  audit: 'Auditoria',
+};
 
 export default function PermissoesPage() {
   const [selectedRole, setSelectedRole] = useState('func');
-  const [rolePermissions, setRolePermissions] = useState({});
+  const [rolePermissions, setRolePermissions] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [allPermissions, setAllPermissions] = useState<Record<string, any[]>>({});
+  const [allPermissions, setAllPermissions] = useState<Record<string, Permission[]>>({});
 
   useEffect(() => {
-    loadPermissions();
-  }, [selectedRole]);
+    void loadPermissions();
+  }, [selectedRole, loadPermissions]);
+
+  const categoryOrder = useMemo(() => {
+    const extras = Object.keys(allPermissions).filter(
+      (category) => !DEFAULT_PERMISSION_CATEGORIES.includes(category as (typeof DEFAULT_PERMISSION_CATEGORIES)[number])
+    );
+    return [...DEFAULT_PERMISSION_CATEGORIES, ...extras];
+  }, [allPermissions]);
 
   const loadPermissions = useCallback(async () => {
     setIsLoading(true);
     try {
-      // TODO: Fetch permissions from API
-      // const permsResponse = await permissionsApi.listPermissions(0, 1000);
-      // const rolesResponse = await permissionsApi.getRolePermissions(selectedRole);
+      const [permsResponse, rolesResponse] = await Promise.all([
+        permissionsApi.listPermissions(0, 1000),
+        permissionsApi.getRolePermissions(selectedRole),
+      ]);
 
-      // For now, set placeholder
-      setRolePermissions({});
-      setAllPermissions({
-        USERS: [],
-        CLIENTS: [],
-        FINANCE: [],
-        OBLIGATIONS: [],
-        LICENSES: [],
-        REPORTS: [],
-        SETTINGS: [],
-        AUDIT: [],
+      const grouped: Record<string, Permission[]> = {};
+      DEFAULT_PERMISSION_CATEGORIES.forEach((category) => {
+        grouped[category] = [];
       });
+
+      const permissions = permsResponse?.items ?? [];
+      permissions.forEach((perm: Permission) => {
+        const category = perm.category || 'outros';
+        if (!grouped[category]) grouped[category] = [];
+        grouped[category].push(perm);
+      });
+
+      Object.values(grouped).forEach((items) => items.sort((a, b) => a.name.localeCompare(b.name)));
+      setAllPermissions(grouped);
+
+      const roleMap: Record<string, boolean> = {};
+      if (rolesResponse?.permissions && Array.isArray(rolesResponse.permissions)) {
+        rolesResponse.permissions.forEach((entry: { permission_id: string; granted: boolean }) => {
+          roleMap[entry.permission_id] = entry.granted;
+        });
+      }
+      setRolePermissions(roleMap);
     } catch (error) {
       toast.error('Erro ao carregar permissões');
     } finally {
@@ -54,8 +95,14 @@ export default function PermissoesPage() {
   const handleSave = useCallback(async () => {
     setIsSaving(true);
     try {
-      // TODO: Save permissions via API
-      // await permissionsApi.updateRolePermissions(selectedRole, rolePermissions);
+      const permissionsToSave: Record<string, boolean> = {};
+      Object.values(allPermissions).forEach((permissions) => {
+        permissions.forEach((permission) => {
+          permissionsToSave[permission.id] = !!rolePermissions[permission.id];
+        });
+      });
+
+      await permissionsApi.updateRolePermissions(selectedRole, permissionsToSave);
       toast.success('Permissões atualizadas!');
     } catch (error) {
       toast.error('Erro ao atualizar permissões');
@@ -106,12 +153,14 @@ export default function PermissoesPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {Object.entries(allPermissions).map(([category, permissions]) => (
+            {categoryOrder.map((category) => {
+              const permissions = allPermissions[category] ?? [];
+              return (
               <div key={category}>
-                <h3 className="text-lg font-semibold mb-3 capitalize">{category}</h3>
+                <h3 className="text-lg font-semibold mb-3">{CATEGORY_LABELS[category] ?? category}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-default-100 p-4 rounded-lg">
                   {permissions.length > 0 ? (
-                    permissions.map((perm: any) => (
+                    permissions.map((perm) => (
                       <Checkbox
                         key={perm.id}
                         isSelected={rolePermissions[perm.id] || false}
@@ -125,7 +174,8 @@ export default function PermissoesPage() {
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

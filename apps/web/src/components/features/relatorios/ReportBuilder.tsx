@@ -6,6 +6,7 @@ import {
   CardBody,
   CardHeader,
   Checkbox,
+  Chip,
   Input,
   Select,
   SelectItem,
@@ -17,7 +18,18 @@ import {
   TableRow,
   Switch,
 } from '@/heroui';
-import { DownloadIcon, EyeIcon, PlusIcon, XIcon } from '@/lib/icons';
+import {
+  CalendarIcon,
+  CheckIcon,
+  DownloadIcon,
+  EyeIcon,
+  LicenseIcon,
+  ObligationIcon,
+  PlusIcon,
+  UsersIcon,
+  WalletIcon,
+  XIcon,
+} from '@/lib/icons';
 import { useEffect, useMemo, useState } from 'react';
 import autoTable from 'jspdf-autotable';
 import jsPDF from 'jspdf';
@@ -32,6 +44,7 @@ import { useAuth } from '@/hooks/auth/AuthContext';
 import type { ClientListItem } from '@/types/client';
 import type { ObligationListResponse } from '@/types/obligation';
 import type { ActivityListResponse } from '@/types/activity';
+import { DatePickerField } from '@/components/ui/DatePickerField';
 
 interface ReportBuilderProps {
   onClose: () => void;
@@ -52,26 +65,47 @@ const dataSourceFields = {
     'created_at',
   ],
   transactions: [
+    'id',
+    'client_id',
     'client_name',
     'client_cnpj',
+    'obligation_id',
+    'transaction_type',
+    'payment_status',
+    'payment_method',
+    'amount',
     'reference_month',
     'due_date',
     'paid_date',
-    'transaction_type',
-    'payment_status',
-    'amount',
     'description',
+    'notes',
+    'invoice_number',
+    'receipt_url',
+    'created_by_id',
+    'created_at',
+    'updated_at',
   ],
   obligations: [
+    'id',
+    'client_id',
     'client_name',
     'client_cnpj',
+    'obligation_type_id',
     'obligation_type_name',
+    'obligation_type_code',
     'status',
     'priority',
     'due_date',
+    'description',
+    'receipt_url',
     'completed_at',
+    'completed_by_name',
+    'created_at',
+    'updated_at',
   ],
   licenses: [
+    'id',
+    'client_id',
     'client_name',
     'license_type',
     'status',
@@ -81,6 +115,14 @@ const dataSourceFields = {
     'expiration_date',
     'fee',
     'fee_paid',
+    'notes',
+    'document_id',
+    'document_url',
+    'days_until_expiration',
+    'is_expired',
+    'is_expiring_soon',
+    'created_at',
+    'updated_at',
   ],
   activities: [
     'title',
@@ -102,6 +144,70 @@ const dataSourceLabels = {
   activities: 'Atividades',
 };
 
+const dataSourceOptions: Array<{
+  key: DataSource;
+  label: string;
+  short: string;
+  description: string;
+  examples: string[];
+  hint: string;
+  icon: typeof UsersIcon;
+}> = [
+  {
+    key: 'clients',
+    label: 'Clientes',
+    short: 'Base cadastral e fiscal',
+    description: 'Cadastros, status e perfil fiscal dos clientes.',
+    examples: ['Razão social', 'CNPJ', 'Regime tributário', 'Honorários'],
+    hint: 'Ideal para listas de clientes ativos, cadastros pendentes e análises de carteira.',
+    icon: UsersIcon,
+  },
+  {
+    key: 'transactions',
+    label: 'Financeiro',
+    short: 'Receitas, despesas e pagamentos',
+    description: 'Movimentações financeiras e status de cobrança.',
+    examples: ['Vencimentos', 'Pagamentos', 'Valores', 'Notas'],
+    hint: 'Use para acompanhar inadimplência, fluxo de caixa e receitas do período.',
+    icon: WalletIcon,
+  },
+  {
+    key: 'obligations',
+    label: 'Obrigações',
+    short: 'Agenda fiscal e entregas',
+    description: 'Obrigações por cliente, prazos e cumprimento.',
+    examples: ['Status', 'Prioridade', 'Prazos', 'Comprovantes'],
+    hint: 'Perfeito para acompanhar pendências e performance de entrega.',
+    icon: ObligationIcon,
+  },
+  {
+    key: 'licenses',
+    label: 'Licenças',
+    short: 'Validades e documentos',
+    description: 'Licenças, documentos e vigências.',
+    examples: ['Validade', 'Órgão emissor', 'Taxas', 'Vencimentos'],
+    hint: 'Bom para monitorar renovações e vencimentos críticos.',
+    icon: LicenseIcon,
+  },
+  {
+    key: 'activities',
+    label: 'Atividades',
+    short: 'Tarefas internas',
+    description: 'Atividades, prioridades e responsáveis.',
+    examples: ['Responsável', 'Prioridade', 'Prazos', 'Etiquetas'],
+    hint: 'Útil para relatórios de produtividade e backlog interno.',
+    icon: CalendarIcon,
+  },
+];
+
+const DEFAULT_DATE_FIELD_BY_SOURCE: Record<DataSource, string> = {
+  clients: 'created_at',
+  transactions: 'reference_month',
+  obligations: 'due_date',
+  licenses: 'expiration_date',
+  activities: 'due_date',
+};
+
 const operatorLabels: Record<string, string> = {
   equals: 'Igual a',
   contains: 'Contém',
@@ -113,12 +219,11 @@ const currencyFields = new Set(['amount', 'fee', 'honorarios_mensais']);
 const dateFields = new Set([
   'reference_month',
   'due_date',
-  'paid_date',
   'issue_date',
   'expiration_date',
 ]);
-const dateTimeFields = new Set(['created_at', 'completed_at']);
-const booleanFields = new Set(['fee_paid']);
+const dateTimeFields = new Set(['paid_date', 'created_at', 'updated_at', 'completed_at']);
+const booleanFields = new Set(['fee_paid', 'is_expired', 'is_expiring_soon']);
 
 const sanitizeFileName = (value: string) =>
   value
@@ -130,6 +235,27 @@ const sanitizeFileName = (value: string) =>
     .toLowerCase();
 
 const fieldLabels: Record<string, string> = {
+  id: 'ID',
+  client_id: 'ID do Cliente',
+  obligation_id: 'ID da Obrigação',
+  obligation_type_id: 'ID do Tipo de Obrigação',
+  obligation_type_code: 'Código da Obrigação',
+  transaction_type: 'Tipo de Transação',
+  payment_status: 'Status de Pagamento',
+  payment_method: 'Forma de Pagamento',
+  amount: 'Valor',
+  reference_month: 'Competência',
+  due_date: 'Vencimento',
+  paid_date: 'Pago em',
+  description: 'Descrição',
+  notes: 'Observações',
+  invoice_number: 'Número da Nota',
+  receipt_url: 'Comprovante',
+  created_by_id: 'Criado por',
+  created_at: 'Criado em',
+  updated_at: 'Atualizado em',
+  client_name: 'Cliente',
+  client_cnpj: 'CNPJ do Cliente',
   razao_social: 'Razão Social',
   nome_fantasia: 'Nome Fantasia',
   cnpj: 'CNPJ',
@@ -138,19 +264,10 @@ const fieldLabels: Record<string, string> = {
   honorarios_mensais: 'Honorário Mensal',
   regime_tributario: 'Regime Tributário',
   tipo_empresa: 'Tipo de Empresa',
-  created_at: 'Criado em',
-  reference_month: 'Competência',
-  due_date: 'Vencimento',
-  paid_date: 'Pago em',
-  description: 'Descrição',
-  transaction_type: 'Tipo',
-  payment_status: 'Status de Pagamento',
-  amount: 'Valor',
-  client_name: 'Cliente',
-  client_cnpj: 'CNPJ do Cliente',
   obligation_type_name: 'Obrigação',
   priority: 'Prioridade',
   completed_at: 'Concluído em',
+  completed_by_name: 'Concluído por',
   license_type: 'Tipo de Licença',
   registration_number: 'Número de Registro',
   issuing_authority: 'Órgão Emissor',
@@ -158,8 +275,12 @@ const fieldLabels: Record<string, string> = {
   expiration_date: 'Validade',
   fee: 'Taxa',
   fee_paid: 'Taxa Paga',
+  document_id: 'ID do Documento',
+  document_url: 'Documento',
+  days_until_expiration: 'Dias até o vencimento',
+  is_expired: 'Vencida',
+  is_expiring_soon: 'Vencendo',
   title: 'Título',
-  priority: 'Prioridade',
   assigned_to_id: 'Responsável',
   labels: 'Etiquetas',
   recurrence: 'Recorrência',
@@ -175,6 +296,9 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
   const [filters, setFilters] = useState<Array<{ field: string; operator: string; value: string }>>(
     []
   );
+  const [dateFilterField, setDateFilterField] = useState<string>('');
+  const [dateFilterStart, setDateFilterStart] = useState<string>('');
+  const [dateFilterEnd, setDateFilterEnd] = useState<string>('');
   const [groupBy, setGroupBy] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -187,10 +311,30 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
   const [isOfficeReport, setIsOfficeReport] = useState(false);
 
   const availableFields = dataSourceFields[dataSource];
+  const dateFilterFields = useMemo(
+    () => availableFields.filter((field) => dateFields.has(field) || dateTimeFields.has(field)),
+    [availableFields]
+  );
+  const isDateRangeInvalid = Boolean(
+    dateFilterStart && dateFilterEnd && dateFilterStart > dateFilterEnd
+  );
   const supportsClientFilter = useMemo(
     () => ['clients', 'transactions', 'obligations', 'licenses'].includes(dataSource),
     [dataSource]
   );
+
+  useEffect(() => {
+    if (dateFilterFields.length === 0) {
+      setDateFilterField('');
+      return;
+    }
+    if (!dateFilterField || !dateFilterFields.includes(dateFilterField)) {
+      const preferred = DEFAULT_DATE_FIELD_BY_SOURCE[dataSource];
+      const nextField =
+        preferred && dateFilterFields.includes(preferred) ? preferred : dateFilterFields[0];
+      setDateFilterField(nextField);
+    }
+  }, [dataSource, dateFilterFields, dateFilterField]);
 
   useEffect(() => {
     if (!supportsClientFilter) {
@@ -241,6 +385,25 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
     return selectedClientId;
   };
 
+  const handleDataSourceChange = (selected: DataSource) => {
+    setDataSource(selected);
+    setSelectedFields([]);
+    setFilters([]);
+    setGroupBy('');
+    setSortBy('');
+    const dateFieldsForSource = dataSourceFields[selected].filter(
+      (field) => dateFields.has(field) || dateTimeFields.has(field)
+    );
+    const preferred = DEFAULT_DATE_FIELD_BY_SOURCE[selected];
+    const nextField =
+      preferred && dateFieldsForSource.includes(preferred)
+        ? preferred
+        : dateFieldsForSource[0] ?? '';
+    setDateFilterField(nextField);
+    setDateFilterStart('');
+    setDateFilterEnd('');
+  };
+
   const fetchRowsForSource = async () => {
     const clientId = resolveClientFilter();
     switch (dataSource) {
@@ -267,15 +430,25 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
           size: 100,
         });
         return response.items.map((tx) => ({
+          id: tx.id,
+          client_id: tx.client_id,
           client_name: tx.client_name,
           client_cnpj: tx.client_cnpj,
+          obligation_id: tx.obligation_id,
+          transaction_type: tx.transaction_type,
+          payment_status: tx.payment_status,
+          payment_method: tx.payment_method,
+          amount: tx.amount,
           reference_month: tx.reference_month,
           due_date: tx.due_date,
           paid_date: tx.paid_date,
-          transaction_type: tx.transaction_type,
-          payment_status: tx.payment_status,
-          amount: tx.amount,
           description: tx.description,
+          notes: tx.notes,
+          invoice_number: tx.invoice_number,
+          receipt_url: tx.receipt_url,
+          created_by_id: tx.created_by_id,
+          created_at: tx.created_at,
+          updated_at: tx.updated_at,
         }));
       }
       case 'obligations': {
@@ -287,13 +460,22 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
         const endpoint = queryString ? `/obligations?${queryString}` : '/obligations';
         const response = await apiClient.get<ObligationListResponse>(endpoint);
         return response.items.map((obligation) => ({
+          id: obligation.id,
+          client_id: obligation.client_id,
           client_name: obligation.client_name,
           client_cnpj: obligation.client_cnpj,
+          obligation_type_id: obligation.obligation_type_id,
           obligation_type_name: obligation.obligation_type_name,
+          obligation_type_code: obligation.obligation_type_code,
           status: obligation.status,
           priority: obligation.priority,
           due_date: obligation.due_date,
+          description: obligation.description,
+          receipt_url: obligation.receipt_url,
           completed_at: obligation.completed_at,
+          completed_by_name: obligation.completed_by_name,
+          created_at: obligation.created_at,
+          updated_at: obligation.updated_at,
         }));
       }
       case 'licenses': {
@@ -303,6 +485,8 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
           size: 100,
         });
         return response.items.map((license) => ({
+          id: license.id,
+          client_id: license.client_id,
           client_name: license.client_name,
           license_type: license.license_type,
           status: license.status,
@@ -312,6 +496,14 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
           expiration_date: license.expiration_date,
           fee: license.fee,
           fee_paid: license.fee_paid,
+          notes: license.notes,
+          document_id: license.document_id,
+          document_url: license.document_url,
+          days_until_expiration: license.days_until_expiration,
+          is_expired: license.is_expired,
+          is_expiring_soon: license.is_expiring_soon,
+          created_at: license.created_at,
+          updated_at: license.updated_at,
         }));
       }
       case 'activities': {
@@ -383,6 +575,38 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
     );
   };
 
+  const applyDateRange = (rows: Record<string, any>[]) => {
+    if (!dateFilterField || isDateRangeInvalid) return rows;
+    if (!dateFilterStart && !dateFilterEnd) return rows;
+
+    const parseBoundary = (value: string, isEnd: boolean) => {
+      if (!value) return null;
+      const hasTime = value.includes('T');
+      const date = hasTime
+        ? new Date(value)
+        : new Date(`${value}T${isEnd ? '23:59:59.999' : '00:00:00.000'}`);
+      if (Number.isNaN(date.getTime())) return null;
+      return date.getTime();
+    };
+
+    const start = parseBoundary(dateFilterStart, false);
+    const end = parseBoundary(dateFilterEnd, true);
+    if (start === null && end === null) return rows;
+
+    return rows.filter((row) => {
+      const rawValue = row[dateFilterField];
+      if (!rawValue) return false;
+      const rawText = String(rawValue);
+      const parsed = rawText.includes('T')
+        ? Date.parse(rawText)
+        : Date.parse(`${rawText}T00:00:00.000`);
+      if (Number.isNaN(parsed)) return false;
+      if (start !== null && parsed < start) return false;
+      if (end !== null && parsed > end) return false;
+      return true;
+    });
+  };
+
   const applySort = (rows: Record<string, any>[]) => {
     const primaryKey = groupBy || sortBy;
     const secondaryKey = groupBy && sortBy && groupBy !== sortBy ? sortBy : null;
@@ -412,7 +636,8 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
     setIsLoading(true);
     try {
       const rows = await fetchRowsForSource();
-      const filtered = applyFilters(rows);
+      const dateFiltered = applyDateRange(rows);
+      const filtered = applyFilters(dateFiltered);
       return applySort(filtered);
     } catch (error) {
       console.error('Erro ao gerar relatório', error);
@@ -447,15 +672,35 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
   };
 
   const buildFiltersSummary = () => {
-    if (filters.length === 0) return 'Nenhum';
-    return filters
+    const summaries: string[] = [];
+    if (dateFilterField && !isDateRangeInvalid && (dateFilterStart || dateFilterEnd)) {
+      const label = getFieldLabel(dateFilterField);
+      if (dateFilterStart && dateFilterEnd) {
+        summaries.push(
+          `${label} entre ${formatDate(dateFilterStart)} e ${formatDate(dateFilterEnd)}`
+        );
+      } else if (dateFilterStart) {
+        summaries.push(`${label} a partir de ${formatDate(dateFilterStart)}`);
+      } else if (dateFilterEnd) {
+        summaries.push(`${label} até ${formatDate(dateFilterEnd)}`);
+      }
+    }
+
+    if (filters.length > 0) {
+      summaries.push(
+        filters
       .map((filter) => {
         const label = getFieldLabel(filter.field);
         const operator = operatorLabels[filter.operator] || filter.operator;
         const value = filter.value?.trim() ? filter.value.trim() : '(vazio)';
         return `${label} ${operator} ${value}`;
       })
-      .join(' | ');
+      .join(' | ')
+      );
+    }
+
+    if (summaries.length === 0) return 'Nenhum';
+    return summaries.join(' | ');
   };
 
   const buildFileName = (extension: string) => {
@@ -727,7 +972,22 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
     return () => {
       active = false;
     };
-  }, [showPreview, dataSource, filters, groupBy, sortBy, sortOrder, selectedClientId, isOfficeReport, isAdminOrFunc, supportsClientFilter]);
+  }, [
+    showPreview,
+    dataSource,
+    filters,
+    dateFilterField,
+    dateFilterStart,
+    dateFilterEnd,
+    isDateRangeInvalid,
+    groupBy,
+    sortBy,
+    sortOrder,
+    selectedClientId,
+    isOfficeReport,
+    isAdminOrFunc,
+    supportsClientFilter,
+  ]);
 
   const reportData = showPreview ? reportRows : [];
   const displayFields = selectedFields.length > 0 ? selectedFields : availableFields;
@@ -752,26 +1012,134 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
         </div>
 
         {/* Data Source */}
-        <div className="space-y-2">
-          <Select
-            label="Fonte de Dados"
-            selectedKeys={[dataSource]}
-            onSelectionChange={(keys) => {
-              const selected = Array.from(keys)[0] as DataSource;
-              setDataSource(selected);
-              setSelectedFields([]);
-              setFilters([]);
-              setGroupBy('');
-              setSortBy('');
-            }}
-          >
-            {Object.entries(dataSourceLabels).map(([key, label]) => (
-              <SelectItem key={key} value={key}>
-                {label}
-              </SelectItem>
-            ))}
-          </Select>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium">Fonte de Dados</label>
+            <Chip size="sm" variant="flat" color="primary">
+              Etapa 1
+            </Chip>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {dataSourceOptions.map((option) => {
+              const isActive = dataSource === option.key;
+              const Icon = option.icon;
+              return (
+                <button
+                  type="button"
+                  key={option.key}
+                  onClick={() => handleDataSourceChange(option.key)}
+                  aria-pressed={isActive}
+                  className={`w-full text-left rounded-lg border p-3 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                    isActive
+                      ? 'border-primary bg-primary-50/40 dark:bg-primary-950/20 shadow-sm'
+                      : 'border-divider hover:border-default-400 hover:bg-default-100/60'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`flex h-10 w-10 items-center justify-center rounded-md ${
+                        isActive
+                          ? 'bg-primary-100/80 text-primary-700 dark:bg-primary-900/40 dark:text-primary-200'
+                          : 'bg-default-100 text-default-500'
+                      }`}
+                    >
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold">{option.label}</p>
+                      <p className="text-xs text-default-500">{option.short}</p>
+                    </div>
+                    {isActive ? <CheckIcon className="h-4 w-4 text-primary" /> : null}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <div className="rounded-lg border border-divider bg-default-100/40 p-4">
+            {dataSourceOptions.map((option) => {
+              if (option.key !== dataSource) return null;
+              const Icon = option.icon;
+              return (
+                <div key={option.key} className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-md bg-default-200/80 text-default-600">
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold">{option.label}</p>
+                        <Chip size="sm" variant="flat" color="primary">
+                          Selecionado
+                        </Chip>
+                      </div>
+                      <p className="text-sm text-default-500">{option.description}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {option.examples.map((example) => (
+                      <Chip key={example} size="sm" variant="flat" color="default">
+                        {example}
+                      </Chip>
+                    ))}
+                  </div>
+                  <p className="text-xs text-default-500">{option.hint}</p>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-sm text-default-500">
+            Escolha a fonte que melhor representa o tipo de análise que você quer montar.
+          </p>
         </div>
+
+        {/* Date Filter */}
+        {dateFilterFields.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Filtro de Datas</label>
+                <Chip size="sm" variant="flat">
+                  Opcional
+                </Chip>
+              </div>
+              {isDateRangeInvalid ? (
+                <span className="text-xs text-danger">Data inicial maior que a final.</span>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-[220px_1fr_1fr] gap-3">
+              <Select
+                label="Campo de data"
+                selectedKeys={dateFilterField ? [dateFilterField] : []}
+                onSelectionChange={(keys) => {
+                  const selected = Array.from(keys)[0] as string;
+                  setDateFilterField(selected);
+                }}
+                placeholder="Selecione"
+              >
+                {dateFilterFields.map((field) => (
+                  <SelectItem key={field} value={field}>
+                    {fieldLabels[field] || field}
+                  </SelectItem>
+                ))}
+              </Select>
+              <DatePickerField
+                label="De"
+                value={dateFilterStart}
+                onChange={setDateFilterStart}
+                isClearable
+              />
+              <DatePickerField
+                label="Até"
+                value={dateFilterEnd}
+                onChange={setDateFilterEnd}
+                isClearable
+              />
+            </div>
+            <p className="text-sm text-default-500">
+              O intervalo é aplicado ao campo de data selecionado.
+            </p>
+          </div>
+        )}
 
         {/* Fields Selection */}
         <div className="space-y-2">

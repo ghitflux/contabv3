@@ -106,6 +106,49 @@ async def list_obligations(
     }
 
 
+@router.get("/types")
+async def list_obligation_types(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+):
+    """
+    List all obligation types.
+    Used for selecting which obligations to generate for each client.
+    """
+    from sqlalchemy import select
+    from app.db.models.obligation_type import ObligationType
+
+    query = select(ObligationType).order_by(ObligationType.name)
+
+    if is_active is not None:
+        query = query.where(ObligationType.is_active == is_active)
+
+    result = await db.execute(query)
+    obligation_types = result.scalars().all()
+
+    return [
+        {
+            "id": str(ot.id),
+            "name": ot.name,
+            "code": ot.code,
+            "description": ot.description,
+            "applies_to_commerce": ot.applies_to_commerce,
+            "applies_to_service": ot.applies_to_service,
+            "applies_to_industry": ot.applies_to_industry,
+            "applies_to_mei": ot.applies_to_mei,
+            "applies_to_simples": ot.applies_to_simples,
+            "applies_to_presumido": ot.applies_to_presumido,
+            "applies_to_real": ot.applies_to_real,
+            "recurrence": str(ot.recurrence.value if hasattr(ot.recurrence, 'value') else ot.recurrence),
+            "day_of_month": ot.day_of_month,
+            "month_of_year": ot.month_of_year,
+            "is_active": ot.is_active,
+        }
+        for ot in obligation_types
+    ]
+
+
 @router.get("/matrix")
 async def get_obligations_matrix(
     db: Annotated[AsyncSession, Depends(get_db)],

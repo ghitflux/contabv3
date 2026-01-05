@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.db.models.activity import Activity, ActivityStatus
 
@@ -24,7 +25,11 @@ class ActivityRepository:
 
     async def get_by_id(self, activity_id: UUID) -> Optional[Activity]:
         """Get activity by ID."""
-        stmt = select(Activity).where(Activity.id == activity_id)
+        stmt = (
+            select(Activity)
+            .options(selectinload(Activity.assigned_to))
+            .where(Activity.id == activity_id)
+        )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -55,7 +60,11 @@ class ActivityRepository:
         total = len(count_result.scalars().all())
 
         # Get paginated results
-        stmt = select(Activity).order_by(Activity.due_date.asc().nullslast(), Activity.created_at.desc())
+        stmt = (
+            select(Activity)
+            .options(selectinload(Activity.assigned_to))
+            .order_by(Activity.due_date.asc().nullslast(), Activity.created_at.desc())
+        )
         if conditions:
             stmt = stmt.where(and_(*conditions))
         stmt = stmt.offset(skip).limit(limit)

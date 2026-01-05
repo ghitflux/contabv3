@@ -11,6 +11,7 @@ import type {
   LogoutRequest,
   PasswordResetRequest,
   PasswordResetConfirm,
+  UpdatePasswordRequest,
 } from "@/types/auth";
 import type { User } from "@/types/user";
 
@@ -84,5 +85,12 @@ export const authApi = {
    */
   async confirmPasswordReset(request: PasswordResetConfirm): Promise<void> {
     await apiClient.post("/auth/password-reset/confirm", request);
+  },
+
+  /**
+   * Update current user password
+   */
+  async updateMyPassword(request: UpdatePasswordRequest): Promise<void> {
+    await apiClient.put("/users/me/password", request);
   },
 };
