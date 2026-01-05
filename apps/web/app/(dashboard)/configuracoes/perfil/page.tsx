@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Card, Button, Input, Select, SelectItem, Switch, Divider, Skeleton } from '@heroui/react';
+import { Card, Button, Select, SelectItem, Switch, Divider, Skeleton } from '@heroui/react';
 import { useUserSettings } from '@/hooks/useSettings';
 import { useAuth } from '@/hooks/auth/AuthContext';
 import { ThemeMode, LanguageCode } from '@/types/settings';
@@ -121,15 +121,14 @@ export default function PerfilPage() {
                 placeholder="Selecione o tema"
                 selectedKeys={[formData.theme_mode]}
                 onChange={(e) => handleChange('theme_mode', e.target.value)}
-                description="Escolha como a aplicação será exibida"
               >
-                <SelectItem key={ThemeMode.LIGHT} value={ThemeMode.LIGHT}>
+                <SelectItem key={ThemeMode.LIGHT}>
                   Claro
                 </SelectItem>
-                <SelectItem key={ThemeMode.DARK} value={ThemeMode.DARK}>
+                <SelectItem key={ThemeMode.DARK}>
                   Escuro
                 </SelectItem>
-                <SelectItem key={ThemeMode.SYSTEM} value={ThemeMode.SYSTEM}>
+                <SelectItem key={ThemeMode.SYSTEM}>
                   Sistema
                 </SelectItem>
               </Select>
@@ -139,15 +138,14 @@ export default function PerfilPage() {
                 placeholder="Selecione o idioma"
                 selectedKeys={[formData.language]}
                 onChange={(e) => handleChange('language', e.target.value)}
-                description="Idioma da interface"
               >
-                <SelectItem key={LanguageCode.PT_BR} value={LanguageCode.PT_BR}>
+                <SelectItem key={LanguageCode.PT_BR}>
                   Português (Brasil)
                 </SelectItem>
-                <SelectItem key={LanguageCode.EN_US} value={LanguageCode.EN_US}>
+                <SelectItem key={LanguageCode.EN_US}>
                   English (US)
                 </SelectItem>
-                <SelectItem key={LanguageCode.ES_ES} value={LanguageCode.ES_ES}>
+                <SelectItem key={LanguageCode.ES_ES}>
                   Español (España)
                 </SelectItem>
               </Select>
@@ -172,7 +170,6 @@ export default function PerfilPage() {
               <Switch
                 isSelected={formData.notify_email_enabled}
                 onChange={(e) => handleChange('notify_email_enabled', e.target.checked)}
-                description="Receber notificações por email"
               >
                 Habilitar notificações por email
               </Switch>
@@ -182,7 +179,6 @@ export default function PerfilPage() {
                   <Switch
                     isSelected={formData.notify_obligations}
                     onChange={(e) => handleChange('notify_obligations', e.target.checked)}
-                    description="Notificações sobre obrigações vencidas"
                   >
                     Notificar sobre obrigações
                   </Switch>
@@ -190,7 +186,6 @@ export default function PerfilPage() {
                   <Switch
                     isSelected={formData.notify_financial}
                     onChange={(e) => handleChange('notify_financial', e.target.checked)}
-                    description="Notificações sobre transações financeiras"
                   >
                     Notificar sobre financeiro
                   </Switch>
@@ -198,7 +193,6 @@ export default function PerfilPage() {
                   <Switch
                     isSelected={formData.notify_licenses}
                     onChange={(e) => handleChange('notify_licenses', e.target.checked)}
-                    description="Notificações sobre licenças vencidas"
                   >
                     Notificar sobre licenças
                   </Switch>
@@ -206,7 +200,6 @@ export default function PerfilPage() {
                   <Switch
                     isSelected={formData.notify_reports}
                     onChange={(e) => handleChange('notify_reports', e.target.checked)}
-                    description="Notificações sobre relatórios gerados"
                   >
                     Notificar sobre relatórios
                   </Switch>
@@ -214,7 +207,6 @@ export default function PerfilPage() {
                   <Switch
                     isSelected={formData.notify_system}
                     onChange={(e) => handleChange('notify_system', e.target.checked)}
-                    description="Notificações do sistema"
                   >
                     Notificar eventos do sistema
                   </Switch>
@@ -224,7 +216,6 @@ export default function PerfilPage() {
                   <Switch
                     isSelected={formData.email_digest_enabled}
                     onChange={(e) => handleChange('email_digest_enabled', e.target.checked)}
-                    description="Receber resumo consolidado de notificações"
                   >
                     Habilitar resumo de email
                   </Switch>
@@ -234,15 +225,14 @@ export default function PerfilPage() {
                       label="Frequência do resumo"
                       selectedKeys={[formData.email_digest_frequency]}
                       onChange={(e) => handleChange('email_digest_frequency', e.target.value)}
-                      description="Com que frequência receber o resumo"
                     >
-                      <SelectItem key="daily" value="daily">
+                      <SelectItem key="daily">
                         Diário
                       </SelectItem>
-                      <SelectItem key="weekly" value="weekly">
+                      <SelectItem key="weekly">
                         Semanal
                       </SelectItem>
-                      <SelectItem key="monthly" value="monthly">
+                      <SelectItem key="monthly">
                         Mensal
                       </SelectItem>
                     </Select>
@@ -266,7 +256,6 @@ export default function PerfilPage() {
             <Switch
               isSelected={formData.show_email_publicly}
               onChange={(e) => handleChange('show_email_publicly', e.target.checked)}
-              description="Permitir que outros usuários vejam seu email"
             >
               Exibir email publicamente
             </Switch>

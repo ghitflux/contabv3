@@ -230,13 +230,13 @@ export default function UsuariosPage() {
               selectedKeys={[formData.role]}
               onChange={(e) => setFormData({ ...formData, role: e.target.value })}
             >
-              <SelectItem key="admin" value="admin">
+              <SelectItem key="admin">
                 Administrador
               </SelectItem>
-              <SelectItem key="func" value="func">
+              <SelectItem key="func">
                 Funcionário
               </SelectItem>
-              <SelectItem key="cliente" value="cliente">
+              <SelectItem key="cliente">
                 Cliente
               </SelectItem>
             </Select>

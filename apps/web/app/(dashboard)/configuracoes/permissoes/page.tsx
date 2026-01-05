@@ -133,13 +133,13 @@ export default function PermissoesPage() {
             onChange={(e) => setSelectedRole(e.target.value)}
             description="Selecione um cargo para gerenciar suas permissões"
           >
-            <SelectItem key="admin" value="admin">
+            <SelectItem key="admin">
               Administrador
             </SelectItem>
-            <SelectItem key="func" value="func">
+            <SelectItem key="func">
               Funcionário
             </SelectItem>
-            <SelectItem key="cliente" value="cliente">
+            <SelectItem key="cliente">
               Cliente
             </SelectItem>
           </Select>

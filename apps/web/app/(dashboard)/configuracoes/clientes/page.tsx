@@ -125,13 +125,13 @@ export default function ClientesPage() {
               onChange={(e) => handleChange('default_client_status', e.target.value)}
               description="Status ao criar novo cliente"
             >
-              <SelectItem key="ativo" value="ativo">
+              <SelectItem key="ativo">
                 Ativo
               </SelectItem>
-              <SelectItem key="inativo" value="inativo">
+              <SelectItem key="inativo">
                 Inativo
               </SelectItem>
-              <SelectItem key="pendente" value="pendente">
+              <SelectItem key="pendente">
                 Pendente
               </SelectItem>
             </Select>

@@ -1,16 +1,16 @@
 'use client';
 
 import { ClientProfile } from '@/components/features/clientes/ClientProfile';
-import { clientApi } from '@/lib/api/endpoints/client';
+import { clientsApi } from '@/lib/api/endpoints/clients';
 import type { Client } from '@/types/client';
 import { Spinner } from '@heroui/react';
 import { useEffect, useState } from 'react';
 
-// Assuming clientApi needs to be updated to include getMe() or we call api directly.
+// Assuming clientsApi needs to be updated to include getMe() or we call api directly.
 // Since we just added the endpoint, the frontend lib might not have it yet.
 // I'll assume we can use a direct fetch or user-specific call if available,
 // or I will update the frontend api definition next.
-// For now I'll use a local fetch wrapper or assume clientApi.getMe() will be added.
+// For now I'll use a local fetch wrapper or assume clientsApi.getMe() will be added.
 // Actually, I should update `apps/web/src/lib/api/endpoints/client.ts` too.
 
 export default function MeusDadosPage() {
@@ -22,9 +22,9 @@ export default function MeusDadosPage() {
     const fetchMyData = async () => {
       try {
         // Temporary direct call until we update the client lib
-        // Or if clientApi supports custom requests
-        // Let's assume we update clientApi to have getMe
-        const data = await clientApi.getMe();
+        // Or if clientsApi supports custom requests
+        // Let's assume we update clientsApi to have getMe
+        const data = await clientsApi.getMe();
         setClient(data);
       } catch (err) {
         console.error(err);
