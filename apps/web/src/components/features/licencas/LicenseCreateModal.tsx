@@ -213,7 +213,7 @@ export function LicenseCreateModal({
             }}
           >
             {licenseTypeOptions.map((type) => (
-              <SelectItem key={type} value={type}>
+              <SelectItem key={type}>
                 {LICENSE_TYPE_LABELS[type]}
               </SelectItem>
             ))}
@@ -230,7 +230,7 @@ export function LicenseCreateModal({
             }}
           >
             {statusOptions.map((status) => (
-              <SelectItem key={status} value={status}>
+              <SelectItem key={status}>
                 {LICENSE_STATUS_LABELS[status]}
               </SelectItem>
             ))}

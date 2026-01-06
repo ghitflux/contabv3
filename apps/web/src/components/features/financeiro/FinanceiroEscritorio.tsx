@@ -205,6 +205,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   const setRangeForMonth = (monthValue: string) => {
     if (!monthValue) return;
     const [year, month] = monthValue.split('-');
+    if (!year || !month) return;
     const parsedYear = Number.parseInt(year, 10);
     const parsedMonth = Number.parseInt(month, 10);
     if (!parsedYear || !parsedMonth) return;
@@ -498,7 +499,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
               label="Tipo"
               selectedKeys={[newTransaction.type]}
               onSelectionChange={(keys) => {
-                const value = Array.from(keys)[0] as TransactionType | undefined;
+                const value = Array.from(keys)[0] as DisplayTransactionType | undefined;
                 if (value) {
                   setNewTransaction((prev) => ({ ...prev, type: value, history: '' }));
                 }
@@ -625,7 +626,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                     <div className="flex items-center gap-2">
                       {transaction.history}
                       {transaction.isRecurring && (
-                        <Repeat className="h-4 w-4 text-primary-600" title="Lançamento recorrente" />
+                        <Repeat className="h-4 w-4 text-primary-600" aria-label="Lançamento recorrente" />
                       )}
                     </div>
                   </TableCell>

@@ -263,9 +263,9 @@ export function LicencasModule() {
     onDetailsOpen();
   };
 
-  const handleCreateSubmit = async (payload: LicenseCreate) => {
+  const handleCreateSubmit = async (payload: any) => {
     try {
-      await createLicense(payload);
+      await createLicense(payload as LicenseCreate);
       toast.success("Licença criada com sucesso.");
       setIsCreateOpen(false);
       setRefreshKey((prev) => prev + 1);

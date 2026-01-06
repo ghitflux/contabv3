@@ -113,7 +113,7 @@ export const cardHover = {
   rest: { scale: 1 },
   hover: {
     scale: 1.02,
-    transition: { duration: 0.2, ease: "easeOut" },
+    transition: { duration: 0.2 },
   },
   tap: { scale: 0.98 },
 }
@@ -123,7 +123,7 @@ export const buttonHover = {
   rest: { scale: 1 },
   hover: {
     scale: 1.05,
-    transition: { duration: 0.2, ease: "easeOut" },
+    transition: { duration: 0.2 },
   },
   tap: { scale: 0.95 },
 }
@@ -134,7 +134,7 @@ export const pageTransition: Variants = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.4, ease: "easeOut" },
+    transition: { duration: 0.4 },
   },
   exit: {
     opacity: 0,

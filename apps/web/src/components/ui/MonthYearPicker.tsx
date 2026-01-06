@@ -77,6 +77,7 @@ export function MonthYearPicker({
     if (!value) return '';
     try {
       const [year, month] = value.split('-');
+      if (!year || !month) return value;
       const monthIndex = parseInt(month, 10) - 1;
       if (monthIndex < 0 || monthIndex > 11) return value;
       return `${monthNames[monthIndex]} de ${year}`;

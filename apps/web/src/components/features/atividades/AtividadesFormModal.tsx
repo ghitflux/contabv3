@@ -114,7 +114,7 @@ export function AtividadesFormModal({
       return
     }
 
-    const payload = {
+    const payload: ActivityCreate | ActivityUpdate = {
       title,
       description: formState.description.trim() || null,
       status: formState.status || ActivityStatus.TODO,
@@ -123,7 +123,7 @@ export function AtividadesFormModal({
       due_date: formState.due_date || null,
       labels: parseLabels(formState.labelsInput),
       reminders: formState.reminders,
-    } satisfies ActivityCreate
+    }
 
     await onSubmit(payload)
   }

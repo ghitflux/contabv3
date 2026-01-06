@@ -295,7 +295,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
       }
     }
 
-    const pick = (chars: string, idx: number) => chars[values[idx] % chars.length];
+    const pick = (chars: string, idx: number) => chars[(values[idx] ?? 0) % chars.length];
     const base = [
       pick(upper, 0),
       pick(lower, 1),

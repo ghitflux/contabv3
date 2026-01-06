@@ -331,8 +331,10 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
     if (!dateFilterField || !dateFilterFields.includes(dateFilterField)) {
       const preferred = DEFAULT_DATE_FIELD_BY_SOURCE[dataSource];
       const nextField =
-        preferred && dateFilterFields.includes(preferred) ? preferred : dateFilterFields[0];
-      setDateFilterField(nextField);
+        preferred && dateFilterFields.includes(preferred) ? preferred : (dateFilterFields[0] || '');
+      if (nextField) {
+        setDateFilterField(nextField);
+      }
     }
   }, [dataSource, dateFilterFields, dateFilterField]);
 
@@ -366,7 +368,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
   };
 
   const addFilter = () => {
-    setFilters([...filters, { field: availableFields[0], operator: 'equals', value: '' }]);
+    setFilters([...filters, { field: availableFields[0] || '', operator: 'equals', value: '' }]);
   };
 
   const removeFilter = (index: number) => {
@@ -375,7 +377,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
 
   const updateFilter = (index: number, key: string, value: string) => {
     const newFilters = [...filters];
-    newFilters[index] = { ...newFilters[index], [key]: value };
+    newFilters[index] = { ...newFilters[index], [key]: value } as { field: string; operator: string; value: string };
     setFilters(newFilters);
   };
 
@@ -656,7 +658,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
     if (selectedClientId) {
       const selected = clientOptions.find((client) => client.id === selectedClientId);
       if (selected) return selected.nome_fantasia || selected.razao_social;
-      if (rows && rows.length > 0) {
+      if (rows && rows.length > 0 && rows[0]) {
         const sample = rows[0];
         return (
           sample.client_name ||
@@ -1117,7 +1119,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
                 placeholder="Selecione"
               >
                 {dateFilterFields.map((field) => (
-                  <SelectItem key={field} value={field}>
+                  <SelectItem key={field}>
                     {fieldLabels[field] || field}
                   </SelectItem>
                 ))}
@@ -1187,7 +1189,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
                   className="w-[180px]"
                 >
                   {availableFields.map((field) => (
-                    <SelectItem key={field} value={field}>
+                    <SelectItem key={field}>
                       {fieldLabels[field] || field}
                     </SelectItem>
                   ))}
@@ -1249,7 +1251,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
                   }}
                 >
                   {clientOptions.map((client) => (
-                    <SelectItem key={client.id} value={client.id}>
+                    <SelectItem key={client.id}>
                       {client.nome_fantasia || client.razao_social}
                     </SelectItem>
                   ))}
@@ -1271,10 +1273,12 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
               }}
               placeholder="Nenhum"
             >
-              <SelectItem key="none">Nenhum</SelectItem>
-              {availableFields.map((field) => (
-                <SelectItem key={field}>{fieldLabels[field] || field}</SelectItem>
-              ))}
+              {[
+                <SelectItem key="none">Nenhum</SelectItem>,
+                ...availableFields.map((field) => (
+                  <SelectItem key={field}>{fieldLabels[field] || field}</SelectItem>
+                ))
+              ]}
             </Select>
           </div>
           <div className="space-y-2">
@@ -1290,10 +1294,12 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
                 className="flex-1"
                 label="Ordenar Por"
               >
-                <SelectItem key="none">Nenhum</SelectItem>
-                {availableFields.map((field) => (
-                  <SelectItem key={field}>{fieldLabels[field] || field}</SelectItem>
-                ))}
+                {[
+                  <SelectItem key="none">Nenhum</SelectItem>,
+                  ...availableFields.map((field) => (
+                    <SelectItem key={field}>{fieldLabels[field] || field}</SelectItem>
+                  ))
+                ]}
               </Select>
               <Select
                 selectedKeys={[sortOrder]}

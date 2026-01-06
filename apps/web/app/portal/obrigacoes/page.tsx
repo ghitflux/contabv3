@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { ObligationTimeline } from "@/components/features/obrigacoes/ObligationTimeline";
 import {
   Card,
   CardHeader,

@@ -67,6 +67,7 @@ export function AtividadesLista({
     if (!activity.due_date) return false
     if (activity.status === ActivityStatus.DONE) return false
     const today = new Date().toISOString().split("T")[0]
+    if (!today) return false
     return activity.due_date < today
   }
 

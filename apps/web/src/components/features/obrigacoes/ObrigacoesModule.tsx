@@ -110,7 +110,9 @@ export function ObrigacoesModule() {
   const [selectedObligation, setSelectedObligation] = useState<ObligationResponse | null>(null);
 
   // Parse competency to get month and year
-  const [year, month] = competency.split('-').map(Number);
+  const [yearStr, monthStr] = competency.split('-');
+  const year = Number(yearStr) || new Date().getFullYear();
+  const month = Number(monthStr) || new Date().getMonth() + 1;
 
   // Use real API
   const { data: matrixData, loading, error, fetchMatrix, undoObligation } = useObligationsMatrix({
@@ -256,10 +258,12 @@ export function ObrigacoesModule() {
               label="Regime"
               size="sm"
             >
-              <SelectItem key="todos">Todos os regimes</SelectItem>
-              {Object.values(RegimeTributario).map((regime) => (
-                <SelectItem key={regime}>{getRegimeLabel(regime)}</SelectItem>
-              ))}
+              {[
+                <SelectItem key="todos">Todos os regimes</SelectItem>,
+                ...Object.values(RegimeTributario).map((regime) => (
+                  <SelectItem key={regime}>{getRegimeLabel(regime)}</SelectItem>
+                ))
+              ]}
             </Select>
             <Select
               selectedKeys={[tipoFilter]}
@@ -270,10 +274,12 @@ export function ObrigacoesModule() {
               label="Tipo de Empresa"
               size="sm"
             >
-              <SelectItem key="todos">Todos os tipos</SelectItem>
-              {Object.values(TipoEmpresa).map((tipo) => (
-                <SelectItem key={tipo}>{getTipoEmpresaLabel(tipo)}</SelectItem>
-              ))}
+              {[
+                <SelectItem key="todos">Todos os tipos</SelectItem>,
+                ...Object.values(TipoEmpresa).map((tipo) => (
+                  <SelectItem key={tipo}>{getTipoEmpresaLabel(tipo)}</SelectItem>
+                ))
+              ]}
             </Select>
             <Input
               placeholder="Buscar empresa..."

@@ -11,7 +11,7 @@ import {
 import { useReportHistory } from "@/hooks/useReportHistory";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { toast } from "@/lib/toast";
 
 interface SavedReportsProps {

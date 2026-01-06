@@ -56,6 +56,7 @@ export function FinanceiroLancamentos() {
   const setRangeForMonth = (monthValue: string) => {
     if (!monthValue) return;
     const [year, month] = monthValue.split("-");
+    if (!year || !month) return;
     const parsedYear = Number.parseInt(year, 10);
     const parsedMonth = Number.parseInt(month, 10);
     if (!parsedYear || !parsedMonth) return;
@@ -296,7 +297,7 @@ export function FinanceiroLancamentos() {
               <TableColumn>Tipo</TableColumn>
               <TableColumn>Status</TableColumn>
               <TableColumn className="text-right">Valor</TableColumn>
-              <TableColumn className="w-[50px]"></TableColumn>
+              <TableColumn className="w-[50px]">{" "}</TableColumn>
             </TableHeader>
             <TableBody emptyContent="Nenhum lançamento encontrado">
               {lancamentosFiltrados.map((lancamento) => (

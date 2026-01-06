@@ -62,6 +62,8 @@ export function AtividadesModule() {
 
   const stats = useMemo(() => {
     const todayStr = new Date().toISOString().split("T")[0]
+    if (!todayStr) return { total: 0, open: 0, dueToday: 0, overdue: 0 }
+
     let open = 0
     let dueToday = 0
     let overdue = 0
@@ -103,7 +105,7 @@ export function AtividadesModule() {
     setIsFormOpen(false)
   }
 
-  const handleCreateActivity = async (payload: ActivityCreate) => {
+  const handleCreateActivity = async (payload: ActivityCreate | ActivityUpdate) => {
     try {
       setIsSubmitting(true)
       await createActivity({
@@ -111,7 +113,7 @@ export function AtividadesModule() {
         status: payload.status ?? ActivityStatus.TODO,
         priority: payload.priority ?? ActivityPriority.MEDIUM,
         assigned_to_id: payload.assigned_to_id || user?.id || "",
-      })
+      } as ActivityCreate)
       toast.success("Atividade criada com sucesso.")
       setIsFormOpen(false)
     } catch (error) {
@@ -124,11 +126,11 @@ export function AtividadesModule() {
     }
   }
 
-  const handleUpdateActivity = async (payload: ActivityUpdate) => {
+  const handleUpdateActivity = async (payload: ActivityCreate | ActivityUpdate) => {
     if (!editingActivity) return
     try {
       setIsSubmitting(true)
-      await updateActivity(editingActivity.id, payload)
+      await updateActivity(editingActivity.id, payload as ActivityUpdate)
       toast.success("Atividade atualizada com sucesso.")
       setIsFormOpen(false)
       setEditingActivity(null)

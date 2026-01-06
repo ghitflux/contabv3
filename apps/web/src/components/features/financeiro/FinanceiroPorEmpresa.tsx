@@ -65,7 +65,7 @@ export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => 
   }, []);
 
   useEffect(() => {
-    if (!selectedClient && clients.length > 0) {
+    if (!selectedClient && clients.length > 0 && clients[0]) {
       // Auto-select first client
       setSelectedClient(clients[0].id);
     }
@@ -74,6 +74,7 @@ export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => 
   const setRangeForMonth = (monthValue: string) => {
     if (!monthValue) return;
     const [year, month] = monthValue.split("-");
+    if (!year || !month) return;
     const parsedYear = Number.parseInt(year, 10);
     const parsedMonth = Number.parseInt(month, 10);
     if (!parsedYear || !parsedMonth) return;
@@ -251,7 +252,7 @@ export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => 
                 disallowEmptySelection
               >
                 {clients.map((client) => (
-                  <SelectItem key={client.id} value={client.id} textValue={`${client.nome_fantasia || client.razao_social} — ${client.cnpj}`}>
+                  <SelectItem key={client.id} textValue={`${client.nome_fantasia || client.razao_social} — ${client.cnpj}`}>
                     {(client.nome_fantasia || client.razao_social) ?? "-"} — {client.cnpj}
                   </SelectItem>
                 ))}

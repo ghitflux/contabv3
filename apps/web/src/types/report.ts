@@ -341,6 +341,7 @@ export function getReportFormatLabel(format: ReportFormat): string {
   const labels: Record<ReportFormat, string> = {
     [ReportFormat.PDF]: "PDF",
     [ReportFormat.CSV]: "CSV",
+    [ReportFormat.XLS]: "XLS",
   };
   return labels[format];
 }

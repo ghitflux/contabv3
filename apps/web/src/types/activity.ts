@@ -33,7 +33,7 @@ export interface ActivityBase {
   reminders?: boolean;
 }
 
-export interface ActivityCreate extends ActivityBase {
+export interface ActivityCreate extends Omit<ActivityBase, 'status' | 'priority' | 'labels'> {
   status?: ActivityStatus | string;
   priority?: ActivityPriority | string;
   labels?: string[];

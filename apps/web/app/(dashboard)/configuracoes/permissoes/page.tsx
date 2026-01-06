@@ -37,10 +37,6 @@ export default function PermissoesPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [allPermissions, setAllPermissions] = useState<Record<string, Permission[]>>({});
 
-  useEffect(() => {
-    void loadPermissions();
-  }, [selectedRole, loadPermissions]);
-
   const categoryOrder = useMemo(() => {
     const extras = Object.keys(allPermissions).filter(
       (category) => !DEFAULT_PERMISSION_CATEGORIES.includes(category as (typeof DEFAULT_PERMISSION_CATEGORIES)[number])
@@ -84,6 +80,10 @@ export default function PermissoesPage() {
       setIsLoading(false);
     }
   }, [selectedRole]);
+
+  useEffect(() => {
+    void loadPermissions();
+  }, [selectedRole, loadPermissions]);
 
   const handlePermissionToggle = useCallback((permissionId: string, granted: boolean) => {
     setRolePermissions((prev) => ({

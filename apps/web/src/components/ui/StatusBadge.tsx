@@ -55,6 +55,7 @@ const statusConfig: Record<
   warning: { color: "warning", label: "Aviso" },
   danger: { color: "danger", label: "Urgente" },
   info: { color: "primary", label: "Informação" },
+  obligation: { color: "primary", label: "Obrigação" },
   default: { color: "default", label: "Padrão" },
 }
 

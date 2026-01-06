@@ -64,4 +64,11 @@ export const clientsApi = {
   async delete(id: string): Promise<void> {
     return apiClient.delete<void>(`/clients/${id}`);
   },
+
+  /**
+   * Get current authenticated client data
+   */
+  async getMe(): Promise<Client> {
+    return apiClient.get<Client>("/clients/me");
+  },
 };

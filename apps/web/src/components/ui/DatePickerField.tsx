@@ -19,6 +19,7 @@ interface DatePickerFieldProps {
 const formatDisplayValue = (value?: string | null) => {
   if (!value) return '';
   const [datePart] = value.split('T');
+  if (!datePart) return value;
   const [year, month, day] = datePart.split('-');
   if (!year || !month || !day) return value;
   const parsedYear = Number.parseInt(year, 10);
@@ -31,6 +32,7 @@ const formatDisplayValue = (value?: string | null) => {
 const parseCalendarDate = (value?: string | null) => {
   if (!value) return null;
   const [datePart] = value.split('T');
+  if (!datePart) return null;
   const [year, month, day] = datePart.split('-').map((part) => Number.parseInt(part, 10));
   if (!year || !month || !day) return null;
   try {

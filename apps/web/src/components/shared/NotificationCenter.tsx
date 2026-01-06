@@ -90,7 +90,12 @@ export function NotificationCenter() {
   const [isOpen, setIsOpen] = useState(false);
 
   const visualByType = (type: string): NotificationVisual => {
-    return notificationVisuals[type] || notificationVisuals.default;
+    return notificationVisuals[type] || notificationVisuals.default || {
+      border: 'border-default-200 dark:border-default-700 bg-default-50 dark:bg-default-100/10',
+      badge: 'bg-default-200 dark:bg-default-700 text-default-600 dark:text-default-300',
+      dot: 'bg-default-400 dark:bg-default-500',
+      text: 'text-default-700 dark:text-default-300',
+    };
   };
 
   const sortedNotifications = useMemo(

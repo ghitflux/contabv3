@@ -66,6 +66,7 @@ export function AtividadesCalendar({
   const getActivitiesForDate = (date: Date | null) => {
     if (!date) return []
     const dateStr = date.toISOString().split("T")[0]
+    if (!dateStr) return []
     return activitiesByDate[dateStr] ?? []
   }
 
@@ -111,6 +112,7 @@ export function AtividadesCalendar({
       const weekDays = getDaysInWeek(currentDate)
       const firstDay = weekDays[0]
       const lastDay = weekDays[6]
+      if (!firstDay || !lastDay) return ""
       return `${firstDay.toLocaleDateString("pt-BR", {
         day: "2-digit",
         month: "short",

@@ -46,13 +46,13 @@ export function useReportExport() {
     setError(null);
 
     try {
-      const blob = await reportsApi.downloadReport(reportId);
+      const { blob, filename: downloadedFilename } = await reportsApi.downloadReport(reportId);
 
       // Create download link
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = filename || `report-${reportId}.pdf`;
+      link.download = filename || downloadedFilename || `report-${reportId}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

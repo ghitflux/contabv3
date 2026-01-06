@@ -507,13 +507,13 @@ export function RelatoriosModule() {
                 if (key) setSelectedFormat(key);
               }}
             >
-              <SelectItem key={ReportFormat.PDF} value={ReportFormat.PDF}>
+              <SelectItem key={ReportFormat.PDF}>
                 PDF
               </SelectItem>
-              <SelectItem key={ReportFormat.CSV} value={ReportFormat.CSV}>
+              <SelectItem key={ReportFormat.CSV}>
                 CSV
               </SelectItem>
-              <SelectItem key={ReportFormat.XLS} value={ReportFormat.XLS}>
+              <SelectItem key={ReportFormat.XLS}>
                 XLS
               </SelectItem>
             </Select>
@@ -546,7 +546,7 @@ export function RelatoriosModule() {
                       }}
                     >
                       {clientOptions.map((client) => (
-                        <SelectItem key={client.id} value={client.id}>
+                        <SelectItem key={client.id}>
                           {client.nome_fantasia || client.razao_social}
                         </SelectItem>
                       ))}

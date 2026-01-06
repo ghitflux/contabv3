@@ -157,7 +157,7 @@ export default function SistemaPage() {
               label="Porta"
               type="number"
               placeholder="587"
-              value={formData.smtp_port}
+              value={String(formData.smtp_port)}
               onChange={(e) => handleChange('smtp_port', parseInt(e.target.value))}
             />
             <Input
@@ -170,7 +170,7 @@ export default function SistemaPage() {
               type="password"
               label="Senha"
               placeholder="••••••••"
-              description="Deixe em branco para manter a atual"
+
             />
             <Input
               label="Email de Saída"
@@ -183,7 +183,7 @@ export default function SistemaPage() {
               <Switch
                 isSelected={formData.smtp_use_tls}
                 onChange={(e) => handleChange('smtp_use_tls', e.target.checked)}
-                description="Usar TLS para conexão"
+
               >
                 Usar TLS
               </Switch>
@@ -200,7 +200,7 @@ export default function SistemaPage() {
             <Switch
               isSelected={formData.backup_enabled}
               onChange={(e) => handleChange('backup_enabled', e.target.checked)}
-              description="Habilitar backups automáticos"
+
             >
               Habilitar Backups
             </Switch>
@@ -211,9 +211,9 @@ export default function SistemaPage() {
                 label="Retenção de Backups (dias)"
                 min="1"
                 max="365"
-                value={formData.backup_retention_days}
+                value={String(formData.backup_retention_days)}
                 onChange={(e) => handleChange('backup_retention_days', parseInt(e.target.value))}
-                description="Quantos dias manter os backups"
+
               />
             )}
           </div>
@@ -228,7 +228,7 @@ export default function SistemaPage() {
             <Switch
               isSelected={formData.enable_two_factor_auth}
               onChange={(e) => handleChange('enable_two_factor_auth', e.target.checked)}
-              description="Permitir autenticação de dois fatores"
+
             >
               Autenticação de Dois Fatores
             </Switch>
@@ -236,7 +236,7 @@ export default function SistemaPage() {
             <Switch
               isSelected={formData.enable_audit_logging}
               onChange={(e) => handleChange('enable_audit_logging', e.target.checked)}
-              description="Registrar todas as ações no sistema"
+
             >
               Auditoria
             </Switch>
@@ -244,7 +244,7 @@ export default function SistemaPage() {
             <Switch
               isSelected={formData.enable_client_drafts}
               onChange={(e) => handleChange('enable_client_drafts', e.target.checked)}
-              description="Permitir salvar rascunhos de clientes"
+
             >
               Rascunhos de Clientes
             </Switch>
