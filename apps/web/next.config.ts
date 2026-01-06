@@ -9,6 +9,9 @@ const apiTarget = normalizedApiUrl.startsWith('http')
   : null;
 
 const nextConfig: NextConfig = {
+  // Output standalone para Docker
+  output: 'standalone',
+
   // Compiler options
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',
