@@ -32,7 +32,8 @@ class DatabaseManager:
 
     def _create_engine(self, url: str, **kwargs: Any) -> AsyncEngine:
         """Create async engine with connection pool."""
-        pool_class = NullPool if settings.DEBUG else QueuePool
+        # Always use NullPool for async engines (QueuePool not compatible)
+        pool_class = NullPool
 
         engine_kwargs: dict[str, Any] = {
             "echo": settings.DB_ECHO,
@@ -40,15 +41,8 @@ class DatabaseManager:
             **kwargs,
         }
 
-        # Only add pool parameters when NOT using NullPool
-        if not settings.DEBUG:
-            engine_kwargs.update({
-                "pool_size": settings.DB_POOL_SIZE,
-                "max_overflow": settings.DB_MAX_OVERFLOW,
-                "pool_timeout": settings.DB_POOL_TIMEOUT,
-                "pool_recycle": settings.DB_POOL_RECYCLE,
-                "pool_pre_ping": True,
-            })
+        # NullPool doesn't support pool parameters, so we skip them
+        # For production connection pooling, consider using pgbouncer/pgpool externally
 
         return create_async_engine(url, **engine_kwargs)
 
@@ -69,14 +63,15 @@ class DatabaseManager:
     @property
     def session_factory(self) -> async_sessionmaker[AsyncSession]:
         """Get or create session factory."""
-        if self._session_factory is None:
-            self._session_factory = async_sessionmaker(
-                bind=self.write_engine,
-                class_=AsyncSession,
-                expire_on_commit=False,
-                autoflush=False,
-                autocommit=False,
-            )
+        # Always recreate to ensure engine is properly bound
+        # (fixes issue where factory was created before engine initialization)
+        self._session_factory = async_sessionmaker(
+            bind=self.write_engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autoflush=False,
+            autocommit=False,
+        )
         return self._session_factory
 
     async def close(self) -> None:
