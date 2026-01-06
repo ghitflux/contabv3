@@ -11,7 +11,7 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY pyproject.toml ./
+COPY apps/api/pyproject.toml ./
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -e .
 
@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 FROM base as development
 
 # Copy application code
-COPY . .
+COPY apps/api/ .
 
 # Expose port
 EXPOSE 8000
@@ -31,7 +31,7 @@ CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --
 FROM base as production
 
 # Copy application code
-COPY . .
+COPY apps/api/ .
 
 # Expose port
 EXPOSE 8000
