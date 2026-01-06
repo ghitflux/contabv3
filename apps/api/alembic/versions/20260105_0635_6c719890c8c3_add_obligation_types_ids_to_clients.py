@@ -83,7 +83,11 @@ def upgrade() -> None:
     op.drop_constraint(op.f('uq_client_drafts_user_id'), 'client_drafts', type_='unique', if_exists=True)
     op.drop_index(op.f('ix_client_drafts_user_id'), table_name='client_drafts', if_exists=True)
     op.create_index(op.f('ix_client_drafts_user_id'), 'client_drafts', ['user_id'], unique=True)
-    op.add_column('clients', sa.Column('obligation_types_ids', postgresql.JSONB(astext_type=sa.Text()), server_default='[]', nullable=True))
+
+    # Add column with IF NOT EXISTS
+    op.execute("""
+        ALTER TABLE clients ADD COLUMN IF NOT EXISTS obligation_types_ids JSONB DEFAULT '[]'
+    """)
     op.alter_column('cnaes', 'is_active',
                existing_type=sa.BOOLEAN(),
                server_default=None,
