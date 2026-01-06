@@ -175,7 +175,8 @@ def upgrade() -> None:
     op.alter_column('permissions', 'category',
                existing_type=sa.VARCHAR(length=50),
                type_=sa.Enum('USERS', 'CLIENTS', 'FINANCE', 'OBLIGATIONS', 'LICENSES', 'REPORTS', 'SETTINGS', 'AUDIT', name='permission_category'),
-               existing_nullable=False)
+               existing_nullable=False,
+               postgresql_using='category::permission_category')
     op.drop_constraint(op.f('uq_permissions_code'), 'permissions', type_='unique', if_exists=True)
     op.drop_constraint(op.f('uq_permissions_name'), 'permissions', type_='unique', if_exists=True)
     op.drop_index(op.f('ix_permissions_code'), table_name='permissions', if_exists=True)
