@@ -42,8 +42,8 @@ def upgrade() -> None:
                existing_type=sa.VARCHAR(length=50),
                server_default=None,
                existing_nullable=False)
-    op.drop_constraint(op.f('uq_client_drafts_user_id'), 'client_drafts', type_='unique')
-    op.drop_index(op.f('ix_client_drafts_user_id'), table_name='client_drafts')
+    op.drop_constraint(op.f('uq_client_drafts_user_id'), 'client_drafts', type_='unique', if_exists=True)
+    op.drop_index(op.f('ix_client_drafts_user_id'), table_name='client_drafts', if_exists=True)
     op.create_index(op.f('ix_client_drafts_user_id'), 'client_drafts', ['user_id'], unique=True)
     op.add_column('clients', sa.Column('obligation_types_ids', postgresql.JSONB(astext_type=sa.Text()), server_default='[]', nullable=True))
     op.alter_column('cnaes', 'is_active',
@@ -134,11 +134,11 @@ def upgrade() -> None:
                existing_type=sa.VARCHAR(length=50),
                type_=sa.Enum('USERS', 'CLIENTS', 'FINANCE', 'OBLIGATIONS', 'LICENSES', 'REPORTS', 'SETTINGS', 'AUDIT', name='permission_category'),
                existing_nullable=False)
-    op.drop_constraint(op.f('uq_permissions_code'), 'permissions', type_='unique')
-    op.drop_constraint(op.f('uq_permissions_name'), 'permissions', type_='unique')
-    op.drop_index(op.f('ix_permissions_code'), table_name='permissions')
+    op.drop_constraint(op.f('uq_permissions_code'), 'permissions', type_='unique', if_exists=True)
+    op.drop_constraint(op.f('uq_permissions_name'), 'permissions', type_='unique', if_exists=True)
+    op.drop_index(op.f('ix_permissions_code'), table_name='permissions', if_exists=True)
     op.create_index(op.f('ix_permissions_code'), 'permissions', ['code'], unique=True)
-    op.drop_index(op.f('ix_permissions_name'), table_name='permissions')
+    op.drop_index(op.f('ix_permissions_name'), table_name='permissions', if_exists=True)
     op.create_index(op.f('ix_permissions_name'), 'permissions', ['name'], unique=True)
     op.alter_column('report_history', 'generated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
@@ -159,7 +159,7 @@ def upgrade() -> None:
                server_default=None,
                existing_nullable=False)
     op.create_unique_constraint('uq_role_permission', 'role_permissions', ['role', 'permission_id'])
-    op.drop_constraint(op.f('role_permissions_permission_id_fkey'), 'role_permissions', type_='foreignkey')
+    op.drop_constraint(op.f('role_permissions_permission_id_fkey'), 'role_permissions', type_='foreignkey', if_exists=True)
     op.alter_column('security_settings', 'password_min_length',
                existing_type=sa.INTEGER(),
                server_default=None,
@@ -304,8 +304,8 @@ def upgrade() -> None:
                existing_type=sa.BOOLEAN(),
                server_default=None,
                existing_nullable=False)
-    op.drop_constraint(op.f('uq_user_settings_user_id'), 'user_settings', type_='unique')
-    op.drop_index(op.f('ix_user_settings_user_id'), table_name='user_settings')
+    op.drop_constraint(op.f('uq_user_settings_user_id'), 'user_settings', type_='unique', if_exists=True)
+    op.drop_index(op.f('ix_user_settings_user_id'), table_name='user_settings', if_exists=True)
     op.create_index(op.f('ix_user_settings_user_id'), 'user_settings', ['user_id'], unique=True)
     # ### end Alembic commands ###
 
