@@ -4,8 +4,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 
-const publicRoutes = ["/auth/login", "/auth/reset-password"];
-const authRoutes = ["/auth/login", "/auth/reset-password"];
+const publicRoutes = ["/login", "/reset-password"];
+const authRoutes = ["/login", "/reset-password"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -25,8 +25,8 @@ export function middleware(request: NextRequest) {
   }
 
   // If trying to access protected route without authentication, redirect to login
-  if (!isPublicRoute && !refreshToken && !pathname.startsWith("/auth")) {
-    const loginUrl = new URL("/auth/login", request.url);
+  if (!isPublicRoute && !refreshToken) {
+    const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("from", pathname);
     return NextResponse.redirect(loginUrl);
   }
