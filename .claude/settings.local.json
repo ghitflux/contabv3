@@ -109,7 +109,9 @@
       "Bash(pnpm store:*)",
       "Bash(pnpm run dev)",
       "Bash(git restore:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(ssh:*)",
+      "Bash(pnpm --filter web build:*)"
     ],
     "deny": [],
     "ask": []

@@ -41,6 +41,7 @@ export interface Transaction {
   paid_date?: string | null; // ISO datetime string
   reference_month: string; // ISO date string (first day of month)
   description: string;
+  category?: string | null; // Código do plano de contas (ex: "1.1.01", "2.1.05")
   notes?: string | null;
   invoice_number?: string | null;
   receipt_url?: string | null;
@@ -61,6 +62,7 @@ export interface TransactionCreate {
   paid_date?: string | null;
   reference_month: string; // ISO date string
   description: string;
+  category?: string | null; // Código do plano de contas
   notes?: string | null;
   invoice_number?: string | null;
 }
@@ -72,6 +74,7 @@ export interface TransactionUpdate {
   due_date?: string;
   paid_date?: string | null;
   description?: string;
+  category?: string | null; // Código do plano de contas
   notes?: string | null;
   invoice_number?: string | null;
 }

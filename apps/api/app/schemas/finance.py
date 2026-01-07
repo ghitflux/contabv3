@@ -53,6 +53,7 @@ class TransactionCreate(BaseModel):
     paid_date: Optional[datetime] = Field(None, description="Date when payment was made")
     reference_month: date = Field(..., description="Reference month (competência) - first day of month")
     description: str = Field(..., min_length=1, max_length=500, description="Transaction description")
+    category: Optional[str] = Field(None, max_length=20, description="Chart of accounts code (Plano de Contas) - ex: 1.1.01, 2.1.05")
     notes: Optional[str] = Field(None, max_length=2000, description="Additional notes")
     invoice_number: Optional[str] = Field(None, max_length=100, description="Invoice/receipt number")
 
@@ -91,6 +92,7 @@ class TransactionUpdate(BaseModel):
     due_date: Optional[date] = Field(None, description="Due date")
     paid_date: Optional[datetime] = Field(None, description="Payment date")
     description: Optional[str] = Field(None, min_length=1, max_length=500, description="Description")
+    category: Optional[str] = Field(None, max_length=20, description="Chart of accounts code (Plano de Contas) - ex: 1.1.01, 2.1.05")
     notes: Optional[str] = Field(None, max_length=2000, description="Notes")
     invoice_number: Optional[str] = Field(None, max_length=100, description="Invoice number")
 
@@ -152,6 +154,7 @@ class TransactionResponse(BaseModel):
     paid_date: Optional[datetime]
     reference_month: date
     description: str
+    category: Optional[str]
     notes: Optional[str]
     invoice_number: Optional[str]
     receipt_url: Optional[str]

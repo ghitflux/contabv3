@@ -87,6 +87,13 @@ class FinancialTransaction(Base):
     description: Mapped[str] = mapped_column(String(500), nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Category (chart of accounts - plano de contas)
+    category: Mapped[Optional[str]] = mapped_column(
+        String(20),
+        nullable=True,
+        comment="Chart of accounts code (Plano de Contas) - ex: 1.1.01, 2.1.05"
+    )
+
     # Invoice/receipt
     invoice_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     receipt_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
@@ -114,6 +121,7 @@ class FinancialTransaction(Base):
         Index("ix_financial_transactions_reference_month", "reference_month"),
         Index("ix_financial_transactions_created_at", "created_at"),
         Index("ix_financial_transactions_deleted_at", "deleted_at"),
+        Index("ix_financial_transactions_category", "category"),
         # Composite indexes for common queries
         Index("ix_financial_transactions_client_status", "client_id", "payment_status"),
         Index("ix_financial_transactions_client_reference", "client_id", "reference_month"),

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useDisclosure } from "@heroui/react";
 import {
   Button,
   Card,
@@ -29,6 +30,8 @@ import {
 import { DatePickerField } from "@/components/ui/DatePickerField";
 import { MonthYearPicker } from "@/components/ui/MonthYearPicker";
 import { endOfMonth, formatISO, startOfMonth, subMonths } from "date-fns";
+import { getContaByCodigo, formatConta } from "@/constants/planoDeContas";
+import { NovoLancamentoModal, type NovoLancamentoData } from "./NovoLancamentoModal";
 
 type LancamentoTipo = TransactionType;
 type LancamentoStatus = PaymentStatus;
@@ -38,6 +41,7 @@ interface Lancamento {
   data: string;
   descricao: string;
   competencia: string;
+  categoria?: string | null;
   tipo: LancamentoTipo;
   valor: number;
   status: LancamentoStatus;
@@ -46,6 +50,7 @@ interface Lancamento {
 }
 
 export function FinanceiroLancamentos() {
+  const { isOpen, onOpen, onOpenChange } = useDisclosure();
   const [busca, setBusca] = useState("");
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
@@ -117,7 +122,7 @@ export function FinanceiroLancamentos() {
   }, [startDate, endDate, monthFilter]);
 
   // Fetch transactions from API
-  const { transactions, isLoading } = useTransactions({
+  const { transactions, isLoading, refetch } = useTransactions({
     filters: {
       due_date_from: startDate,
       due_date_to: endDate,
@@ -127,12 +132,27 @@ export function FinanceiroLancamentos() {
     autoFetch: true,
   });
 
+  const handleSaveTransaction = async (data: NovoLancamentoData) => {
+    try {
+      // TODO: Implementar chamada à API para salvar transação
+      console.log("Salvando lançamento:", data);
+      alert("Lançamento salvo com sucesso!");
+
+      // Recarregar dados
+      await refetch();
+    } catch (error) {
+      console.error("Erro ao salvar lançamento:", error);
+      throw error;
+    }
+  };
+
   const lancamentos = useMemo<Lancamento[]>(() => {
     return transactions.map((transaction) => ({
       id: transaction.id,
       data: transaction.paid_date || transaction.due_date,
       descricao: transaction.description,
       competencia: transaction.reference_month,
+      categoria: transaction.category ?? null,
       tipo: transaction.transaction_type,
       valor: transaction.amount,
       status: transaction.payment_status,
@@ -198,7 +218,7 @@ export function FinanceiroLancamentos() {
           <Button size="sm" variant="bordered" startContent={<Download className="h-4 w-4" />}>
             Exportar
           </Button>
-          <Button size="sm" color="primary" startContent={<Plus className="h-4 w-4" />}>
+          <Button size="sm" color="primary" startContent={<Plus className="h-4 w-4" />} onPress={onOpen}>
             Novo Lançamento
           </Button>
         </div>
@@ -292,6 +312,7 @@ export function FinanceiroLancamentos() {
             <TableHeader>
               <TableColumn>Data</TableColumn>
               <TableColumn>Descrição</TableColumn>
+              <TableColumn>Categoria</TableColumn>
               <TableColumn>Competência</TableColumn>
               <TableColumn>Cliente</TableColumn>
               <TableColumn>Tipo</TableColumn>
@@ -300,14 +321,25 @@ export function FinanceiroLancamentos() {
               <TableColumn className="w-[50px]">{" "}</TableColumn>
             </TableHeader>
             <TableBody emptyContent="Nenhum lançamento encontrado">
-              {lancamentosFiltrados.map((lancamento) => (
-                <TableRow key={lancamento.id}>
-                  <TableCell className="font-medium">{formatDate(lancamento.data)}</TableCell>
-                  <TableCell>{lancamento.descricao}</TableCell>
-                  <TableCell className="text-sm text-slate-600 dark:text-slate-400">
-                    {formatCompetencia(lancamento.competencia)}
-                  </TableCell>
-                  <TableCell className="text-sm">{lancamento.cliente ?? "-"}</TableCell>
+              {lancamentosFiltrados.map((lancamento) => {
+                const conta = lancamento.categoria ? getContaByCodigo(lancamento.categoria) : null;
+                return (
+                  <TableRow key={lancamento.id}>
+                    <TableCell className="font-medium">{formatDate(lancamento.data)}</TableCell>
+                    <TableCell>{lancamento.descricao}</TableCell>
+                    <TableCell className="text-sm">
+                      {conta ? (
+                        <span className="text-default-700" title={conta.descricao}>
+                          {formatConta(conta)}
+                        </span>
+                      ) : (
+                        <span className="text-default-400">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm text-slate-600 dark:text-slate-400">
+                      {formatCompetencia(lancamento.competencia)}
+                    </TableCell>
+                    <TableCell className="text-sm">{lancamento.cliente ?? "-"}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
                       {lancamento.tipo === TransactionType.RECEITA ? (
@@ -339,10 +371,18 @@ export function FinanceiroLancamentos() {
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+              );
+              })}
             </TableBody>
           </Table>
         </div>
+
+        <NovoLancamentoModal
+          isOpen={isOpen}
+          onOpenChange={onOpenChange}
+          onSave={handleSaveTransaction}
+          clients={[]} // TODO: Fetch clients from API
+        />
       </CardBody>
     </Card>
   );
