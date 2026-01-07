@@ -122,7 +122,7 @@ export function FinanceiroLancamentos() {
   }, [startDate, endDate, monthFilter]);
 
   // Fetch transactions from API
-  const { transactions, isLoading, refetch } = useTransactions({
+  const { transactions, isLoading, fetchTransactions } = useTransactions({
     filters: {
       due_date_from: startDate,
       due_date_to: endDate,
@@ -139,7 +139,12 @@ export function FinanceiroLancamentos() {
       alert("Lançamento salvo com sucesso!");
 
       // Recarregar dados
-      await refetch();
+      await fetchTransactions({
+        due_date_from: startDate,
+        due_date_to: endDate,
+        page: 1,
+        size: 200,
+      });
     } catch (error) {
       console.error("Erro ao salvar lançamento:", error);
       throw error;
