@@ -115,7 +115,6 @@ export function PlanoDeContasAutocomplete({
             {contas.map((conta) => (
               <AutocompleteItem
                 key={conta.codigo}
-                value={conta.codigo}
                 textValue={formatConta(conta)}
                 description={conta.descricao}
                 classNames={{
