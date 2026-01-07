@@ -172,7 +172,6 @@ export function NovoLancamentoModal({ isOpen, onOpenChange, onSave, clients = []
                     <DatePickerField
                       value={formData.due_date || ""}
                       onChange={(value) => setFormData((prev) => ({ ...prev, due_date: value }))}
-                      variant="bordered"
                     />
                   </div>
 
@@ -236,7 +235,6 @@ export function NovoLancamentoModal({ isOpen, onOpenChange, onSave, clients = []
                     <DatePickerField
                       value={formData.paid_date || ""}
                       onChange={(value) => setFormData((prev) => ({ ...prev, paid_date: value }))}
-                      variant="bordered"
                     />
                   </div>
                 )}
