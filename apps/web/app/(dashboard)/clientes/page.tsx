@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from "framer-motion";
-import { Button, Card, CardBody, CardHeader, Chip, Divider, Pagination, Spinner, Table, TableBody, TableCell, TableColumn, TableHeader, TableRow, useDisclosure } from '@/heroui';
+import { Button, Card, CardBody, CardHeader, Chip, Divider, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem, Pagination, Spinner, Table, TableBody, TableCell, TableColumn, TableHeader, TableRow, useDisclosure } from '@/heroui';
 import { pageTransition } from "@/lib/animations";
 import { useClients } from '@/hooks/useClients';
 import type { ClientListItem, ClientStatus, ClientCreate, ClientUserCredentials, RegimeTributario } from '@/types/client';
@@ -9,7 +9,7 @@ import { formatCNPJ, getRegimeLabel, getStatusLabel } from '@/types/client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { SearchInput } from '@/components/ui/SearchInput';
-import { PlusIcon, EyeIcon } from '@/lib/icons';
+import { PlusIcon, EyeIcon, EditIcon, MoreVerticalIcon, CheckCircleIcon, XCircleIcon, ClockIcon } from '@/lib/icons';
 import { ClientFormModal } from '@/components/features/clientes/ClientFormModal';
 import { ClientDetailsModal } from '@/components/features/clientes/ClientDetailsModal';
 import { ClientCreatedSuccessModal } from '@/components/features/clientes/ClientCreatedSuccessModal';
@@ -21,8 +21,9 @@ import { SnippetCopy } from '@/components/ui/SnippetCopy';
 import { toast } from '@/lib/toast';
 
 export default function ClientesPage() {
-  const { clients, selectedClient, isLoading, fetchClients, fetchClientById, createClient, setSelectedClient } = useClients();
+  const { clients, selectedClient, isLoading, fetchClients, fetchClientById, createClient, updateClient, setSelectedClient } = useClients();
   const router = useRouter();
+  const [editingClient, setEditingClient] = useState<ClientListItem | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [letterFilter, setLetterFilter] = useState('');
@@ -76,23 +77,34 @@ export default function ClientesPage() {
   };
 
   const handleSaveClient = async (data: ClientCreate) => {
-    const result = await createClient(data);
+    try {
+      console.log('🚀 Salvando cliente:', data);
+      const result = await createClient(data);
+      console.log('✅ Cliente criado:', result);
 
-    if (result.credentials) {
-      setCreatedCredentials(result.credentials);
-      // Open after the form closes to avoid stacked modals/focus issues.
-      setTimeout(() => onCreatedOpen(), 0);
+      toast.success('Cliente criado com sucesso!');
+
+      if (result.credentials) {
+        setCreatedCredentials(result.credentials);
+        // Open after the form closes to avoid stacked modals/focus issues.
+        setTimeout(() => onCreatedOpen(), 0);
+      }
+
+      // Refresh list
+      console.log('🔄 Atualizando lista de clientes...');
+      await fetchClients({
+        query: searchQuery || undefined,
+        status: (statusFilter as ClientStatus) || undefined,
+        starts_with: letterFilter || undefined,
+        page,
+        size: pageSize,
+      });
+      console.log('✅ Lista atualizada!');
+    } catch (error) {
+      console.error('❌ Erro ao salvar cliente:', error);
+      toast.error('Não foi possível salvar o cliente.');
+      throw error; // Re-throw para o modal tratar
     }
-    // Refresh list
-    fetchClients({
-      query: searchQuery || undefined,
-      status: (statusFilter as ClientStatus) || undefined,
-      starts_with: letterFilter || undefined,
-      page,
-      size: pageSize,
-    }).catch(() => {
-      toast.error('Não foi possível atualizar a lista de clientes.');
-    });
   };
 
   const handleCloseCreated = () => {
@@ -103,6 +115,61 @@ export default function ClientesPage() {
   const handleCloseDetails = () => {
     setSelectedClient(null);
     onDetailsClose();
+  };
+
+  const handleEditClient = async (client: ClientListItem) => {
+    await fetchClientById(client.id);
+    setEditingClient(client);
+    onFormOpen();
+  };
+
+  const handleUpdateClient = async (data: ClientCreate) => {
+    if (!editingClient) return;
+
+    try {
+      await updateClient(editingClient.id, data);
+      toast.success('Cliente atualizado com sucesso!');
+      setEditingClient(null);
+
+      // Refresh list
+      fetchClients({
+        query: searchQuery || undefined,
+        status: (statusFilter as ClientStatus) || undefined,
+        starts_with: letterFilter || undefined,
+        page,
+        size: pageSize,
+      }).catch(() => {
+        toast.error('Não foi possível atualizar a lista de clientes.');
+      });
+    } catch (error) {
+      toast.error('Não foi possível atualizar o cliente.');
+      throw error;
+    }
+  };
+
+  const handleChangeStatus = async (client: ClientListItem, newStatus: ClientStatus) => {
+    try {
+      await updateClient(client.id, { status: newStatus });
+      toast.success(`Status alterado para ${getStatusLabel(newStatus)}`);
+
+      // Refresh list
+      fetchClients({
+        query: searchQuery || undefined,
+        status: (statusFilter as ClientStatus) || undefined,
+        starts_with: letterFilter || undefined,
+        page,
+        size: pageSize,
+      }).catch(() => {
+        toast.error('Não foi possível atualizar a lista de clientes.');
+      });
+    } catch (error) {
+      toast.error('Não foi possível alterar o status do cliente.');
+    }
+  };
+
+  const handleFormClose = () => {
+    setEditingClient(null);
+    onFormClose();
   };
 
   const statusColors: Record<ClientStatus, "success" | "warning" | "default"> = {
@@ -117,11 +184,13 @@ export default function ClientesPage() {
   const filteredClients = clients?.items.filter((client) => {
     // CNPJ filter
     if (cnpjFilter && !client.cnpj.toLowerCase().includes(cnpjFilter.toLowerCase())) {
+      console.log(`❌ Cliente ${client.razao_social} filtrado por CNPJ`);
       return false;
     }
 
     // Regime filter
     if (regimeFilter && client.regime_tributario !== regimeFilter) {
+      console.log(`❌ Cliente ${client.razao_social} filtrado por regime`);
       return false;
     }
 
@@ -129,12 +198,27 @@ export default function ClientesPage() {
     if (honorariosRange) {
       const [min, max] = honorariosRange;
       if (client.honorarios_mensais < min || client.honorarios_mensais > max) {
+        console.log(`❌ Cliente ${client.razao_social} filtrado por honorários`);
         return false;
       }
     }
 
     return true;
   }) || [];
+
+  // Debug: log quando clients mudar
+  useEffect(() => {
+    if (clients) {
+      console.log('📊 Clientes atualizados:', {
+        total: clients.total,
+        page: clients.page,
+        size: clients.size,
+        pages: clients.pages,
+        items: clients.items.length,
+      });
+      console.log('📋 Lista de clientes:', clients.items.map(c => ({ id: c.id, razao: c.razao_social })));
+    }
+  }, [clients]);
 
   return (
     <motion.div
@@ -333,15 +417,15 @@ export default function ClientesPage() {
                     {filteredClients.map((client) => (
                       <TableRow key={client.id} onClick={() => handleViewDetails(client)}>
                         <TableCell>
-                          <div>
-                            <p className="font-medium">{client.razao_social}</p>
+                          <div className="space-y-1">
+                            <SnippetCopy text={client.razao_social} />
                             {client.nome_fantasia && (
-                              <p className="text-xs text-default-500">{client.nome_fantasia}</p>
+                              <p className="text-xs text-default-400">{client.nome_fantasia}</p>
                             )}
                           </div>
                         </TableCell>
                         <TableCell>
-                          <code className="text-xs">{formatCNPJ(client.cnpj)}</code>
+                          <SnippetCopy text={client.cnpj} />
                         </TableCell>
                         <TableCell>
                           {client.cpf_empresa ? (
@@ -380,8 +464,60 @@ export default function ClientesPage() {
                           </Chip>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center justify-center">
-                            <EyeIcon className="h-5 w-5 text-default-400" />
+                          <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            <Dropdown>
+                              <DropdownTrigger>
+                                <Button
+                                  size="sm"
+                                  variant="light"
+                                  isIconOnly
+                                  aria-label="Ações"
+                                >
+                                  <MoreVerticalIcon className="h-5 w-5" />
+                                </Button>
+                              </DropdownTrigger>
+                              <DropdownMenu aria-label="Ações do cliente">
+                                <DropdownItem
+                                  key="view"
+                                  startContent={<EyeIcon className="h-4 w-4" />}
+                                  onPress={() => handleViewDetails(client)}
+                                >
+                                  Ver detalhes
+                                </DropdownItem>
+                                <DropdownItem
+                                  key="edit"
+                                  startContent={<EditIcon className="h-4 w-4" />}
+                                  onPress={() => handleEditClient(client)}
+                                >
+                                  Editar
+                                </DropdownItem>
+                                <DropdownItem
+                                  key="status-ativo"
+                                  startContent={<CheckCircleIcon className="h-4 w-4" />}
+                                  onPress={() => handleChangeStatus(client, 'ativo')}
+                                  className={client.status === 'ativo' ? 'hidden' : ''}
+                                >
+                                  Marcar como Ativo
+                                </DropdownItem>
+                                <DropdownItem
+                                  key="status-pendente"
+                                  startContent={<ClockIcon className="h-4 w-4" />}
+                                  onPress={() => handleChangeStatus(client, 'pendente')}
+                                  className={client.status === 'pendente' ? 'hidden' : ''}
+                                >
+                                  Marcar como Pendente
+                                </DropdownItem>
+                                <DropdownItem
+                                  key="status-inativo"
+                                  startContent={<XCircleIcon className="h-4 w-4" />}
+                                  onPress={() => handleChangeStatus(client, 'inativo')}
+                                  className={client.status === 'inativo' ? 'hidden' : ''}
+                                  color="danger"
+                                >
+                                  Marcar como Inativo
+                                </DropdownItem>
+                              </DropdownMenu>
+                            </Dropdown>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -409,8 +545,10 @@ export default function ClientesPage() {
       {/* Form Modal */}
       <ClientFormModal
         isOpen={isFormOpen}
-        onClose={onFormClose}
-        onSave={handleSaveClient}
+        onClose={handleFormClose}
+        onSave={editingClient ? handleUpdateClient : handleSaveClient}
+        client={selectedClient}
+        isEditing={!!editingClient}
       />
 
       {/* Details Modal */}

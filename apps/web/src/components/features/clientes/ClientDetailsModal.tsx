@@ -323,11 +323,13 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
                 {(client.cpf_empresa ||
                   client.senha_sistema ||
                   client.senha_gov ||
+                  client.senha_prefeitura ||
                   client.login_seg_desemp ||
                   client.senha_seg_desemp ||
                   client.email_seg_desemp ||
                   client.senha_nfse ||
-                  client.senha_certificado_digital) && (
+                  client.senha_certificado_digital ||
+                  client.senha_gcw_resp) && (
                   <>
                     <Divider />
                     <section>
@@ -349,6 +351,12 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
                           <div className="bg-secondary-50 dark:bg-secondary-950 p-3 rounded-lg">
                             <p className="text-xs text-secondary-600 dark:text-secondary-400 mb-1 font-medium">Senha GOV.BR</p>
                             <SnippetCopy text={client.senha_gov} hideByDefault />
+                          </div>
+                        )}
+                        {client.senha_prefeitura && (
+                          <div className="bg-secondary-50 dark:bg-secondary-950 p-3 rounded-lg">
+                            <p className="text-xs text-secondary-600 dark:text-secondary-400 mb-1 font-medium">Senha da Prefeitura</p>
+                            <SnippetCopy text={client.senha_prefeitura} hideByDefault />
                           </div>
                         )}
                         {client.login_seg_desemp && (
@@ -379,6 +387,12 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
                           <div className="bg-danger-50 dark:bg-danger-950 p-3 rounded-lg">
                             <p className="text-xs text-danger-600 dark:text-danger-400 mb-1 font-medium">Senha Certificado Digital</p>
                             <SnippetCopy text={client.senha_certificado_digital} hideByDefault />
+                          </div>
+                        )}
+                        {client.senha_gcw_resp && (
+                          <div className="bg-danger-50 dark:bg-danger-950 p-3 rounded-lg">
+                            <p className="text-xs text-danger-600 dark:text-danger-400 mb-1 font-medium">Senha GCW Responsável</p>
+                            <SnippetCopy text={client.senha_gcw_resp} hideByDefault />
                           </div>
                         )}
                       </div>

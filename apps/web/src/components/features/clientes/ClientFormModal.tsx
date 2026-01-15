@@ -137,9 +137,10 @@ interface ClientFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (data: ClientCreate) => Promise<void>;
+  isEditing?: boolean;
 }
 
-export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormModalProps) {
+export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = false }: ClientFormModalProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [visibleFields, setVisibleFields] = React.useState<Record<string, boolean>>({});
   const [obligationTypes, setObligationTypes] = React.useState<ObligationTypeResponse[]>([]);
@@ -237,6 +238,64 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
   // Watch regime and tipo_empresa to filter obligations
   const regimeTributario = useWatch({ control, name: "regime_tributario" });
   const tipoEmpresa = useWatch({ control, name: "tipo_empresa" });
+
+  // Reset form when client data changes (for editing)
+  React.useEffect(() => {
+    if (isOpen && isEditing && client) {
+      console.log("🔄 [DEBUG] Resetando formulário com dados do cliente:", client.id);
+      reset({
+        ...client,
+        tipos_empresa: client.tipos_empresa || [],
+        servicos_contratados: client.servicos_contratados || [],
+        licencas_necessarias: client.licencas_necessarias || [],
+        obligation_types_ids: client.obligation_types_ids || [],
+      });
+    } else if (isOpen && !isEditing) {
+      console.log("🆕 [DEBUG] Resetando formulário para novo cliente");
+      reset({
+        razao_social: "",
+        nome_fantasia: null,
+        cnpj: "",
+        cpf_empresa: null,
+        senha_sistema: null,
+        senha_gov: null,
+        inscricao_estadual: null,
+        inscricao_municipal: null,
+        codigo_simples: null,
+        email: "",
+        celular: null,
+        cep: null,
+        logradouro: null,
+        numero: null,
+        complemento: null,
+        bairro: null,
+        cidade: null,
+        uf: null,
+        honorarios_mensais: 0,
+        dia_vencimento: 10,
+        regime_tributario: RegimeTributario.SIMPLES_NACIONAL,
+        tipo_empresa: TipoEmpresa.COMERCIO,
+        tipos_empresa: [],
+        data_abertura: null,
+        inicio_escritorio: null,
+        responsavel_nome: null,
+        responsavel_cpf: null,
+        responsavel_email: null,
+        responsavel_telefone: null,
+        senha_prefeitura: null,
+        login_seg_desemp: null,
+        senha_seg_desemp: null,
+        email_seg_desemp: null,
+        senha_nfse: null,
+        senha_certificado_digital: null,
+        senha_gcw_resp: null,
+        servicos_contratados: [],
+        licencas_necessarias: [],
+        obligation_types_ids: [],
+        observacoes: null,
+      });
+    }
+  }, [isOpen, isEditing, client, reset]);
 
   // Filter obligation types based on selected regime and tipo_empresa
   const filteredObligationTypes = React.useMemo(() => {
@@ -363,7 +422,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
             >
               <ModalHeader className="flex-shrink-0 px-6 pt-6">
                 <h2 className="text-2xl font-bold">
-                  {client ? "Editar Cliente" : "Novo Cliente"}
+                  {isEditing ? "Editar Cliente" : "Novo Cliente"}
                 </h2>
               </ModalHeader>
               <ModalBody className="overflow-y-auto px-6 py-6">
@@ -1189,7 +1248,10 @@ export function ClientFormModal({ client, isOpen, onClose, onSave }: ClientFormM
                   startContent={<SaveIcon className="h-4 w-4" />}
                   isLoading={isSubmitting}
                 >
-                  {isSubmitting ? "Salvando..." : "Salvar"}
+                  {isSubmitting
+                    ? (isEditing ? "Atualizando..." : "Salvando...")
+                    : (isEditing ? "Atualizar" : "Salvar")
+                  }
                 </Button>
               </ModalFooter>
             </form>

@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { Chip } from '@/heroui';
-import type { ClientListItem, ClientStatus } from '@/types/client';
+import { getRegimeLabel, type ClientListItem, type ClientStatus } from '@/types/client';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { SnippetCopy } from '@/components/ui/SnippetCopy';
 
@@ -43,45 +43,31 @@ export function ClientsTable({ clients, isLoading = false }: ClientsTableProps) 
           client.cpf_empresa ? <SnippetCopy text={client.cpf_empresa} /> : <span className="text-default-400">-</span>,
       },
       {
+        key: 'codigo_simples',
+        label: 'Código do Simples',
+        render: (client) =>
+          client.codigo_simples ? <SnippetCopy text={client.codigo_simples} /> : <span className="text-default-400">-</span>,
+      },
+      {
         key: 'senha_gov',
         label: 'Senha GOV',
         render: (client) =>
           client.senha_gov ? <SnippetCopy text={client.senha_gov} hideByDefault /> : <span className="text-default-400">-</span>,
       },
       {
-        key: 'login_seg_desemp',
-        label: 'Login Seg. Desemprego',
+        key: 'senha_prefeitura',
+        label: 'Senha da Prefeitura',
         render: (client) =>
-          client.login_seg_desemp ? <SnippetCopy text={client.login_seg_desemp} /> : <span className="text-default-400">-</span>,
+          client.senha_prefeitura ? (
+            <SnippetCopy text={client.senha_prefeitura} hideByDefault />
+          ) : (
+            <span className="text-default-400">-</span>
+          ),
       },
       {
-        key: 'senha_seg_desemp',
-        label: 'Senha Seg. Desemprego',
-        render: (client) =>
-          client.senha_seg_desemp ? <SnippetCopy text={client.senha_seg_desemp} hideByDefault /> : <span className="text-default-400">-</span>,
-      },
-      {
-        key: 'email_seg_desemp',
-        label: 'E-mail Seg. Desemprego',
-        render: (client) =>
-          client.email_seg_desemp ? <SnippetCopy text={client.email_seg_desemp} /> : <span className="text-default-400">-</span>,
-      },
-      {
-        key: 'senha_nfse',
-        label: 'Senha NFS-e',
-        render: (client) =>
-          client.senha_nfse ? <SnippetCopy text={client.senha_nfse} hideByDefault /> : <span className="text-default-400">-</span>,
-      },
-      {
-        key: 'senha_certificado_digital',
-        label: 'Senha Cert. Digital',
-        render: (client) =>
-          client.senha_certificado_digital ? <SnippetCopy text={client.senha_certificado_digital} hideByDefault /> : <span className="text-default-400">-</span>,
-      },
-      {
-        key: 'email',
-        label: 'Email',
-        render: (client) => <SnippetCopy text={client.email} />,
+        key: 'regime_tributario',
+        label: 'Regime de Tributação',
+        render: (client) => getRegimeLabel(client.regime_tributario),
       },
       {
         key: 'status',
@@ -91,19 +77,6 @@ export function ClientsTable({ clients, isLoading = false }: ClientsTableProps) 
           <Chip color={statusColorMap[client.status]} size="sm" variant="flat">
             {statusLabelMap[client.status]}
           </Chip>
-        ),
-      },
-      {
-        key: 'honorarios_mensais',
-        label: 'Honorários',
-        sortable: true,
-        render: (client) => (
-          <span className="font-medium">
-            {new Intl.NumberFormat('pt-BR', {
-              style: 'currency',
-              currency: 'BRL',
-            }).format(client.honorarios_mensais)}
-          </span>
         ),
       },
     ],

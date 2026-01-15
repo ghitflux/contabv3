@@ -136,10 +136,14 @@ export interface ClientListItem {
   created_at: string;
   updated_at: string;
 
+  // Tax info (optional in list view)
+  codigo_simples?: string | null;
+
   // System access credentials (optional in list view)
   cpf_empresa?: string | null;
   senha_sistema?: string | null;
   senha_gov?: string | null;
+  senha_prefeitura?: string | null;
   login_seg_desemp?: string | null;
   senha_seg_desemp?: string | null;
   email_seg_desemp?: string | null;
