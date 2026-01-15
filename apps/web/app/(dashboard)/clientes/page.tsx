@@ -263,6 +263,7 @@ export default function ClientesPage() {
                     th: "px-2 py-2 sm:px-3 sm:py-2.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-default-500 whitespace-nowrap",
                     td: "px-2 py-2 sm:px-3 sm:py-2.5 text-[11px] sm:text-xs whitespace-nowrap",
                     table: "min-w-full",
+                    tr: "cursor-pointer hover:bg-default-100 transition-colors",
                   }}
                 >
                   <TableHeader>
@@ -290,17 +291,22 @@ export default function ClientesPage() {
                     </TableColumn>
                     <TableColumn>
                       <div className="flex items-center gap-1">
+                        CPF
+                      </div>
+                    </TableColumn>
+                    <TableColumn>
+                      <div className="flex items-center gap-1">
+                        CÓDIGO DO SIMPLES
+                      </div>
+                    </TableColumn>
+                    <TableColumn>
+                      <div className="flex items-center gap-1">
                         <Chip size="sm" variant="flat" color="secondary" className="text-[10px] sm:text-xs">SENHA GOV</Chip>
                       </div>
                     </TableColumn>
                     <TableColumn>
                       <div className="flex items-center gap-1">
-                        <Chip size="sm" variant="flat" color="success" className="text-[10px] sm:text-xs">LOGIN SEG. DESEMPREGO</Chip>
-                      </div>
-                    </TableColumn>
-                    <TableColumn>
-                      <div className="flex items-center gap-1">
-                        <Chip size="sm" variant="flat" color="warning" className="text-[10px] sm:text-xs">SENHA SEG. DESEMPREGO</Chip>
+                        <Chip size="sm" variant="flat" color="primary" className="text-[10px] sm:text-xs">SENHA PREFEITURA</Chip>
                       </div>
                     </TableColumn>
                     <TableColumn>
@@ -320,24 +326,12 @@ export default function ClientesPage() {
                         />
                       </div>
                     </TableColumn>
-                    <TableColumn>
-                      <div className="flex items-center gap-1">
-                        HONORÁRIOS
-                        <ColumnFilter
-                          type="range"
-                          value={honorariosRange}
-                          onChange={setHonorariosRange}
-                          min={0}
-                          max={10000}
-                        />
-                      </div>
-                    </TableColumn>
                     <TableColumn>STATUS</TableColumn>
                     <TableColumn>AÇÕES</TableColumn>
                   </TableHeader>
                   <TableBody emptyContent="Nenhum cliente encontrado">
                     {filteredClients.map((client) => (
-                      <TableRow key={client.id}>
+                      <TableRow key={client.id} onClick={() => handleViewDetails(client)}>
                         <TableCell>
                           <div>
                             <p className="font-medium">{client.razao_social}</p>
@@ -350,6 +344,20 @@ export default function ClientesPage() {
                           <code className="text-xs">{formatCNPJ(client.cnpj)}</code>
                         </TableCell>
                         <TableCell>
+                          {client.cpf_empresa ? (
+                            <SnippetCopy text={client.cpf_empresa} />
+                          ) : (
+                            <span className="text-default-400 text-xs">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {client.codigo_simples ? (
+                            <SnippetCopy text={client.codigo_simples} />
+                          ) : (
+                            <span className="text-default-400 text-xs">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
                           {client.senha_gov ? (
                             <SnippetCopy text={client.senha_gov} hideByDefault />
                           ) : (
@@ -357,15 +365,8 @@ export default function ClientesPage() {
                           )}
                         </TableCell>
                         <TableCell>
-                          {client.login_seg_desemp ? (
-                            <SnippetCopy text={client.login_seg_desemp} />
-                          ) : (
-                            <span className="text-default-400 text-xs">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {client.senha_seg_desemp ? (
-                            <SnippetCopy text={client.senha_seg_desemp} hideByDefault />
+                          {client.senha_prefeitura ? (
+                            <SnippetCopy text={client.senha_prefeitura} hideByDefault />
                           ) : (
                             <span className="text-default-400 text-xs">-</span>
                           )}
@@ -374,28 +375,14 @@ export default function ClientesPage() {
                           <span className="text-sm">{getRegimeLabel(client.regime_tributario)}</span>
                         </TableCell>
                         <TableCell>
-                          <span className="font-medium">
-                            {client.honorarios_mensais.toLocaleString('pt-BR', {
-                              style: 'currency',
-                              currency: 'BRL',
-                            })}
-                          </span>
-                        </TableCell>
-                        <TableCell>
                           <Chip size="sm" color={statusColors[client.status]} variant="flat">
                             {getStatusLabel(client.status)}
                           </Chip>
                         </TableCell>
                         <TableCell>
-                          <Button
-                            size="sm"
-                            variant="light"
-                            isIconOnly
-                            onPress={() => handleViewDetails(client)}
-                            aria-label="Ver detalhes"
-                          >
-                            <EyeIcon className="h-5 w-5" />
-                          </Button>
+                          <div className="flex items-center justify-center">
+                            <EyeIcon className="h-5 w-5 text-default-400" />
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
