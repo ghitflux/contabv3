@@ -19,18 +19,52 @@ import type {
   ClientFinancialSummary,
 } from "@/types/finance";
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_MONTH_REGEX = /^\d{4}-\d{2}$/;
+
+const normalizeDateParam = (value?: string) => {
+  if (!value) return undefined;
+  const datePart = value.split("T")[0];
+  if (!datePart || !ISO_DATE_REGEX.test(datePart)) return undefined;
+  const parsed = new Date(datePart);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  return datePart;
+};
+
+const normalizeReferenceMonth = (value?: string) => {
+  if (!value) return undefined;
+  if (ISO_MONTH_REGEX.test(value)) {
+    return `${value}-01`;
+  }
+  return normalizeDateParam(value);
+};
+
+const normalizePositiveInt = (value: number | undefined, fallback: number, max: number) => {
+  if (typeof value !== "number" || Number.isNaN(value)) return fallback;
+  const intValue = Math.trunc(value);
+  if (intValue <= 0) return fallback;
+  return Math.min(intValue, max);
+};
+
 export const financeApi = {
   async getTransactions(filters?: TransactionFilters): Promise<TransactionListResponse> {
     const params = new URLSearchParams();
 
-    if (filters?.client_id) params.append("client_id", filters.client_id);
-    if (filters?.status) params.append("status", filters.status);
-    if (filters?.reference_month) params.append("reference_month", filters.reference_month);
-    if (filters?.due_date_from) params.append("due_date_from", filters.due_date_from);
-    if (filters?.due_date_to) params.append("due_date_to", filters.due_date_to);
+    const clientId = filters?.client_id && UUID_REGEX.test(filters.client_id) ? filters.client_id : undefined;
+    const status = filters?.status || undefined;
+    const referenceMonth = normalizeReferenceMonth(filters?.reference_month);
+    const dueDateFrom = normalizeDateParam(filters?.due_date_from);
+    const dueDateTo = normalizeDateParam(filters?.due_date_to);
 
-    const size = filters?.size ?? 100;
-    const page = filters?.page ?? 1;
+    if (clientId) params.append("client_id", clientId);
+    if (status) params.append("status", status);
+    if (referenceMonth) params.append("reference_month", referenceMonth);
+    if (dueDateFrom) params.append("due_date_from", dueDateFrom);
+    if (dueDateTo) params.append("due_date_to", dueDateTo);
+
+    const size = normalizePositiveInt(filters?.size ?? 100, 100, 100);
+    const page = normalizePositiveInt(filters?.page ?? 1, 1, Number.MAX_SAFE_INTEGER);
     const skip = Math.max(0, (page - 1) * size);
 
     params.append("skip", skip.toString());

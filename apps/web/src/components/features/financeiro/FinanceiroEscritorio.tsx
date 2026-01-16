@@ -157,7 +157,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       due_date_from: startDate,
       due_date_to: endDate,
       page: 1,
-      size: 200,
+      size: 100,
     },
     autoFetch: true,
   });
@@ -265,6 +265,19 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     }
   }, [startDate, endDate, monthFilter]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleRefresh = () => {
+      refresh().catch((error) => {
+        console.error('Erro ao atualizar lançamentos do escritório', error);
+      });
+    };
+    window.addEventListener('finance:transactions-updated', handleRefresh);
+    return () => {
+      window.removeEventListener('finance:transactions-updated', handleRefresh);
+    };
+  }, [refresh]);
+
   const kpis: FinanceiroKpi[] = [
     {
       title: 'Receita do Período',
@@ -338,6 +351,9 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         notes,
       });
       await refresh();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
+      }
       setNewTransaction(buildDefaultTransaction());
       toast.success('Lançamento registrado com sucesso.');
     } catch (error) {

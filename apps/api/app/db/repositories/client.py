@@ -76,7 +76,7 @@ class ClientRepository(BaseRepository[Client]):
         regime_tributario: Optional[RegimeTributario] = None,
         tipo_empresa: Optional[TipoEmpresa] = None,
         skip: int = 0,
-        limit: int = 10,
+        limit: Optional[int] = 10,
     ) -> tuple[list[Client], int]:
         """
         List clients with filters and pagination.
@@ -86,7 +86,7 @@ class ClientRepository(BaseRepository[Client]):
             status: Filter by status
             starts_with: Filter by first letter of razao_social
             skip: Number of records to skip
-            limit: Maximum number of records to return
+            limit: Maximum number of records to return (None for no limit)
 
         Returns:
             Tuple of (clients list, total count)
@@ -125,13 +125,12 @@ class ClientRepository(BaseRepository[Client]):
         total = total_result.scalar_one()
 
         # Data query with pagination
-        data_query = (
-            select(Client)
-            .where(and_(*filters))
-            .order_by(Client.razao_social)
-            .offset(skip)
-            .limit(limit)
-        )
+        data_query = select(Client).where(and_(*filters)).order_by(Client.razao_social)
+
+        if skip:
+            data_query = data_query.offset(skip)
+        if limit is not None:
+            data_query = data_query.limit(limit)
         result = await self.session.execute(data_query)
         clients = list(result.scalars().all())
 

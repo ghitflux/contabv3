@@ -27,11 +27,14 @@ import {
   getPaymentStatusColor,
   getPaymentStatusLabel,
 } from "@/types/finance";
+import type { ClientListItem } from "@/types/client";
 import { DatePickerField } from "@/components/ui/DatePickerField";
 import { MonthYearPicker } from "@/components/ui/MonthYearPicker";
 import { endOfMonth, formatISO, startOfMonth, subMonths } from "date-fns";
 import { getContaByCodigo, formatConta } from "@/constants/planoDeContas";
 import { NovoLancamentoModal, type NovoLancamentoData } from "./NovoLancamentoModal";
+import { clientsApi } from "@/lib/api/endpoints/clients";
+import { toast } from "@/lib/toast";
 
 type LancamentoTipo = TransactionType;
 type LancamentoStatus = PaymentStatus;
@@ -57,6 +60,17 @@ export function FinanceiroLancamentos() {
   const [monthFilter, setMonthFilter] = useState(formatISO(new Date(), { representation: "date" }).slice(0, 7));
   const [startDate, setStartDate] = useState(formatISO(startOfMonth(new Date()), { representation: "date" }));
   const [endDate, setEndDate] = useState(formatISO(endOfMonth(new Date()), { representation: "date" }));
+  const [clients, setClients] = useState<ClientListItem[]>([]);
+
+  const transactionFilters = useMemo(
+    () => ({
+      due_date_from: startDate,
+      due_date_to: endDate,
+      page: 1,
+      size: 100,
+    }),
+    [startDate, endDate]
+  );
 
   const setRangeForMonth = (monthValue: string) => {
     if (!monthValue) return;
@@ -121,32 +135,51 @@ export function FinanceiroLancamentos() {
     }
   }, [startDate, endDate, monthFilter]);
 
+  // Carregar clientes imediatamente ao montar o componente
+  useEffect(() => {
+    let active = true;
+
+    (async () => {
+      try {
+        // Sempre tenta carregar a lista completa primeiro
+        const response = await clientsApi.list({ size: 0 });
+        if (active) setClients(response.items);
+      } catch (error) {
+        // Se falhar (ex: usuário é cliente), tenta carregar apenas o próprio cliente
+        try {
+          const client = await clientsApi.getMe();
+          if (active) setClients([client]);
+        } catch (innerError) {
+          console.error("Erro ao carregar clientes:", innerError);
+          toast.error("Não foi possível carregar os clientes.");
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   // Fetch transactions from API
-  const { transactions, isLoading, fetchTransactions } = useTransactions({
-    filters: {
-      due_date_from: startDate,
-      due_date_to: endDate,
-      page: 1,
-      size: 200,
-    },
+  const { transactions, isLoading, fetchTransactions, createTransaction } = useTransactions({
+    filters: transactionFilters,
     autoFetch: true,
   });
 
   const handleSaveTransaction = async (data: NovoLancamentoData) => {
     try {
-      // TODO: Implementar chamada à API para salvar transação
-      console.log("Salvando lançamento:", data);
-      alert("Lançamento salvo com sucesso!");
+      await createTransaction(data);
+      toast.success("Lançamento salvo com sucesso.");
 
       // Recarregar dados
-      await fetchTransactions({
-        due_date_from: startDate,
-        due_date_to: endDate,
-        page: 1,
-        size: 200,
-      });
+      await fetchTransactions(transactionFilters);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("finance:transactions-updated"));
+      }
     } catch (error) {
       console.error("Erro ao salvar lançamento:", error);
+      toast.error("Não foi possível salvar o lançamento.");
       throw error;
     }
   };
@@ -155,8 +188,8 @@ export function FinanceiroLancamentos() {
     return transactions.map((transaction) => ({
       id: transaction.id,
       data: transaction.paid_date || transaction.due_date,
-      descricao: transaction.description,
-      competencia: transaction.reference_month,
+      descricao: transaction.description ?? "",
+      competencia: transaction.reference_month ?? "",
       categoria: transaction.category ?? null,
       tipo: transaction.transaction_type,
       valor: transaction.amount,
@@ -166,15 +199,26 @@ export function FinanceiroLancamentos() {
     }));
   }, [transactions]);
 
+  const clientOptions = useMemo(
+    () =>
+      clients.map((client) => ({
+        id: client.id,
+        name: `${client.nome_fantasia || client.razao_social} — ${client.cnpj}`,
+      })),
+    [clients]
+  );
+
   const lancamentosFiltrados = useMemo(() => {
+    const query = busca.trim().toLowerCase();
     return lancamentos.filter((lancamento) => {
       const matchTipo = filtroTipo === "todos" || lancamento.tipo === filtroTipo;
       const matchStatus = filtroStatus === "todos" || lancamento.status === filtroStatus;
       const matchBusca =
-        busca.trim() === "" ||
-        lancamento.descricao.toLowerCase().includes(busca.toLowerCase()) ||
-        lancamento.competencia.toLowerCase().includes(busca.toLowerCase()) ||
-        lancamento.cliente?.toLowerCase().includes(busca.toLowerCase());
+        query === "" ||
+        lancamento.descricao.toLowerCase().includes(query) ||
+        lancamento.competencia.toLowerCase().includes(query) ||
+        (lancamento.categoria ?? "").toLowerCase().includes(query) ||
+        (lancamento.cliente ?? "").toLowerCase().includes(query);
 
       return matchTipo && matchStatus && matchBusca;
     });
@@ -345,38 +389,38 @@ export function FinanceiroLancamentos() {
                       {formatCompetencia(lancamento.competencia)}
                     </TableCell>
                     <TableCell className="text-sm">{lancamento.cliente ?? "-"}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      {lancamento.tipo === TransactionType.RECEITA ? (
-                        <>
-                          <ArrowUpRight className="h-4 w-4 text-green-600" />
-                          <span className="text-sm text-green-600">Receita</span>
-                        </>
-                      ) : (
-                        <>
-                          <ArrowDownRight className="h-4 w-4 text-red-600" />
-                          <span className="text-sm text-red-600">Despesa</span>
-                        </>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Chip color={getPaymentStatusColor(lancamento.status)} variant="flat" size="sm">
-                      {getPaymentStatusLabel(lancamento.status)}
-                    </Chip>
-                  </TableCell>
-                  <TableCell className="text-right font-semibold">
-                    <span className={lancamento.tipo === TransactionType.RECEITA ? "text-green-600" : "text-red-600"}>
-                      {formatCurrency(lancamento.valor)}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <Button variant="light" size="sm" isIconOnly aria-label="Mais ações">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              );
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        {lancamento.tipo === TransactionType.RECEITA ? (
+                          <>
+                            <ArrowUpRight className="h-4 w-4 text-green-600" />
+                            <span className="text-sm text-green-600">Receita</span>
+                          </>
+                        ) : (
+                          <>
+                            <ArrowDownRight className="h-4 w-4 text-red-600" />
+                            <span className="text-sm text-red-600">Despesa</span>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Chip color={getPaymentStatusColor(lancamento.status)} variant="flat" size="sm">
+                        {getPaymentStatusLabel(lancamento.status)}
+                      </Chip>
+                    </TableCell>
+                    <TableCell className="text-right font-semibold">
+                      <span className={lancamento.tipo === TransactionType.RECEITA ? "text-green-600" : "text-red-600"}>
+                        {formatCurrency(lancamento.valor)}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="light" size="sm" isIconOnly aria-label="Mais ações">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
               })}
             </TableBody>
           </Table>
@@ -386,7 +430,7 @@ export function FinanceiroLancamentos() {
           isOpen={isOpen}
           onOpenChange={onOpenChange}
           onSave={handleSaveTransaction}
-          clients={[]} // TODO: Fetch clients from API
+          clients={clientOptions}
         />
       </CardBody>
     </Card>

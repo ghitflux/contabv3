@@ -467,7 +467,13 @@ class ClientService:
         Returns:
             Paginated client list
         """
-        skip = (page - 1) * size
+        if size == 0:
+            skip = 0
+            limit = None
+            page = 1
+        else:
+            skip = (page - 1) * size
+            limit = size
 
         # Convert status string to enum
         status_enum = None
@@ -504,14 +510,17 @@ class ClientService:
             regime_tributario=regime_enum,
             tipo_empresa=tipo_enum,
             skip=skip,
-            limit=size,
+            limit=limit,
         )
 
         # Convert to list items
         items = [self._build_client_list_item(c) for c in clients]
 
         # Calculate pages
-        pages = (total + size - 1) // size if size > 0 else 0
+        if size == 0:
+            pages = 1 if total > 0 else 0
+        else:
+            pages = (total + size - 1) // size if size > 0 else 0
 
         return {
             "items": items,

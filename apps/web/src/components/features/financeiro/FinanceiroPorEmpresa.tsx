@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  Autocomplete,
+  AutocompleteItem,
   Button,
   Card,
   CardBody,
-  Select,
-  SelectItem,
   Table,
   TableBody,
   TableCell,
@@ -23,6 +23,7 @@ import { toast } from "@/lib/toast";
 import { DatePickerField } from "@/components/ui/DatePickerField";
 import { MonthYearPicker } from "@/components/ui/MonthYearPicker";
 import { endOfMonth, formatISO, startOfMonth, subMonths } from "date-fns";
+import { useAuth } from "@/hooks/auth/AuthContext";
 
 interface ClientTransaction {
   id: string;
@@ -34,7 +35,10 @@ interface ClientTransaction {
 }
 
 export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => void }) {
+  const { user } = useAuth();
+  const isAdminOrFunc = user?.role !== "cliente";
   const [clients, setClients] = useState<ClientListItem[]>([]);
+  const [clientSearch, setClientSearch] = useState("");
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [clientDetails, setClientDetails] = useState<Client | null>(null);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
@@ -43,11 +47,21 @@ export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => 
   const [endDate, setEndDate] = useState(formatISO(endOfMonth(new Date()), { representation: "date" }));
 
   useEffect(() => {
+    if (!user) return;
     let active = true;
     (async () => {
       try {
         setIsLoadingClients(true);
-        const response = await clientsApi.list({ size: 100 });
+        if (!isAdminOrFunc) {
+          const client = await clientsApi.getMe();
+          if (active) {
+            setClients([client]);
+            console.log("Clientes carregados:", 1);
+          }
+          return;
+        }
+
+        const response = await clientsApi.list({ size: 0 });
         if (active) {
           setClients(response.items);
           console.log("Clientes carregados:", response.items.length);
@@ -62,14 +76,29 @@ export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => 
     return () => {
       active = false;
     };
-  }, []);
+  }, [user, isAdminOrFunc]);
 
   useEffect(() => {
     if (!selectedClient && clients.length > 0 && clients[0]) {
       // Auto-select first client
       setSelectedClient(clients[0].id);
+      setClientSearch(`${clients[0].nome_fantasia || clients[0].razao_social} — ${clients[0].cnpj}`);
     }
   }, [clients]); // Remove selectedClient from dependencies to avoid loop
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleRefresh = () => {
+      if (!selectedClient) return;
+      refresh().catch((error) => {
+        console.error("Erro ao atualizar lançamentos", error);
+      });
+    };
+    window.addEventListener("finance:transactions-updated", handleRefresh);
+    return () => {
+      window.removeEventListener("finance:transactions-updated", handleRefresh);
+    };
+  }, [refresh, selectedClient]);
 
   const setRangeForMonth = (monthValue: string) => {
     if (!monthValue) return;
@@ -155,14 +184,19 @@ export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => 
     };
   }, [selectedClient]);
 
-  const { transactions } = useTransactions({
-    filters: {
+  const transactionFilters = useMemo(
+    () => ({
       client_id: selectedClient || undefined,
       due_date_from: startDate,
       due_date_to: endDate,
       page: 1,
-      size: 200,
-    },
+      size: 100,
+    }),
+    [selectedClient, startDate, endDate]
+  );
+
+  const { transactions, refresh } = useTransactions({
+    filters: transactionFilters,
     autoFetch: Boolean(selectedClient),
   });
 
@@ -180,6 +214,19 @@ export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => 
       })),
     [transactions]
   );
+
+  const filteredClients = useMemo(() => {
+    const query = clientSearch.trim().toLowerCase();
+    if (!query) return clients;
+
+    return clients.filter((client) => {
+      const fantasia = (client.nome_fantasia || "").toLowerCase();
+      const razao = client.razao_social.toLowerCase();
+      const cnpj = client.cnpj.toLowerCase();
+      const label = `${client.nome_fantasia || client.razao_social} — ${client.cnpj}`.toLowerCase();
+      return label.includes(query) || fantasia.includes(query) || razao.includes(query) || cnpj.includes(query);
+    });
+  }, [clients, clientSearch]);
 
   const receita = useMemo(
     () =>
@@ -221,6 +268,9 @@ export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => 
   );
 
   const selectedClientData = clientDetails ?? clients.find((client) => client.id === selectedClient);
+  const selectedClientLabel = selectedClientData
+    ? `${selectedClientData.nome_fantasia || selectedClientData.razao_social} — ${selectedClientData.cnpj}`
+    : "";
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat("pt-BR", {
@@ -235,28 +285,44 @@ export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => 
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Selecione a empresa</label>
-              <Select
-                selectedKeys={selectedClient ? new Set([selectedClient]) : new Set()}
-                onSelectionChange={(keys) => {
-                  const selectedKeys = Array.from(keys);
-                  const value = selectedKeys[0] as string | undefined;
-                  if (value) {
-                    setSelectedClient(value);
+              <Autocomplete
+                selectedKey={selectedClient || ""}
+                onSelectionChange={(key) => {
+                  if (!key) {
+                    setSelectedClient("");
+                    setClientSearch("");
+                    return;
+                  }
+                  const value = String(key);
+                  const selected = clients.find((client) => client.id === value);
+                  setSelectedClient(value);
+                  if (selected) {
+                    setClientSearch(`${selected.nome_fantasia || selected.razao_social} — ${selected.cnpj}`);
                   }
                 }}
-                placeholder={isLoadingClients ? "Carregando empresas..." : "Selecione uma empresa..."}
-                aria-label="Selecionar empresa"
+                placeholder={isLoadingClients ? "Carregando empresas..." : "Digite para buscar empresa..."}
+                aria-label="Buscar empresa"
                 className="max-w-[420px]"
                 isDisabled={isLoadingClients || clients.length === 0}
                 isLoading={isLoadingClients}
-                disallowEmptySelection
+                inputValue={clientSearch}
+                onInputChange={setClientSearch}
+                defaultInputValue={selectedClientLabel}
+                isClearable
+                allowsCustomValue={false}
+                listboxProps={{
+                  emptyContent: isLoadingClients ? "Carregando empresas..." : "Nenhuma empresa encontrada",
+                }}
               >
-                {clients.map((client) => (
-                  <SelectItem key={client.id} textValue={`${client.nome_fantasia || client.razao_social} — ${client.cnpj}`}>
+                {filteredClients.map((client) => (
+                  <AutocompleteItem
+                    key={client.id}
+                    textValue={`${client.nome_fantasia || client.razao_social} — ${client.cnpj}`}
+                  >
                     {(client.nome_fantasia || client.razao_social) ?? "-"} — {client.cnpj}
-                  </SelectItem>
+                  </AutocompleteItem>
                 ))}
-              </Select>
+              </Autocomplete>
             </div>
             <Button
               color="primary"

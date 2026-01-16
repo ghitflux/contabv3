@@ -119,7 +119,9 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
   // Auto-fetch on mount
   useEffect(() => {
     if (autoFetch) {
-      fetchTransactions();
+      fetchTransactions().catch((err) => {
+        console.error("Erro ao buscar lançamentos", err);
+      });
     }
   }, [autoFetch, fetchTransactions]);
 

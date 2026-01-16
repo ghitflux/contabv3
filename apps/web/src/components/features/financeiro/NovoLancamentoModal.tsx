@@ -17,12 +17,14 @@ import { DatePickerField } from "@/components/ui/DatePickerField";
 import { PlanoDeContasAutocomplete } from "@/components/ui/PlanoDeContasAutocomplete";
 import { TransactionType, PaymentStatus, PaymentMethod } from "@/types/finance";
 import { formatISO } from "date-fns";
+import { toast } from "@/lib/toast";
 
 interface NovoLancamentoModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (data: NovoLancamentoData) => void | Promise<void>;
   clients?: Array<{ id: string; name: string }>;
+  isLoadingClients?: boolean;
 }
 
 export interface NovoLancamentoData {
@@ -40,7 +42,7 @@ export interface NovoLancamentoData {
   invoice_number?: string | null;
 }
 
-export function NovoLancamentoModal({ isOpen, onOpenChange, onSave, clients = [] }: NovoLancamentoModalProps) {
+export function NovoLancamentoModal({ isOpen, onOpenChange, onSave, clients = [], isLoadingClients = false }: NovoLancamentoModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<Partial<NovoLancamentoData>>({
     transaction_type: TransactionType.RECEITA,
@@ -61,7 +63,7 @@ export function NovoLancamentoModal({ isOpen, onOpenChange, onSave, clients = []
         !formData.reference_month ||
         !formData.description
       ) {
-        alert("Preencha todos os campos obrigatórios");
+        toast.error("Preencha todos os campos obrigatórios.");
         return;
       }
 
@@ -77,7 +79,6 @@ export function NovoLancamentoModal({ isOpen, onOpenChange, onSave, clients = []
       });
     } catch (error) {
       console.error("Erro ao salvar lançamento:", error);
-      alert("Erro ao salvar lançamento. Tente novamente.");
     } finally {
       setIsSubmitting(false);
     }
@@ -115,7 +116,7 @@ export function NovoLancamentoModal({ isOpen, onOpenChange, onSave, clients = []
                 {/* Cliente */}
                 <Select
                   label="Cliente"
-                  placeholder="Selecione o cliente"
+                  placeholder={isLoadingClients ? "Carregando clientes..." : "Selecione o cliente"}
                   selectedKeys={formData.client_id ? [formData.client_id] : []}
                   onSelectionChange={(keys) => {
                     const value = Array.from(keys)[0] as string | undefined;
@@ -123,10 +124,11 @@ export function NovoLancamentoModal({ isOpen, onOpenChange, onSave, clients = []
                   }}
                   isRequired
                   variant="bordered"
+                  isLoading={isLoadingClients}
+                  isDisabled={isLoadingClients}
+                  items={clients}
                 >
-                  {clients.map((client) => (
-                    <SelectItem key={client.id}>{client.name}</SelectItem>
-                  ))}
+                  {(client) => <SelectItem key={client.id}>{client.name}</SelectItem>}
                 </Select>
 
                 {/* Categoria (Plano de Contas) */}

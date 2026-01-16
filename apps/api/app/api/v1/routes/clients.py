@@ -53,7 +53,7 @@ async def list_clients(
     regime_tributario: Optional[str] = Query(None, description="Filter by tax regime"),
     tipo_empresa: Optional[str] = Query(None, description="Filter by company type"),
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(10, ge=1, le=100, description="Page size"),
+    size: int = Query(10, ge=0, le=100, description="Page size (0 = all clients)"),
 ) -> dict:
     """
     List all clients with filters and pagination (admin or func only).

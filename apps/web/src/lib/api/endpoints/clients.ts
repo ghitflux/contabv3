@@ -28,8 +28,8 @@ export const clientsApi = {
       params.append("tipo_empresa", filters.tipo_empresa);
     }
     if (filters?.starts_with) params.append("starts_with", filters.starts_with);
-    if (filters?.page) params.append("page", filters.page.toString());
-    if (filters?.size) params.append("size", filters.size.toString());
+    if (typeof filters?.page === "number") params.append("page", filters.page.toString());
+    if (typeof filters?.size === "number") params.append("size", filters.size.toString());
 
     const queryString = params.toString();
     const endpoint = queryString ? `/clients?${queryString}` : "/clients";
