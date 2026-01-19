@@ -13,8 +13,9 @@ import {
   TableColumn,
   TableHeader,
   TableRow,
+  useDisclosure,
 } from "@/heroui";
-import { Download } from "lucide-react";
+import { Download, Plus } from "lucide-react";
 import { clientsApi } from "@/lib/api/endpoints/clients";
 import { useTransactions } from "@/hooks/useTransactions";
 import type { Client, ClientListItem } from "@/types/client";
@@ -24,6 +25,7 @@ import { DatePickerField } from "@/components/ui/DatePickerField";
 import { MonthYearPicker } from "@/components/ui/MonthYearPicker";
 import { endOfMonth, formatISO, startOfMonth, subMonths } from "date-fns";
 import { useAuth } from "@/hooks/auth/AuthContext";
+import { NovoLancamentoModal, type NovoLancamentoData } from "./NovoLancamentoModal";
 
 interface ClientTransaction {
   id: string;
@@ -34,8 +36,15 @@ interface ClientTransaction {
   payment: string;
 }
 
-export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => void }) {
+export function FinanceiroPorEmpresa({
+  onExportLivro,
+  onClientChange,
+}: {
+  onExportLivro?: (client?: ClientListItem | null) => void;
+  onClientChange?: (client: ClientListItem | null) => void;
+}) {
   const { user } = useAuth();
+  const { isOpen, onOpen, onOpenChange } = useDisclosure();
   const isAdminOrFunc = user?.role !== "cliente";
   const [clients, setClients] = useState<ClientListItem[]>([]);
   const [clientSearch, setClientSearch] = useState("");
@@ -85,20 +94,6 @@ export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => 
       setClientSearch(`${clients[0].nome_fantasia || clients[0].razao_social} — ${clients[0].cnpj}`);
     }
   }, [clients]); // Remove selectedClient from dependencies to avoid loop
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handleRefresh = () => {
-      if (!selectedClient) return;
-      refresh().catch((error) => {
-        console.error("Erro ao atualizar lançamentos", error);
-      });
-    };
-    window.addEventListener("finance:transactions-updated", handleRefresh);
-    return () => {
-      window.removeEventListener("finance:transactions-updated", handleRefresh);
-    };
-  }, [refresh, selectedClient]);
 
   const setRangeForMonth = (monthValue: string) => {
     if (!monthValue) return;
@@ -195,10 +190,48 @@ export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => 
     [selectedClient, startDate, endDate]
   );
 
-  const { transactions, refresh } = useTransactions({
+  const { transactions, refresh, createTransaction } = useTransactions({
     filters: transactionFilters,
     autoFetch: Boolean(selectedClient),
   });
+
+  const handleSaveTransaction = async (data: NovoLancamentoData) => {
+    if (!selectedClient) {
+      toast.error("Selecione uma empresa antes de lançar.");
+      return;
+    }
+
+    try {
+      await createTransaction({ ...data, client_id: selectedClient });
+      toast.success("Lançamento salvo com sucesso.");
+      await refresh();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("finance:transactions-updated"));
+      }
+    } catch (error) {
+      console.error("Erro ao salvar lançamento:", error);
+      const message =
+        typeof (error as { data?: { detail?: string } })?.data?.detail === "string"
+          ? (error as { data?: { detail?: string } }).data?.detail
+          : "Não foi possível salvar o lançamento.";
+      toast.error(message);
+      throw error;
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleRefresh = () => {
+      if (!selectedClient) return;
+      refresh().catch((error) => {
+        console.error("Erro ao atualizar lançamentos", error);
+      });
+    };
+    window.addEventListener("finance:transactions-updated", handleRefresh);
+    return () => {
+      window.removeEventListener("finance:transactions-updated", handleRefresh);
+    };
+  }, [refresh, selectedClient]);
 
   const displayTransactions = useMemo<ClientTransaction[]>(
     () =>
@@ -267,10 +300,24 @@ export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => 
     [transactions]
   );
 
-  const selectedClientData = clientDetails ?? clients.find((client) => client.id === selectedClient);
+  const selectedClientListItem = clients.find((client) => client.id === selectedClient) ?? null;
+  const selectedClientData = clientDetails ?? selectedClientListItem;
   const selectedClientLabel = selectedClientData
     ? `${selectedClientData.nome_fantasia || selectedClientData.razao_social} — ${selectedClientData.cnpj}`
     : "";
+  const selectedClientOption = selectedClientData
+    ? [
+        {
+          id: selectedClientData.id,
+          name: `${selectedClientData.nome_fantasia || selectedClientData.razao_social} — ${selectedClientData.cnpj}`,
+        },
+      ]
+    : [];
+
+  useEffect(() => {
+    if (!onClientChange) return;
+    onClientChange(selectedClientListItem);
+  }, [onClientChange, selectedClientListItem]);
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat("pt-BR", {
@@ -324,15 +371,26 @@ export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => 
                 ))}
               </Autocomplete>
             </div>
-            <Button
-              color="primary"
-              variant="flat"
-              startContent={<Download className="h-4 w-4" />}
-              onPress={onExportLivro}
-              isDisabled={!onExportLivro}
-            >
-              Exportar Livro Caixa
-            </Button>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+              <Button
+                color="primary"
+                variant="solid"
+                startContent={<Plus className="h-4 w-4" />}
+                onPress={onOpen}
+                isDisabled={!selectedClient || isLoadingClients}
+              >
+                Novo Lançamento
+              </Button>
+              <Button
+                color="primary"
+                variant="flat"
+                startContent={<Download className="h-4 w-4" />}
+                onPress={() => onExportLivro?.(selectedClientListItem)}
+                isDisabled={!onExportLivro}
+              >
+                Exportar Livro Caixa
+              </Button>
+            </div>
           </div>
           <div className="flex flex-col md:flex-row md:items-end gap-4">
             <div className="space-y-2">
@@ -461,6 +519,16 @@ export function FinanceiroPorEmpresa({ onExportLivro }: { onExportLivro?: () => 
           </Table>
         </CardBody>
       </Card>
+
+      <NovoLancamentoModal
+        isOpen={isOpen}
+        onOpenChange={onOpenChange}
+        onSave={handleSaveTransaction}
+        clients={selectedClientOption}
+        isLoadingClients={isLoadingClients}
+        defaultClientId={selectedClient || null}
+        isClientLocked={Boolean(selectedClient)}
+      />
     </div>
   );
 }

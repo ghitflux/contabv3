@@ -336,61 +336,61 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
                       <h3 className="text-lg font-semibold mb-3">Credenciais de Acesso</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                         {client.cpf_empresa && (
-                          <div className="bg-primary-50 dark:bg-primary-950 p-3 rounded-lg">
+                          <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800/60 p-3 rounded-lg">
                             <p className="text-xs text-primary-600 dark:text-primary-400 mb-1 font-medium">CPF da Empresa</p>
                             <SnippetCopy text={client.cpf_empresa} />
                           </div>
                         )}
                         {client.senha_sistema && (
-                          <div className="bg-primary-50 dark:bg-primary-950 p-3 rounded-lg">
+                          <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800/60 p-3 rounded-lg">
                             <p className="text-xs text-primary-600 dark:text-primary-400 mb-1 font-medium">Senha de Acesso</p>
                             <SnippetCopy text={client.senha_sistema} hideByDefault />
                           </div>
                         )}
                         {client.senha_gov && (
-                          <div className="bg-secondary-50 dark:bg-secondary-950 p-3 rounded-lg">
+                          <div className="bg-secondary-50 dark:bg-secondary-900/20 border border-secondary-200 dark:border-secondary-800/60 p-3 rounded-lg">
                             <p className="text-xs text-secondary-600 dark:text-secondary-400 mb-1 font-medium">Senha GOV.BR</p>
                             <SnippetCopy text={client.senha_gov} hideByDefault />
                           </div>
                         )}
                         {client.senha_prefeitura && (
-                          <div className="bg-secondary-50 dark:bg-secondary-950 p-3 rounded-lg">
+                          <div className="bg-secondary-50 dark:bg-secondary-900/20 border border-secondary-200 dark:border-secondary-800/60 p-3 rounded-lg">
                             <p className="text-xs text-secondary-600 dark:text-secondary-400 mb-1 font-medium">Senha da Prefeitura</p>
                             <SnippetCopy text={client.senha_prefeitura} hideByDefault />
                           </div>
                         )}
                         {client.login_seg_desemp && (
-                          <div className="bg-success-50 dark:bg-success-950 p-3 rounded-lg">
+                          <div className="bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800/60 p-3 rounded-lg">
                             <p className="text-xs text-success-600 dark:text-success-400 mb-1 font-medium">Login Seguro Desemprego</p>
                             <SnippetCopy text={client.login_seg_desemp} />
                           </div>
                         )}
                         {client.senha_seg_desemp && (
-                          <div className="bg-success-50 dark:bg-success-950 p-3 rounded-lg">
+                          <div className="bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800/60 p-3 rounded-lg">
                             <p className="text-xs text-success-600 dark:text-success-400 mb-1 font-medium">Senha Seguro Desemprego</p>
                             <SnippetCopy text={client.senha_seg_desemp} hideByDefault />
                           </div>
                         )}
                         {client.email_seg_desemp && (
-                          <div className="bg-success-50 dark:bg-success-950 p-3 rounded-lg">
+                          <div className="bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800/60 p-3 rounded-lg">
                             <p className="text-xs text-success-600 dark:text-success-400 mb-1 font-medium">E-mail Seguro Desemprego</p>
                             <SnippetCopy text={client.email_seg_desemp} />
                           </div>
                         )}
                         {client.senha_nfse && (
-                          <div className="bg-warning-50 dark:bg-warning-950 p-3 rounded-lg">
+                          <div className="bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-800/60 p-3 rounded-lg">
                             <p className="text-xs text-warning-600 dark:text-warning-400 mb-1 font-medium">Senha NFS-e</p>
                             <SnippetCopy text={client.senha_nfse} hideByDefault />
                           </div>
                         )}
                         {client.senha_certificado_digital && (
-                          <div className="bg-danger-50 dark:bg-danger-950 p-3 rounded-lg">
+                          <div className="bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800/60 p-3 rounded-lg">
                             <p className="text-xs text-danger-600 dark:text-danger-400 mb-1 font-medium">Senha Certificado Digital</p>
                             <SnippetCopy text={client.senha_certificado_digital} hideByDefault />
                           </div>
                         )}
                         {client.senha_gcw_resp && (
-                          <div className="bg-danger-50 dark:bg-danger-950 p-3 rounded-lg">
+                          <div className="bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800/60 p-3 rounded-lg">
                             <p className="text-xs text-danger-600 dark:text-danger-400 mb-1 font-medium">Senha GCW Responsável</p>
                             <SnippetCopy text={client.senha_gcw_resp} hideByDefault />
                           </div>

@@ -32,6 +32,7 @@ export function FinanceiroModule() {
   const [clientSearch, setClientSearch] = useState("");
   const [clientOptions, setClientOptions] = useState<ClientListItem[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [selectedClientForExport, setSelectedClientForExport] = useState<ClientListItem | null>(null);
   const [isOfficeExport, setIsOfficeExport] = useState(true);
 
   useEffect(() => {
@@ -40,7 +41,13 @@ export function FinanceiroModule() {
     (async () => {
       try {
         const res = await clientsApi.list({ query: clientSearch || undefined, size: 20 });
-        if (active) setClientOptions(res.items);
+        if (active) {
+          setClientOptions((prev) => {
+            if (!selectedClientForExport) return res.items;
+            const exists = res.items.some((client) => client.id === selectedClientForExport.id);
+            return exists ? res.items : [selectedClientForExport, ...res.items];
+          });
+        }
       } catch (error) {
         console.error("Erro ao buscar clientes para exportação", error);
       }
@@ -48,13 +55,27 @@ export function FinanceiroModule() {
     return () => {
       active = false;
     };
-  }, [clientSearch, isAdminOrFunc, isExportOpen]);
+  }, [clientSearch, isAdminOrFunc, isExportOpen, selectedClientForExport]);
 
-  const openExportModal = (scope: ExportScope) => {
+  const openExportModal = (scope: ExportScope, client?: ClientListItem | null) => {
     const office = scope === "office";
+    const resolvedClient = office ? null : client ?? selectedClientForExport;
     setIsOfficeExport(office);
     if (office) {
       setSelectedClientId(null);
+      setClientSearch("");
+    } else if (resolvedClient) {
+      setSelectedClientForExport(resolvedClient);
+      setSelectedClientId(resolvedClient.id);
+      setClientSearch(resolvedClient.nome_fantasia || resolvedClient.razao_social);
+      setClientOptions((prev) => {
+        const exists = prev.some((item) => item.id === resolvedClient.id);
+        return exists ? prev : [resolvedClient, ...prev];
+      });
+    } else {
+      setSelectedClientForExport(null);
+      setSelectedClientId(null);
+      setClientSearch("");
     }
     setIsExportOpen(true);
   };
@@ -135,7 +156,12 @@ export function FinanceiroModule() {
           <Button
             variant="flat"
             startContent={<Download className="h-4 w-4" />}
-            onPress={() => openExportModal(activeTab === "por-empresa" ? "client" : "office")}
+            onPress={() =>
+              openExportModal(
+                activeTab === "por-empresa" ? "client" : "office",
+                activeTab === "por-empresa" ? selectedClientForExport : null
+              )
+            }
           >
             Exportar Livro Caixa
           </Button>
@@ -168,7 +194,10 @@ export function FinanceiroModule() {
             variants={fadeIn}
             className="mt-6"
           >
-            <FinanceiroPorEmpresa onExportLivro={() => openExportModal("client")} />
+            <FinanceiroPorEmpresa
+              onExportLivro={(client) => openExportModal("client", client ?? null)}
+              onClientChange={setSelectedClientForExport}
+            />
           </motion.div>
         </Tab>
         <Tab key="lancamentos" title="Lançamentos">

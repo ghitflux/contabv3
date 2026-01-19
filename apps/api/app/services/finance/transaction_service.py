@@ -44,17 +44,6 @@ class TransactionService:
         if not client:
             raise ValueError(f"Client with ID {data.client_id} not found")
 
-        # Check if transaction already exists for this client/month (to avoid duplicates)
-        existing = await self.transaction_repo.get_by_client_and_reference_month(
-            client_id=data.client_id,
-            reference_month=data.reference_month,
-        )
-        if existing:
-            raise ValueError(
-                f"Transaction for client {data.client_id} and month "
-                f"{data.reference_month.strftime('%Y-%m')} already exists"
-            )
-
         # Create transaction
         transaction = FinancialTransaction(
             client_id=data.client_id,
@@ -67,6 +56,7 @@ class TransactionService:
             paid_date=data.paid_date,
             reference_month=data.reference_month,
             description=data.description,
+            category=data.category,
             notes=data.notes,
             invoice_number=data.invoice_number,
             created_by_id=created_by_id,
@@ -113,6 +103,8 @@ class TransactionService:
             transaction.paid_date = data.paid_date
         if data.description is not None:
             transaction.description = data.description
+        if data.category is not None:
+            transaction.category = data.category
         if data.notes is not None:
             transaction.notes = data.notes
         if data.invoice_number is not None:

@@ -179,7 +179,11 @@ export function FinanceiroLancamentos() {
       }
     } catch (error) {
       console.error("Erro ao salvar lançamento:", error);
-      toast.error("Não foi possível salvar o lançamento.");
+      const message =
+        typeof (error as { data?: { detail?: string } })?.data?.detail === "string"
+          ? (error as { data?: { detail?: string } }).data?.detail
+          : "Não foi possível salvar o lançamento.";
+      toast.error(message);
       throw error;
     }
   };

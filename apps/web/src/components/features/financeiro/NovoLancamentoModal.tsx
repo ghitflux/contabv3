@@ -12,7 +12,7 @@ import {
   SelectItem,
   Textarea,
 } from "@/heroui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DatePickerField } from "@/components/ui/DatePickerField";
 import { PlanoDeContasAutocomplete } from "@/components/ui/PlanoDeContasAutocomplete";
 import { TransactionType, PaymentStatus, PaymentMethod } from "@/types/finance";
@@ -25,6 +25,8 @@ interface NovoLancamentoModalProps {
   onSave: (data: NovoLancamentoData) => void | Promise<void>;
   clients?: Array<{ id: string; name: string }>;
   isLoadingClients?: boolean;
+  defaultClientId?: string | null;
+  isClientLocked?: boolean;
 }
 
 export interface NovoLancamentoData {
@@ -42,7 +44,15 @@ export interface NovoLancamentoData {
   invoice_number?: string | null;
 }
 
-export function NovoLancamentoModal({ isOpen, onOpenChange, onSave, clients = [], isLoadingClients = false }: NovoLancamentoModalProps) {
+export function NovoLancamentoModal({
+  isOpen,
+  onOpenChange,
+  onSave,
+  clients = [],
+  isLoadingClients = false,
+  defaultClientId = null,
+  isClientLocked = false,
+}: NovoLancamentoModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<Partial<NovoLancamentoData>>({
     transaction_type: TransactionType.RECEITA,
@@ -50,6 +60,14 @@ export function NovoLancamentoModal({ isOpen, onOpenChange, onSave, clients = []
     due_date: formatISO(new Date(), { representation: "date" }),
     reference_month: formatISO(new Date(), { representation: "date" }).slice(0, 7) + "-01",
   });
+
+  useEffect(() => {
+    if (!isOpen || !defaultClientId) return;
+    setFormData((prev) => {
+      if (prev.client_id === defaultClientId) return prev;
+      return { ...prev, client_id: defaultClientId };
+    });
+  }, [defaultClientId, isOpen]);
 
   const handleSubmit = async () => {
     try {
@@ -125,7 +143,7 @@ export function NovoLancamentoModal({ isOpen, onOpenChange, onSave, clients = []
                   isRequired
                   variant="bordered"
                   isLoading={isLoadingClients}
-                  isDisabled={isLoadingClients}
+                  isDisabled={isLoadingClients || isClientLocked}
                   items={clients}
                 >
                   {(client) => <SelectItem key={client.id}>{client.name}</SelectItem>}
@@ -184,7 +202,7 @@ export function NovoLancamentoModal({ isOpen, onOpenChange, onSave, clients = []
                     type="month"
                     value={formData.reference_month?.slice(0, 7) || ""}
                     onValueChange={(value) =>
-                      setFormData((prev) => ({ ...prev, reference_month: value + "-01" }))
+                      setFormData((prev) => ({ ...prev, reference_month: value ? `${value}-01` : "" }))
                     }
                     isRequired
                     variant="bordered"

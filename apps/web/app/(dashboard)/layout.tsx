@@ -26,14 +26,15 @@ import {
   UsersIcon,
 } from '@/lib/icons';
 import { UserRole } from '@/types/user';
-import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useCallback, useState } from 'react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const pathname = usePathname();
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user, logout } = useAuth();
 
   const navigation = [
     ...(user?.role === UserRole.CLIENTE
@@ -57,6 +58,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       ? [{ name: 'Configurações', href: '/configuracoes', icon: SettingsIcon }]
       : []),
   ];
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await logout();
+    } finally {
+      router.replace('/login');
+    }
+  }, [logout, router]);
 
   return (
     <div className="flex h-screen bg-background">
@@ -125,9 +134,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             );
           })}
         </nav>
-        <div className={`border-t border-divider ${isCollapsed ? 'px-4' : 'px-6'} py-4`}>
-          <p className="text-xs text-default-400">Marco 1 - Em Desenvolvimento</p>
-        </div>
       </aside>
 
       {/* Main Content */}
@@ -157,7 +163,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <DropdownTrigger>
                 <Avatar as="button" className="cursor-pointer" name="Admin" size="sm" />
               </DropdownTrigger>
-              <DropdownMenu aria-label="Profile Actions">
+              <DropdownMenu
+                aria-label="Profile Actions"
+                onAction={(key) => {
+                  if (key === 'logout') {
+                    void handleLogout();
+                  }
+                }}
+              >
                 <DropdownItem key="profile" className="gap-2">
                   <p className="font-semibold">{user?.name || 'Usuário'}</p>
                   <p className="text-sm">{user?.email || 'user@example.com'}</p>

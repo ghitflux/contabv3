@@ -64,7 +64,7 @@ export default function ClientesPage() {
       const status = (err as any)?.status;
       if (status === 401) {
         toast.error('Sessão expirada. Faça login novamente.');
-        router.replace('/auth/login');
+        router.replace('/login');
         return;
       }
       toast.error('Não foi possível carregar a lista de clientes.');

@@ -86,6 +86,7 @@ async def list_transactions(
             "paid_date": transaction.paid_date,
             "reference_month": transaction.reference_month,
             "description": transaction.description,
+            "category": transaction.category,
             "notes": transaction.notes,
             "invoice_number": transaction.invoice_number,
             "receipt_url": transaction.receipt_url,
