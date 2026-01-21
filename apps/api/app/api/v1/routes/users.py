@@ -37,11 +37,11 @@ async def list_users(
     limit: Optional[int] = Query(None, ge=1, le=200, description="Limit items (overrides size)"),
 ) -> dict:
     """
-    List users with pagination and filters (admin only).
+    List users with pagination and filters (admin/func only).
 
     Args:
         db: Database session
-        _: Current admin user
+        _: Current admin/func user
         search: Search term for name or email
         role: Filter by role
         is_active: Filter by active status
@@ -103,12 +103,12 @@ async def create_user(
     _: User = Depends(require_admin()),
 ) -> UserResponse:
     """
-    Create a new user (admin only).
+    Create a new user (admin/func only).
 
     Args:
         user_data: User creation data
         db: Database session
-        _: Current user (must be admin)
+        _: Current user (must be admin/func)
 
     Returns:
         UserResponse: Created user data
@@ -185,7 +185,7 @@ async def update_user(
     current_user: User = Depends(get_current_active_user),
 ) -> UserResponse:
     """
-    Update user (admin or self only).
+    Update user (admin/func or self only).
 
     Args:
         user_id: User UUID
@@ -209,8 +209,8 @@ async def update_user(
             detail="User not found"
         )
 
-    # Check authorization (admin or self)
-    is_admin = current_user.role == UserRole.ADMIN
+    # Check authorization (admin/func or self)
+    is_admin = current_user.role in [UserRole.ADMIN, UserRole.FUNC]
     is_self = current_user.id == user_id
 
     if not (is_admin or is_self):
@@ -219,12 +219,12 @@ async def update_user(
             detail="Not authorized to update this user"
         )
 
-    # If not admin, can only update own name and email
+    # If not admin/func, can only update own name and email
     if not is_admin:
         if user_data.role is not None or user_data.is_active is not None or user_data.is_verified is not None:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only admin can update role, active status, or verified status"
+                detail="Only admin/func can update role, active status, or verified status"
             )
 
     # Update fields
@@ -300,14 +300,14 @@ async def delete_user(
     _: User = Depends(require_admin()),
 ) -> ResponseSchema:
     """
-    Delete user (admin only).
+    Delete user (admin/func only).
 
     Note: This is a hard delete. Consider implementing soft delete in production.
 
     Args:
         user_id: User UUID
         db: Database session
-        _: Current user (must be admin)
+        _: Current user (must be admin/func)
 
     Returns:
         ResponseSchema: Success message

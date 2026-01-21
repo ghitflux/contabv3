@@ -5,7 +5,10 @@ WebSocket routes for real-time communication.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+
+from app.api.v1.deps import get_current_active_user
+from app.db.models.user import User, UserRole
 
 from app.core.security import decode_token
 from app.websockets.events import WebSocketEventBuilder
@@ -114,14 +117,22 @@ async def websocket_endpoint(
 
 
 @router.get("/ws/stats")
-async def websocket_stats():
+async def websocket_stats(
+    current_user: User = Depends(get_current_active_user),
+):
     """
     Get WebSocket connection statistics.
-    Requires admin role (should add dependency).
+    Requires admin/func role.
 
     Returns:
         Dict with connection stats
     """
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized",
+        )
+
     return {
         "stats": manager.get_connection_stats(),
         "connected_users": len(manager.get_connected_users()),

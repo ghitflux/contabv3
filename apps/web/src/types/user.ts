@@ -52,10 +52,10 @@ export function hasRole(user: User | null, roles: UserRole[]): boolean {
 }
 
 /**
- * Type guard to check if user is admin.
+ * Type guard to check if user is admin or funcionario.
  */
 export function isAdmin(user: User | null): boolean {
-  return hasRole(user, [UserRole.ADMIN]);
+  return hasRole(user, [UserRole.ADMIN, UserRole.FUNC]);
 }
 
 /**

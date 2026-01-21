@@ -22,14 +22,14 @@ export function Can({ roles, children, fallback = null }: CanProps) {
 }
 
 /**
- * Component to show content only to admin users.
+ * Component to show content only to admin or func users.
  */
 export function AdminOnly({
   children,
   fallback,
 }: Omit<CanProps, "roles">) {
   return (
-    <Can roles={[UserRole.ADMIN]} fallback={fallback}>
+    <Can roles={[UserRole.ADMIN, UserRole.FUNC]} fallback={fallback}>
       {children}
     </Can>
   );

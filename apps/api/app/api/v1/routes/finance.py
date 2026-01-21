@@ -4,11 +4,12 @@ from datetime import date
 from typing import Annotated, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_active_user, get_db
 from app.db.models.finance import PaymentStatus
+from app.db.models.audit import AuditLog
 from app.db.models.user import User, UserRole
 from app.db.repositories.client import ClientRepository
 from app.db.repositories.transaction import TransactionRepository
@@ -137,14 +138,25 @@ async def get_transaction(
 async def create_transaction(
     data: TransactionCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
     current_user: Annotated[User, Depends(get_current_active_user)],
 ):
     """
     Create a new transaction.
 
-    Admin/Func only.
+    Admin/Func can create for any client.
+    Clients can create for their own client.
     """
-    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+    if current_user.role == UserRole.CLIENTE:
+        client_repo = ClientRepository(db)
+        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
+        if not client:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Client profile not found",
+            )
+        data = data.model_copy(update={"client_id": client.id})
+    elif current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin/func can create transactions",
@@ -157,6 +169,30 @@ async def create_transaction(
             data=data,
             created_by_id=current_user.id,
         )
+        if current_user.role == UserRole.CLIENTE:
+            audit_log = AuditLog(
+                user_id=current_user.id,
+                action="transaction.create",
+                entity="financial_transaction",
+                entity_id=str(transaction.id),
+                payload={
+                    "client_id": str(transaction.client_id),
+                    "summary": (
+                        f"Lançamento criado: {transaction.description} - "
+                        f"R$ {transaction.amount:.2f}"
+                    ),
+                    "description": transaction.description,
+                    "amount": f"{transaction.amount:.2f}",
+                    "transaction_type": transaction.transaction_type.value,
+                    "payment_status": transaction.payment_status.value,
+                    "payment_method": transaction.payment_method.value if transaction.payment_method else None,
+                    "due_date": str(transaction.due_date),
+                    "reference_month": str(transaction.reference_month),
+                },
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+            )
+            db.add(audit_log)
         await db.commit()
         return transaction
     except ValueError as e:
@@ -279,12 +315,12 @@ async def delete_transaction(
     """
     Delete a transaction (soft delete).
 
-    Admin only.
+    Admin/Func only.
     """
-    if current_user.role != UserRole.ADMIN:
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin can delete transactions",
+            detail="Only admin/func can delete transactions",
         )
 
     service = TransactionService(db)

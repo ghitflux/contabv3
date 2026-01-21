@@ -238,8 +238,8 @@ export default function ClientesPage() {
         </Button>
       </div>
 
-      {/* KPIs - Only for Admin */}
-      <Can roles={[UserRole.ADMIN]}>
+      {/* KPIs - Only for Admin/Func */}
+      <Can roles={[UserRole.ADMIN, UserRole.FUNC]}>
         <ClientKPIs stats={stats} isLoading={isLoading} />
       </Can>
 

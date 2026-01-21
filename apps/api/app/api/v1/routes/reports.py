@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.deps import get_current_active_user, get_db
 from app.db.models.report import ReportFormat, ReportType, ReportType as DBReportType
 from app.db.models.user import User, UserRole
+from app.db.repositories.client import ClientRepository
 from app.db.repositories.report import ReportRepository
 from app.schemas.report import (
     ReportCustomization,
@@ -39,6 +40,30 @@ from app.services.report.obligation_report import ObligationReportService
 from app.services.report.revenue_by_client_report import RevenueByClientReportService
 
 router = APIRouter()
+
+
+async def _enforce_report_access(
+    db: AsyncSession,
+    current_user: User,
+    report_type: ReportType,
+    filters: ReportFilterRequest,
+) -> None:
+    report_type_value = report_type.value if hasattr(report_type, "value") else str(report_type)
+    if report_type_value == ReportType.AUDITORIA.value and current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access audit reports",
+        )
+
+    if current_user.role == UserRole.CLIENTE:
+        client_repo = ClientRepository(db)
+        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
+        if not client:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Client profile not found",
+            )
+        filters.client_ids = [client.id]
 
 
 # Report type factory
@@ -166,7 +191,7 @@ async def list_report_types():
             "category": "operacional",
             "supports_customization": True,
             "supported_charts": ["table", "bar"],
-            "required_permissions": ["admin"],
+            "required_permissions": ["admin", "func"],
         },
     ]
 
@@ -269,14 +294,7 @@ async def preview_report(
     request: ReportPreviewRequest,
 ):
     """Generate a preview of the report."""
-    # Apply RBAC filter for clients
-    if current_user.role == UserRole.CLIENTE:
-        from app.db.repositories.client import ClientRepository
-
-        client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
-        if client:
-            request.filters.client_ids = [client.id]
+    await _enforce_report_access(db, current_user, request.report_type, request.filters)
 
     # Get appropriate service
     service = get_report_service(request.report_type, db)
@@ -301,14 +319,7 @@ async def export_report(
     request: ReportExportRequest,
 ):
     """Export report in the specified format."""
-    # Apply RBAC filter for clients
-    if current_user.role == UserRole.CLIENTE:
-        from app.db.repositories.client import ClientRepository
-
-        client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
-        if client:
-            request.filters.client_ids = [client.id]
+    await _enforce_report_access(db, current_user, request.report_type, request.filters)
 
     # Get appropriate service
     service = get_report_service(request.report_type, db)
@@ -382,7 +393,7 @@ async def download_report(
         )
 
     # Check ownership
-    if history.user_id != current_user.id and current_user.role != UserRole.ADMIN:
+    if history.user_id != current_user.id and current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
         )

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_active_user, get_db
 from app.db.models.activity import Activity, ActivityStatus
-from app.db.models.user import User
+from app.db.models.user import User, UserRole
 from app.db.repositories.activity import ActivityRepository
 from app.schemas.activity import (
     ActivityCreate,
@@ -62,6 +62,9 @@ async def list_activities(
                 detail=f"Invalid status: {status_filter}",
             )
 
+    if current_user.role == UserRole.CLIENTE:
+        assigned_to_id = current_user.id
+
     activities, total = await repo.list(
         skip=skip,
         limit=limit,
@@ -99,6 +102,12 @@ async def get_activity(
             detail="Activity not found",
         )
 
+    if current_user.role == UserRole.CLIENTE and activity.assigned_to_id != current_user.id:
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this activity",
+        )
+
     return _build_activity_response(activity)
 
 
@@ -113,13 +122,17 @@ async def create_activity(
 
     # Convert labels list to comma-separated string
     labels_str = ",".join(activity_data.labels) if activity_data.labels else None
+    assigned_to_id = activity_data.assigned_to_id
+
+    if current_user.role == UserRole.CLIENTE:
+        assigned_to_id = current_user.id
 
     activity = Activity(
         title=activity_data.title,
         description=activity_data.description,
         status=ActivityStatus(activity_data.status),
         priority=ActivityPriority(activity_data.priority),
-        assigned_to_id=activity_data.assigned_to_id,
+        assigned_to_id=assigned_to_id,
         due_date=activity_data.due_date,
         labels=labels_str,
         recurrence=ActivityRecurrence(activity_data.recurrence) if activity_data.recurrence else None,
@@ -152,8 +165,21 @@ async def update_activity(
             detail="Activity not found",
         )
 
+    if current_user.role == UserRole.CLIENTE and activity.assigned_to_id != current_user.id:
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this activity",
+        )
+
     # Update fields
     update_data = activity_data.model_dump(exclude_unset=True)
+
+    if current_user.role == UserRole.CLIENTE:
+        if "assigned_to_id" in update_data and update_data["assigned_to_id"] != current_user.id:
+            raise HTTPException(
+                status_code=http_status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to reassign this activity",
+            )
 
     if "status" in update_data:
         activity.status = ActivityStatus(update_data["status"])
@@ -187,6 +213,12 @@ async def delete_activity(
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Activity not found",
+        )
+
+    if current_user.role == UserRole.CLIENTE and activity.assigned_to_id != current_user.id:
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to delete this activity",
         )
 
     await repo.delete(activity_id)

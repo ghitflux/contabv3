@@ -6,17 +6,17 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 export default function LoginPage() {
-  const { login, isAuthenticated, isLoading, error } = useAuth();
+  const { login, isAuthenticated, isLoading, error, user } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      router.replace('/clientes');
+    if (!isLoading && isAuthenticated && user) {
+      router.replace('/financeiro');
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isLoading, router, user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,8 +24,6 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      // Redirect to clients page on success
-      router.push('/clientes');
     } catch (err) {
       setLoginError('Email ou senha incorretos');
       console.error('Login error:', err);
@@ -81,9 +79,6 @@ export default function LoginPage() {
               {isLoading ? 'Entrando...' : 'Entrar'}
             </Button>
           </form>
-          <div className="mt-6 text-center text-sm text-default-400">
-            Credenciais de teste: admin@contabil.com / admin123
-          </div>
         </CardBody>
       </Card>
     </div>

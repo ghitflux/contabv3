@@ -135,6 +135,7 @@ class Client(Base, UUIDMixin, TimestampMixin):
     # Relationships
     obligations = relationship("Obligation", back_populates="client", cascade="all, delete-orphan")
     transactions = relationship("FinancialTransaction", back_populates="client", cascade="all, delete-orphan")
+    bank_accounts = relationship("BankAccount", back_populates="client", cascade="all, delete-orphan")
     licenses = relationship("License", back_populates="client", cascade="all, delete-orphan")
     cnaes = relationship("Cnae", back_populates="client", cascade="all, delete-orphan")
     municipal_registrations = relationship("MunicipalRegistration", back_populates="client", cascade="all, delete-orphan")

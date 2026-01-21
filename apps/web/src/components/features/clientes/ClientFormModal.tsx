@@ -520,6 +520,35 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
                       )}
                     />
                     <Controller
+                      name="senha_prefeitura"
+                      control={control}
+                      render={({ field }) => (
+                        <Input
+                          {...field}
+                          value={field.value || ""}
+                          type={isFieldVisible("senha_prefeitura") ? "text" : "password"}
+                          label="Senha da Prefeitura"
+                          placeholder="Digite a senha da prefeitura"
+                          endContent={
+                            <Button
+                              type="button"
+                              variant="light"
+                              size="sm"
+                              isIconOnly
+                              onPress={() => toggleFieldVisibility("senha_prefeitura")}
+                              aria-label={isFieldVisible("senha_prefeitura") ? "Ocultar senha" : "Mostrar senha"}
+                            >
+                              {isFieldVisible("senha_prefeitura") ? (
+                                <EyeOffIcon className="h-4 w-4" />
+                              ) : (
+                                <EyeIcon className="h-4 w-4" />
+                              )}
+                            </Button>
+                          }
+                        />
+                      )}
+                    />
+                    <Controller
                       name="login_seg_desemp"
                       control={control}
                       render={({ field }) => (

@@ -6,6 +6,7 @@ from app.db.models.base import Base  # noqa: F401
 from app.db.models.client import Client, ClientStatus, RegimeTributario, TipoEmpresa  # noqa: F401
 from app.db.models.client_draft import ClientDraft  # noqa: F401
 from app.db.models.cnae import Cnae  # noqa: F401
+from app.db.models.bank_account import BankAccount  # noqa: F401
 from app.db.models.finance import FinancialTransaction, PaymentMethod, PaymentStatus, TransactionType  # noqa: F401
 from app.db.models.activity import Activity, ActivityPriority, ActivityRecurrence, ActivityStatus  # noqa: F401
 from app.db.models.license import License  # noqa: F401
@@ -30,6 +31,7 @@ __all__ = [
     "ClientStatus",
     "RegimeTributario",
     "TipoEmpresa",
+    "BankAccount",
     "Cnae",
     "FinancialTransaction",
     "PaymentMethod",

@@ -206,12 +206,12 @@ async def delete_client(
     _: User = Depends(require_admin()),
 ) -> ResponseSchema:
     """
-    Delete client (soft delete, admin only).
+    Delete client (soft delete, admin/func only).
 
     Args:
         client_id: Client UUID
         db: Database session
-        _: Current user (must be admin)
+        _: Current user (must be admin/func)
 
     Returns:
         Success message

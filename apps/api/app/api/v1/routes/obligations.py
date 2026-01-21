@@ -165,6 +165,11 @@ async def get_obligations_matrix(
     - Each client's obligations for the specified month/year
     - Progress counter
     """
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/func can access obligations matrix",
+        )
     from sqlalchemy import select, func
     from sqlalchemy.orm import selectinload
     from app.db.models.client import Client
@@ -466,12 +471,12 @@ async def reopen_obligation(
     """
     Reopen obligation (mark as pending again).
 
-    Admin only.
+    Admin/Func only.
     """
-    if current_user.role != UserRole.ADMIN:
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin can reopen obligations",
+            detail="Only admin/func can reopen obligations",
         )
 
     processor = ObligationProcessor(db, websocket_manager)
@@ -649,6 +654,11 @@ async def complete_obligation(
     Mark obligation as completed without receipt.
     Quick action for the minimalist panel.
     """
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/func can complete obligations",
+        )
     processor = ObligationProcessor(db, websocket_manager)
 
     # Get obligation
@@ -703,6 +713,11 @@ async def undo_obligation(
     """
     Undo obligation completion (mark back as pending).
     """
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/func can undo obligations",
+        )
     processor = ObligationProcessor(db, websocket_manager)
     obligation = await processor.mark_as_pending(
         obligation_id=obligation_id,
@@ -725,6 +740,11 @@ async def list_obligations_simple(
     Simple list of obligations for matrix view.
     Returns obligations grouped by client with fixed type columns.
     """
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/func can access obligations list",
+        )
     from sqlalchemy import select, func
     from app.db.models.client import Client
     from app.db.models.obligation import Obligation
@@ -854,7 +874,7 @@ async def download_receipt(
                 )
     except (IndexError, ValueError):
         # If filename format is invalid, only allow admin
-        if current_user.role != UserRole.ADMIN:
+        if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Invalid receipt filename",

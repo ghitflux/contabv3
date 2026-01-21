@@ -410,6 +410,23 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
     const clientId = resolveClientFilter();
     switch (dataSource) {
       case 'clients': {
+        if (!isAdminOrFunc) {
+          const client = await clientsApi.getMe();
+          return [
+            {
+              razao_social: client.razao_social,
+              nome_fantasia: client.nome_fantasia,
+              cnpj: client.cnpj,
+              email: client.email,
+              status: client.status,
+              honorarios_mensais: client.honorarios_mensais,
+              regime_tributario: client.regime_tributario,
+              tipo_empresa: client.tipo_empresa,
+              created_at: client.created_at,
+            },
+          ];
+        }
+
         const response = await clientsApi.list({ page: 1, size: 100 });
         return response.items
           .filter((client) => (!clientId ? true : client.id === clientId))

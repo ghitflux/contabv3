@@ -27,14 +27,14 @@ async def list_permissions(
     _: User = Depends(require_admin()),
 ):
     """
-    List all permissions with optional filtering by category (admin only).
+    List all permissions with optional filtering by category (admin/func only).
 
     Args:
         db: Database session
         skip: Number of records to skip
         limit: Maximum number of records to return
         category: Optional category filter
-        _: Current user (must be admin)
+        _: Current user (must be admin/func)
 
     Returns:
         PaginatedResponse: Paginated list of permissions
@@ -67,12 +67,12 @@ async def get_permission(
     _: User = Depends(require_admin()),
 ) -> PermissionResponse:
     """
-    Get permission by ID (admin only).
+    Get permission by ID (admin/func only).
 
     Args:
         permission_id: Permission UUID
         db: Database session
-        _: Current user (must be admin)
+        _: Current user (must be admin/func)
 
     Returns:
         PermissionResponse: Permission data
@@ -99,12 +99,12 @@ async def get_role_permissions(
     _: User = Depends(require_admin()),
 ):
     """
-    Get all permissions assigned to a role (admin only).
+    Get all permissions assigned to a role (admin/func only).
 
     Args:
         role: Role name (admin, func, cliente)
         db: Database session
-        _: Current user (must be admin)
+        _: Current user (must be admin/func)
 
     Returns:
         dict: Role permissions mapping
@@ -138,13 +138,13 @@ async def update_role_permissions(
     _: User = Depends(require_admin()),
 ):
     """
-    Update permissions for a role (admin only).
+    Update permissions for a role (admin/func only).
 
     Args:
         role: Role name (admin, func, cliente)
         update_data: Map of permission_id to granted boolean
         db: Database session
-        _: Current user (must be admin)
+        _: Current user (must be admin/func)
 
     Returns:
         dict: Updated role permissions

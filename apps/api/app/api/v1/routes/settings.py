@@ -97,7 +97,7 @@ async def update_user_settings(
     return UserSettingsResponse.model_validate(settings)
 
 
-# ======================== SYSTEM SETTINGS (ADMIN ONLY) ========================
+# ======================== SYSTEM SETTINGS (ADMIN/FUNC ONLY) ========================
 
 
 @router.get("/system", response_model=SystemSettingsResponse, status_code=status.HTTP_200_OK)
@@ -106,11 +106,11 @@ async def get_system_settings(
     _: User = Depends(require_admin()),
 ) -> SystemSettingsResponse:
     """
-    Get system settings (admin only).
+    Get system settings (admin/func only).
 
     Args:
         db: Database session
-        _: Current user (must be admin)
+        _: Current user (must be admin/func)
 
     Returns:
         SystemSettingsResponse: System settings data
@@ -134,12 +134,12 @@ async def update_system_settings(
     _: User = Depends(require_admin()),
 ) -> SystemSettingsResponse:
     """
-    Update system settings (admin only).
+    Update system settings (admin/func only).
 
     Args:
         settings_data: Settings update data
         db: Database session
-        _: Current user (must be admin)
+        _: Current user (must be admin/func)
 
     Returns:
         SystemSettingsResponse: Updated settings data
@@ -165,7 +165,7 @@ async def update_system_settings(
     return SystemSettingsResponse.model_validate(settings)
 
 
-# ======================== SECURITY SETTINGS (ADMIN ONLY) ========================
+# ======================== SECURITY SETTINGS (ADMIN/FUNC ONLY) ========================
 
 
 @router.get("/security", response_model=SecuritySettingsResponse, status_code=status.HTTP_200_OK)
@@ -174,11 +174,11 @@ async def get_security_settings(
     _: User = Depends(require_admin()),
 ) -> SecuritySettingsResponse:
     """
-    Get security settings (admin only).
+    Get security settings (admin/func only).
 
     Args:
         db: Database session
-        _: Current user (must be admin)
+        _: Current user (must be admin/func)
 
     Returns:
         SecuritySettingsResponse: Security settings data
@@ -202,12 +202,12 @@ async def update_security_settings(
     _: User = Depends(require_admin()),
 ) -> SecuritySettingsResponse:
     """
-    Update security settings (admin only).
+    Update security settings (admin/func only).
 
     Args:
         settings_data: Settings update data
         db: Database session
-        _: Current user (must be admin)
+        _: Current user (must be admin/func)
 
     Returns:
         SecuritySettingsResponse: Updated settings data
@@ -231,7 +231,7 @@ async def update_security_settings(
     return SecuritySettingsResponse.model_validate(settings)
 
 
-# ======================== CLIENT DEFAULT SETTINGS (ADMIN ONLY) ========================
+# ======================== CLIENT DEFAULT SETTINGS (ADMIN/FUNC ONLY) ========================
 
 
 @router.get("/clients/defaults", response_model=ClientDefaultSettingsResponse, status_code=status.HTTP_200_OK)
@@ -240,11 +240,11 @@ async def get_client_defaults(
     _: User = Depends(require_admin()),
 ) -> ClientDefaultSettingsResponse:
     """
-    Get default client settings (admin only).
+    Get default client settings (admin/func only).
 
     Args:
         db: Database session
-        _: Current user (must be admin)
+        _: Current user (must be admin/func)
 
     Returns:
         ClientDefaultSettingsResponse: Client default settings data
@@ -268,12 +268,12 @@ async def update_client_defaults(
     _: User = Depends(require_admin()),
 ) -> ClientDefaultSettingsResponse:
     """
-    Update default client settings (admin only).
+    Update default client settings (admin/func only).
 
     Args:
         settings_data: Settings update data
         db: Database session
-        _: Current user (must be admin)
+        _: Current user (must be admin/func)
 
     Returns:
         ClientDefaultSettingsResponse: Updated settings data

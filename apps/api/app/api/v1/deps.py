@@ -132,12 +132,12 @@ def require_role(allowed_roles: list[UserRole]):
 
 def require_admin():
     """
-    Dependency to require admin role.
+    Dependency to require admin or funcionario role.
 
     Returns:
-        Dependency function that checks for admin role
+        Dependency function that checks for admin or func role
     """
-    return require_role([UserRole.ADMIN])
+    return require_role([UserRole.ADMIN, UserRole.FUNC])
 
 
 def require_admin_or_func():

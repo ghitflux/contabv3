@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Button, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, Select, SelectItem, Switch, Tabs, Tab, Input } from "@/heroui";
 import { FinanceiroEscritorio } from "./FinanceiroEscritorio";
 import { FinanceiroPorEmpresa } from "./FinanceiroPorEmpresa";
 import { FinanceiroLancamentos } from "./FinanceiroLancamentos";
+import { FinanceiroHistoricoClientes } from "./FinanceiroHistoricoClientes";
 import { pageTransition, fadeIn } from "@/lib/animations";
 import { Download } from "lucide-react";
 import { DatePickerField } from "@/components/ui/DatePickerField";
@@ -23,7 +24,14 @@ export function FinanceiroModule() {
   const { user } = useAuth();
   const isAdminOrFunc = user?.role !== "cliente";
   const OFFICE_CLIENT_ID = process.env.NEXT_PUBLIC_OFFICE_CLIENT_ID ?? "";
-  const [activeTab, setActiveTab] = useState("escritorio");
+  const availableTabs = useMemo(
+    () =>
+      isAdminOrFunc
+        ? ["escritorio", "por-empresa", "lancamentos", "historico"]
+        : ["por-empresa"],
+    [isAdminOrFunc]
+  );
+  const [activeTab, setActiveTab] = useState(availableTabs[0] || "por-empresa");
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [rangeStart, setRangeStart] = useState(formatISO(startOfMonth(new Date()), { representation: "date" }));
@@ -34,6 +42,12 @@ export function FinanceiroModule() {
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedClientForExport, setSelectedClientForExport] = useState<ClientListItem | null>(null);
   const [isOfficeExport, setIsOfficeExport] = useState(true);
+
+  useEffect(() => {
+    if (!availableTabs.includes(activeTab)) {
+      setActiveTab(availableTabs[0] || "por-empresa");
+    }
+  }, [availableTabs, activeTab]);
 
   useEffect(() => {
     if (!isAdminOrFunc || !isExportOpen) return;
@@ -173,19 +187,21 @@ export function FinanceiroModule() {
         onSelectionChange={(key) => setActiveTab(key as string)}
         color="primary"
       >
-        <Tab key="escritorio" title="Escritório">
-          <motion.div
-            key="escritorio"
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            variants={fadeIn}
-            className="mt-6"
-          >
-            <FinanceiroEscritorio onExportLivro={() => openExportModal("office")} />
-          </motion.div>
-        </Tab>
-        <Tab key="por-empresa" title="Por Empresa">
+        {isAdminOrFunc && (
+          <Tab key="escritorio" title="Escritório">
+            <motion.div
+              key="escritorio"
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              variants={fadeIn}
+              className="mt-6"
+            >
+              <FinanceiroEscritorio onExportLivro={() => openExportModal("office")} />
+            </motion.div>
+          </Tab>
+        )}
+        <Tab key="por-empresa" title={isAdminOrFunc ? "Por Empresa" : "Minha Empresa"}>
           <motion.div
             key="por-empresa"
             initial="hidden"
@@ -200,18 +216,34 @@ export function FinanceiroModule() {
             />
           </motion.div>
         </Tab>
-        <Tab key="lancamentos" title="Lançamentos">
-          <motion.div
-            key="lancamentos"
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            variants={fadeIn}
-            className="mt-6"
-          >
-            <FinanceiroLancamentos />
-          </motion.div>
-        </Tab>
+        {isAdminOrFunc && (
+          <Tab key="lancamentos" title="Lançamentos">
+            <motion.div
+              key="lancamentos"
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              variants={fadeIn}
+              className="mt-6"
+            >
+              <FinanceiroLancamentos />
+            </motion.div>
+          </Tab>
+        )}
+        {isAdminOrFunc && (
+          <Tab key="historico" title="Histórico">
+            <motion.div
+              key="historico"
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              variants={fadeIn}
+              className="mt-6"
+            >
+              <FinanceiroHistoricoClientes />
+            </motion.div>
+          </Tab>
+        )}
       </Tabs>
 
       <Modal isOpen={isExportOpen} onOpenChange={(open) => setIsExportOpen(open)}>

@@ -54,7 +54,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           { name: 'Downloads', href: '/downloads', icon: DocumentIcon },
           { name: 'Atividades', href: '/atividades', icon: ClockIcon },
         ]),
-    ...(user?.role === UserRole.ADMIN
+    ...(user?.role === UserRole.ADMIN || user?.role === UserRole.FUNC
       ? [{ name: 'Configurações', href: '/configuracoes', icon: SettingsIcon }]
       : []),
   ];

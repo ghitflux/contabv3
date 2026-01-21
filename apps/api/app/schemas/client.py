@@ -220,10 +220,14 @@ class ClientListItem(TimestampSchema):
     tipo_empresa: TipoEmpresa
     user_id: Optional[UUID] = None
 
+    # Tax info (optional in list view)
+    codigo_simples: Optional[str] = None
+
     # System access credentials (optional in list view)
     cpf_empresa: Optional[str] = None
     senha_sistema: Optional[str] = None
     senha_gov: Optional[str] = None
+    senha_prefeitura: Optional[str] = None
     login_seg_desemp: Optional[str] = None
     senha_seg_desemp: Optional[str] = None
     email_seg_desemp: Optional[str] = None
