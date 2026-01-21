@@ -159,13 +159,9 @@ export function FinanceiroHistoricoClientes() {
               setSelectedClientId(value ?? "all");
             }}
             className="min-w-[220px]"
+            items={[{ id: 'all', label: 'Todos' }, ...clientOptions.map(c => ({ id: c.id, label: c.nome_fantasia || c.razao_social }))]}
           >
-            <SelectItem key="all">Todos</SelectItem>
-            {clientOptions.map((client) => (
-              <SelectItem key={client.id}>
-                {client.nome_fantasia || client.razao_social}
-              </SelectItem>
-            ))}
+            {(item) => <SelectItem key={item.id}>{item.label}</SelectItem>}
           </Select>
           <Select
             label="Tipo"

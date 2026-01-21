@@ -48,7 +48,7 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile.web.prod
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://testecic.ghitflux.com}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://cicgestao.com/api}
     container_name: contabil-web-prod
     env_file:
       - .env.prod

@@ -4,8 +4,8 @@ import { motion } from "framer-motion";
 import { Button, Card, CardBody, CardHeader, Chip, Divider, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem, Pagination, Spinner, Table, TableBody, TableCell, TableColumn, TableHeader, TableRow, useDisclosure } from '@/heroui';
 import { pageTransition } from "@/lib/animations";
 import { useClients } from '@/hooks/useClients';
-import type { ClientListItem, ClientStatus, ClientCreate, ClientUserCredentials, RegimeTributario } from '@/types/client';
-import { formatCNPJ, getRegimeLabel, getStatusLabel } from '@/types/client';
+import type { ClientListItem, ClientCreate, ClientUserCredentials, RegimeTributario } from '@/types/client';
+import { ClientStatus, formatCNPJ, getRegimeLabel, getStatusLabel } from '@/types/client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { SearchInput } from '@/components/ui/SearchInput';
@@ -494,24 +494,24 @@ export default function ClientesPage() {
                                 <DropdownItem
                                   key="status-ativo"
                                   startContent={<CheckCircleIcon className="h-4 w-4" />}
-                                  onPress={() => handleChangeStatus(client, 'ativo')}
-                                  className={client.status === 'ativo' ? 'hidden' : ''}
+                                  onPress={() => handleChangeStatus(client, ClientStatus.ATIVO)}
+                                  className={client.status === ClientStatus.ATIVO ? 'hidden' : ''}
                                 >
                                   Marcar como Ativo
                                 </DropdownItem>
                                 <DropdownItem
                                   key="status-pendente"
                                   startContent={<ClockIcon className="h-4 w-4" />}
-                                  onPress={() => handleChangeStatus(client, 'pendente')}
-                                  className={client.status === 'pendente' ? 'hidden' : ''}
+                                  onPress={() => handleChangeStatus(client, ClientStatus.PENDENTE)}
+                                  className={client.status === ClientStatus.PENDENTE ? 'hidden' : ''}
                                 >
                                   Marcar como Pendente
                                 </DropdownItem>
                                 <DropdownItem
                                   key="status-inativo"
                                   startContent={<XCircleIcon className="h-4 w-4" />}
-                                  onPress={() => handleChangeStatus(client, 'inativo')}
-                                  className={client.status === 'inativo' ? 'hidden' : ''}
+                                  onPress={() => handleChangeStatus(client, ClientStatus.INATIVO)}
+                                  className={client.status === ClientStatus.INATIVO ? 'hidden' : ''}
                                   color="danger"
                                 >
                                   Marcar como Inativo

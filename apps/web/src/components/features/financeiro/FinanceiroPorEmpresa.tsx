@@ -346,10 +346,8 @@ export function FinanceiroPorEmpresa({
       }
     } catch (error) {
       console.error("Erro ao salvar lançamento:", error);
-      const message =
-        typeof (error as { data?: { detail?: string } })?.data?.detail === "string"
-          ? (error as { data?: { detail?: string } }).data?.detail
-          : "Não foi possível salvar o lançamento.";
+      const errorDetail = (error as { data?: { detail?: string } })?.data?.detail;
+      const message = typeof errorDetail === "string" ? errorDetail : "Não foi possível salvar o lançamento.";
       toast.error(message);
       throw error;
     }
