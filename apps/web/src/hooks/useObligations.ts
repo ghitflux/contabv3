@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { apiClient } from "@/lib/api/client";
 
 export interface Obligation {
   id: string;
@@ -27,6 +28,13 @@ interface UseObligationsOptions {
   autoFetch?: boolean;
 }
 
+type ObligationsListResponse = {
+  items: Obligation[];
+  total: number;
+  skip: number;
+  limit: number;
+};
+
 export function useObligations(options: UseObligationsOptions = {}) {
   const { clientId, status, year, month, autoFetch = true } = options;
 
@@ -43,7 +51,6 @@ export function useObligations(options: UseObligationsOptions = {}) {
         setLoading(true);
         setError(null);
 
-        const token = localStorage.getItem("access_token");
         const params = new URLSearchParams({
           skip: skip.toString(),
           limit: limit.toString(),
@@ -58,20 +65,8 @@ export function useObligations(options: UseObligationsOptions = {}) {
         if (year) params.append("year", year.toString());
         if (month) params.append("month", month.toString());
 
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/v1/obligations?${params}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch obligations");
-        }
-
-        const data = await response.json();
+        const endpoint = `/obligations?${params.toString()}`;
+        const data = await apiClient.get<ObligationsListResponse>(endpoint);
         // Transform obligations to include client info if not present
         const transformedItems = data.items.map((item: any) => ({
           ...item,
@@ -100,28 +95,11 @@ export function useObligations(options: UseObligationsOptions = {}) {
       setLoading(true);
       setError(null);
 
-      const token = localStorage.getItem("access_token");
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/obligations/generate`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            year,
-            month,
-            client_id: clientId,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to generate obligations");
-      }
-
-      const data = await response.json();
+      const data = await apiClient.post("/obligations/generate", {
+        year,
+        month,
+        client_id: clientId,
+      });
       await fetchObligations();
       return data;
     } catch (err) {
@@ -141,27 +119,14 @@ export function useObligations(options: UseObligationsOptions = {}) {
       setLoading(true);
       setError(null);
 
-      const token = localStorage.getItem("access_token");
       const formData = new FormData();
       formData.append("file", file);
       if (notes) formData.append("notes", notes);
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/obligations/${obligationId}/receipt`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
-        }
+      const data = await apiClient.upload(
+        `/obligations/${obligationId}/receipt`,
+        formData
       );
-
-      if (!response.ok) {
-        throw new Error("Failed to upload receipt");
-      }
-
-      const data = await response.json();
       await fetchObligations();
       return data;
     } catch (err) {
@@ -177,24 +142,7 @@ export function useObligations(options: UseObligationsOptions = {}) {
       setLoading(true);
       setError(null);
 
-      const token = localStorage.getItem("access_token");
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/obligations/${obligationId}/cancel`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ reason }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to cancel obligation");
-      }
-
-      const data = await response.json();
+      const data = await apiClient.post(`/obligations/${obligationId}/cancel`, { reason });
       await fetchObligations();
       return data;
     } catch (err) {
@@ -214,27 +162,10 @@ export function useObligations(options: UseObligationsOptions = {}) {
       setLoading(true);
       setError(null);
 
-      const token = localStorage.getItem("access_token");
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/obligations/${obligationId}/due-date`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            new_due_date: newDueDate,
-            reason,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to update due date");
-      }
-
-      const data = await response.json();
+      const data = await apiClient.put(`/obligations/${obligationId}/due-date`, {
+        new_due_date: newDueDate,
+        reason,
+      });
       await fetchObligations();
       return data;
     } catch (err) {

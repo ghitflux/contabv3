@@ -14,19 +14,29 @@ import {
   ModalContent,
   ModalFooter,
   ModalHeader,
+  Select,
+  SelectItem,
   Table,
   TableBody,
   TableCell,
   TableColumn,
   TableHeader,
   TableRow,
+  Textarea,
   useDisclosure,
 } from "@/heroui";
 import { Download, Pencil, Plus, Trash2 } from "lucide-react";
 import { clientsApi } from "@/lib/api/endpoints/clients";
 import { useTransactions } from "@/hooks/useTransactions";
 import type { Client, ClientListItem } from "@/types/client";
-import { PaymentStatus, TransactionType, getPaymentMethodLabel } from "@/types/finance";
+import {
+  PaymentMethod,
+  PaymentStatus,
+  TransactionType,
+  type Transaction,
+  type TransactionUpdate,
+  getPaymentMethodLabel,
+} from "@/types/finance";
 import { toast } from "@/lib/toast";
 import { DatePickerField } from "@/components/ui/DatePickerField";
 import { MonthYearPicker } from "@/components/ui/MonthYearPicker";
@@ -43,6 +53,7 @@ interface ClientTransaction {
   history: string;
   value: number;
   payment: string;
+  raw: Transaction;
 }
 
 export function FinanceiroPorEmpresa({
@@ -67,11 +78,24 @@ export function FinanceiroPorEmpresa({
   const [isLoadingBanks, setIsLoadingBanks] = useState(false);
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [editingBank, setEditingBank] = useState<BankAccount | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [bankForm, setBankForm] = useState({
     name: "",
     account_number: "",
     balance: "",
     accounting_account: "",
+  });
+  const [editForm, setEditForm] = useState({
+    description: "",
+    amount: "",
+    due_date: "",
+    payment_status: PaymentStatus.PENDENTE,
+    payment_method: "" as PaymentMethod | "",
+    paid_date: "",
+    category: "",
+    notes: "",
+    invoice_number: "",
   });
 
   useEffect(() => {
@@ -326,7 +350,7 @@ export function FinanceiroPorEmpresa({
     [selectedClient, startDate, endDate]
   );
 
-  const { transactions, refresh, createTransaction } = useTransactions({
+  const { transactions, refresh, createTransaction, updateTransaction } = useTransactions({
     filters: transactionFilters,
     autoFetch: Boolean(selectedClient),
   });
@@ -378,6 +402,7 @@ export function FinanceiroPorEmpresa({
         payment: transaction.payment_method
           ? getPaymentMethodLabel(transaction.payment_method) || transaction.payment_method
           : "-",
+        raw: transaction,
       })),
     [transactions]
   );
@@ -458,6 +483,70 @@ export function FinanceiroPorEmpresa({
       style: "currency",
       currency: "BRL",
     }).format(value);
+
+  const normalizeDateInput = (value?: string | null) => (value ? value.split("T")[0] : "");
+
+  const openEditTransaction = (transaction: Transaction) => {
+    setEditingTransaction(transaction);
+    setEditForm({
+      description: transaction.description ?? "",
+      amount: transaction.amount?.toString() ?? "",
+      due_date: normalizeDateInput(transaction.due_date),
+      payment_status: transaction.payment_status ?? PaymentStatus.PENDENTE,
+      payment_method: transaction.payment_method ?? "",
+      paid_date: normalizeDateInput(transaction.paid_date),
+      category: transaction.category ?? "",
+      notes: transaction.notes ?? "",
+      invoice_number: transaction.invoice_number ?? "",
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdateTransaction = async () => {
+    if (!editingTransaction) return;
+    const amountValue = Number.parseFloat(editForm.amount);
+    if (Number.isNaN(amountValue) || amountValue <= 0) {
+      toast.error("Informe um valor valido.");
+      return;
+    }
+    if (!editForm.description.trim()) {
+      toast.error("Informe a descricao.");
+      return;
+    }
+    if (!editForm.due_date) {
+      toast.error("Informe a data de vencimento.");
+      return;
+    }
+
+    const payload: TransactionUpdate = {
+      amount: amountValue,
+      description: editForm.description.trim(),
+      due_date: editForm.due_date,
+      payment_status: editForm.payment_status,
+      payment_method: editForm.payment_method ? editForm.payment_method : null,
+      paid_date:
+        editForm.payment_status === PaymentStatus.PAGO
+          ? editForm.paid_date || null
+          : null,
+      category: editForm.category.trim() || null,
+      notes: editForm.notes.trim() || null,
+      invoice_number: editForm.invoice_number.trim() || null,
+    };
+
+    try {
+      await updateTransaction(editingTransaction.id, payload);
+      toast.success("Lancamento atualizado com sucesso.");
+      setIsEditModalOpen(false);
+      setEditingTransaction(null);
+      await refresh();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("finance:transactions-updated"));
+      }
+    } catch (error) {
+      console.error("Erro ao atualizar lancamento:", error);
+      toast.error("Nao foi possivel atualizar o lancamento.");
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -713,6 +802,7 @@ export function FinanceiroPorEmpresa({
               <TableColumn>Histórico</TableColumn>
               <TableColumn className="text-right">Valor</TableColumn>
               <TableColumn>Recebimento</TableColumn>
+              {isAdminOrFunc && <TableColumn className="text-right">Ações</TableColumn>}
             </TableHeader>
             <TableBody emptyContent="Nenhum lançamento encontrado">
               {displayTransactions.map((transaction) => (
@@ -722,6 +812,19 @@ export function FinanceiroPorEmpresa({
                   <TableCell>{transaction.history}</TableCell>
                   <TableCell className="text-right font-semibold">{formatCurrency(transaction.value)}</TableCell>
                   <TableCell>{transaction.payment}</TableCell>
+                  {isAdminOrFunc && (
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        variant="light"
+                        isIconOnly
+                        aria-label="Editar lançamento"
+                        onPress={() => openEditTransaction(transaction.raw)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
@@ -795,6 +898,117 @@ export function FinanceiroPorEmpresa({
         defaultClientId={selectedClient || null}
         isClientLocked={Boolean(selectedClient)}
       />
+
+      <Modal
+        isOpen={isEditModalOpen}
+        onOpenChange={(open) => {
+          setIsEditModalOpen(open);
+          if (!open) setEditingTransaction(null);
+        }}
+      >
+        <ModalContent>
+          {(onClose) => (
+            <>
+              <ModalHeader>Editar Lançamento</ModalHeader>
+              <ModalBody className="space-y-3">
+                <Input
+                  label="Descrição"
+                  placeholder="Ex: Honorarios do mes"
+                  value={editForm.description}
+                  onValueChange={(value) => setEditForm((prev) => ({ ...prev, description: value }))}
+                />
+                <Input
+                  label="Valor (R$)"
+                  type="number"
+                  placeholder="0,00"
+                  value={editForm.amount}
+                  onValueChange={(value) => setEditForm((prev) => ({ ...prev, amount: value }))}
+                />
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                    Data de Vencimento
+                  </label>
+                  <DatePickerField
+                    value={editForm.due_date}
+                    onChange={(value) => setEditForm((prev) => ({ ...prev, due_date: value }))}
+                    aria-label="Data de vencimento"
+                  />
+                </div>
+                <Select
+                  label="Status do Pagamento"
+                  selectedKeys={[editForm.payment_status]}
+                  onSelectionChange={(keys) => {
+                    const value = Array.from(keys)[0] as PaymentStatus | undefined;
+                    if (!value) return;
+                    setEditForm((prev) => ({ ...prev, payment_status: value }));
+                  }}
+                >
+                  <SelectItem key={PaymentStatus.PENDENTE}>Pendente</SelectItem>
+                  <SelectItem key={PaymentStatus.PAGO}>Pago</SelectItem>
+                  <SelectItem key={PaymentStatus.PARCIAL}>Parcial</SelectItem>
+                  <SelectItem key={PaymentStatus.ATRASADO}>Atrasado</SelectItem>
+                  <SelectItem key={PaymentStatus.CANCELADO}>Cancelado</SelectItem>
+                </Select>
+                <Select
+                  label="Metodo de Pagamento"
+                  selectedKeys={editForm.payment_method ? [editForm.payment_method] : []}
+                  onSelectionChange={(keys) => {
+                    const value = Array.from(keys)[0] as PaymentMethod | undefined;
+                    setEditForm((prev) => ({ ...prev, payment_method: value ?? "" }));
+                  }}
+                >
+                  <SelectItem key={PaymentMethod.PIX}>PIX</SelectItem>
+                  <SelectItem key={PaymentMethod.BOLETO}>Boleto</SelectItem>
+                  <SelectItem key={PaymentMethod.TRANSFERENCIA}>Transferencia</SelectItem>
+                  <SelectItem key={PaymentMethod.DINHEIRO}>Dinheiro</SelectItem>
+                  <SelectItem key={PaymentMethod.CARTAO_CREDITO}>Cartao de Credito</SelectItem>
+                  <SelectItem key={PaymentMethod.CARTAO_DEBITO}>Cartao de Debito</SelectItem>
+                  <SelectItem key={PaymentMethod.CHEQUE}>Cheque</SelectItem>
+                </Select>
+                {editForm.payment_status === PaymentStatus.PAGO && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                      Data de Pagamento
+                    </label>
+                    <DatePickerField
+                      value={editForm.paid_date}
+                      onChange={(value) => setEditForm((prev) => ({ ...prev, paid_date: value }))}
+                      aria-label="Data de pagamento"
+                    />
+                  </div>
+                )}
+                <Input
+                  label="Categoria"
+                  placeholder="Ex: 1.1.01"
+                  value={editForm.category}
+                  onValueChange={(value) => setEditForm((prev) => ({ ...prev, category: value }))}
+                />
+                <Input
+                  label="Numero da Nota"
+                  placeholder="Ex: NF-001/2024"
+                  value={editForm.invoice_number}
+                  onValueChange={(value) => setEditForm((prev) => ({ ...prev, invoice_number: value }))}
+                />
+                <Textarea
+                  label="Observacoes"
+                  placeholder="Informacoes adicionais..."
+                  value={editForm.notes}
+                  onValueChange={(value) => setEditForm((prev) => ({ ...prev, notes: value }))}
+                  minRows={3}
+                />
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="light" onPress={onClose}>
+                  Cancelar
+                </Button>
+                <Button color="primary" onPress={handleUpdateTransaction}>
+                  Salvar
+                </Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
     </div>
   );
 }

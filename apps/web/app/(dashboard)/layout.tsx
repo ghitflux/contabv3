@@ -35,6 +35,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const isAdminOrFunc = user?.role !== UserRole.CLIENTE;
 
   const navigation = [
     ...(user?.role === UserRole.CLIENTE
@@ -54,7 +55,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           { name: 'Downloads', href: '/downloads', icon: DocumentIcon },
           { name: 'Atividades', href: '/atividades', icon: ClockIcon },
         ]),
-    ...(user?.role === UserRole.ADMIN || user?.role === UserRole.FUNC
+    ...(isAdminOrFunc
       ? [{ name: 'Configurações', href: '/configuracoes', icon: SettingsIcon }]
       : []),
   ];

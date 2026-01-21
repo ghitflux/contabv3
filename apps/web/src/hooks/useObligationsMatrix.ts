@@ -46,7 +46,14 @@ export function useObligationsMatrix(options: UseObligationsMatrixOptions) {
       const result = await obligationsApi.getMatrix(month, year, search);
       setData(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      const detail = (err as { data?: { detail?: string } })?.data?.detail;
+      const message =
+        typeof detail === "string"
+          ? detail
+          : err instanceof Error
+          ? err.message
+          : "An error occurred";
+      setError(message);
       console.error("Error fetching obligations matrix:", err);
     } finally {
       setLoading(false);
