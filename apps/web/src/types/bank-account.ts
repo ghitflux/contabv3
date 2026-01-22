@@ -1,6 +1,6 @@
 export interface BankAccount {
   id: string;
-  client_id: string;
+  client_id?: string | null;
   name: string;
   account_number: string;
   balance: number;

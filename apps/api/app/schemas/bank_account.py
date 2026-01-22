@@ -31,7 +31,7 @@ class BankAccountResponse(BaseModel):
     """Schema for bank account response."""
 
     id: UUID
-    client_id: UUID
+    client_id: Optional[UUID]
     name: str
     account_number: str
     balance: Decimal

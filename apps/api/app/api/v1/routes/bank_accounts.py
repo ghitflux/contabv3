@@ -34,13 +34,14 @@ async def list_bank_accounts(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: User = Depends(get_current_active_user),
     client_id: Optional[UUID] = Query(None),
+    office_only: bool = Query(False, description="List only office bank accounts (client_id=null)"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
 ) -> BankAccountListResponse:
     """
     List bank accounts.
 
-    - Admin/Func: Can see all or filter by client
+    - Admin/Func: Can see all, filter by client, or see office accounts (office_only=true)
     - Client: Can only see their own
     """
     if current_user.role == UserRole.CLIENTE:
@@ -52,9 +53,15 @@ async def list_bank_accounts(
                 detail="Client profile not found",
             )
         client_id = client.id
+        office_only = False  # Clients cannot see office accounts
 
     repo = BankAccountRepository(db)
-    items, total = await repo.list_with_filters(client_id=client_id, skip=skip, limit=limit)
+    items, total = await repo.list_with_filters(
+        client_id=client_id,
+        office_only=office_only,
+        skip=skip,
+        limit=limit,
+    )
 
     return BankAccountListResponse(
         items=[BankAccountResponse.model_validate(item) for item in items],
@@ -74,7 +81,7 @@ async def create_bank_account(
     """
     Create bank account.
 
-    - Admin/Func: Can create for any client
+    - Admin/Func: Can create for any client or office (client_id=null)
     - Client: Can only create for own client
     """
     client_id = data.client_id
@@ -89,19 +96,23 @@ async def create_bank_account(
             )
         client_id = client.id
 
-    if not client_id:
+    # Admin/Func can create office bank accounts (client_id=null)
+    # Client must always have a client_id
+    if current_user.role == UserRole.CLIENTE and not client_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="client_id is required",
         )
 
-    client_repo = ClientRepository(db)
-    client = await client_repo.get(client_id)
-    if not client:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Client not found",
-        )
+    # If client_id is provided, validate it exists
+    if client_id:
+        client_repo = ClientRepository(db)
+        client = await client_repo.get(client_id)
+        if not client:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Client not found",
+            )
 
     bank = BankAccount(
         client_id=client_id,
@@ -120,12 +131,13 @@ async def create_bank_account(
         entity="bank_account",
         entity_id=str(bank.id),
         payload={
-            "client_id": str(bank.client_id),
+            "client_id": str(bank.client_id) if bank.client_id else None,
             "summary": f"Banco criado: {bank.name} ({bank.account_number}) - Saldo {_format_balance(bank.balance)}",
             "name": bank.name,
             "account_number": bank.account_number,
             "balance": _format_balance(bank.balance),
             "accounting_account": bank.accounting_account,
+            "is_office_account": bank.client_id is None,
         },
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
@@ -185,7 +197,7 @@ async def update_bank_account(
         entity="bank_account",
         entity_id=str(bank.id),
         payload={
-            "client_id": str(bank.client_id),
+            "client_id": str(bank.client_id) if bank.client_id else None,
             "summary": f"Banco atualizado: {bank.name} ({bank.account_number}) - Saldo {_format_balance(bank.balance)}",
             "before": before,
             "after": {
@@ -194,6 +206,7 @@ async def update_bank_account(
                 "balance": _format_balance(bank.balance),
                 "accounting_account": bank.accounting_account,
             },
+            "is_office_account": bank.client_id is None,
         },
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
@@ -239,12 +252,13 @@ async def delete_bank_account(
         entity="bank_account",
         entity_id=str(bank.id),
         payload={
-            "client_id": str(bank.client_id),
+            "client_id": str(bank.client_id) if bank.client_id else None,
             "summary": f"Banco removido: {bank.name} ({bank.account_number}) - Saldo {_format_balance(bank.balance)}",
             "name": bank.name,
             "account_number": bank.account_number,
             "balance": _format_balance(bank.balance),
             "accounting_account": bank.accounting_account,
+            "is_office_account": bank.client_id is None,
         },
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),

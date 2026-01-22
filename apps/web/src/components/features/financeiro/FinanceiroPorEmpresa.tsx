@@ -484,7 +484,11 @@ export function FinanceiroPorEmpresa({
       currency: "BRL",
     }).format(value);
 
-  const normalizeDateInput = (value?: string | null) => (value ? value.split("T")[0] : "");
+  const normalizeDateInput = (value?: string | null): string => {
+    if (!value) return "";
+    const parts = value.split("T");
+    return parts[0] ?? "";
+  };
 
   const openEditTransaction = (transaction: Transaction) => {
     setEditingTransaction(transaction);
@@ -802,7 +806,7 @@ export function FinanceiroPorEmpresa({
               <TableColumn>Histórico</TableColumn>
               <TableColumn className="text-right">Valor</TableColumn>
               <TableColumn>Recebimento</TableColumn>
-              {isAdminOrFunc && <TableColumn className="text-right">Ações</TableColumn>}
+              <TableColumn className={isAdminOrFunc ? "text-right" : "hidden"}>Ações</TableColumn>
             </TableHeader>
             <TableBody emptyContent="Nenhum lançamento encontrado">
               {displayTransactions.map((transaction) => (
@@ -812,8 +816,8 @@ export function FinanceiroPorEmpresa({
                   <TableCell>{transaction.history}</TableCell>
                   <TableCell className="text-right font-semibold">{formatCurrency(transaction.value)}</TableCell>
                   <TableCell>{transaction.payment}</TableCell>
-                  {isAdminOrFunc && (
-                    <TableCell className="text-right">
+                  <TableCell className={isAdminOrFunc ? "text-right" : "hidden"}>
+                    {isAdminOrFunc && (
                       <Button
                         size="sm"
                         variant="light"
@@ -823,8 +827,8 @@ export function FinanceiroPorEmpresa({
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
-                    </TableCell>
-                  )}
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

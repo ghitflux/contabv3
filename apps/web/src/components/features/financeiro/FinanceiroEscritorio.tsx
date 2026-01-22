@@ -23,8 +23,8 @@ import {
   TableRow,
   Textarea,
 } from '@/heroui';
-import { DollarSign, Download, Plus, Repeat, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { CheckCircle, DollarSign, Download, Pencil, Plus, Repeat, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FinanceiroKPIs, type FinanceiroKpi } from './FinanceiroKPIs';
 import { useTransactions } from '@/hooks/useTransactions';
 import {
@@ -36,6 +36,8 @@ import {
 import { toast } from '@/lib/toast';
 import { endOfMonth, formatISO, startOfMonth, subMonths } from 'date-fns';
 import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
+import { bankAccountsApi } from '@/lib/api/endpoints/bank-accounts';
+import type { BankAccount } from '@/types/bank-account';
 
 type DisplayTransactionType = 'Entrada' | 'Saída';
 
@@ -49,14 +51,6 @@ type DisplayTransaction = {
   value: number;
   isRecurring?: boolean;
   recurringDay?: number;
-};
-
-type Bank = {
-  id: string;
-  name: string;
-  accountNumber: string;
-  balance: number;
-  accountingAccount?: string;
 };
 
 type StandardHistory = {
@@ -76,30 +70,6 @@ type NewTransactionState = {
   isRecurring: boolean;
   recurringDay: number;
 };
-
-const initialBanks: Bank[] = [
-  {
-    id: '1',
-    name: 'Banco do Brasil',
-    accountNumber: '1234-7',
-    balance: 12500.5,
-    accountingAccount: '1.1.1.01',
-  },
-  {
-    id: '2',
-    name: 'Caixa Econômica',
-    accountNumber: '5678-9',
-    balance: 6800.25,
-    accountingAccount: '1.1.1.02',
-  },
-  {
-    id: '3',
-    name: 'Pagamento PIX',
-    accountNumber: '0001-2',
-    balance: 9800.0,
-    accountingAccount: '1.1.1.03',
-  },
-];
 
 const initialHistories: StandardHistory[] = [
   { id: '1', description: 'Honorários do mês', accountingAccount: '3.1.1.01', type: 'income' },
@@ -133,15 +103,23 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   const [endDate, setEndDate] = useState(
     formatISO(endOfMonth(new Date()), { representation: 'date' })
   );
-  const [banks, setBanks] = useState<Bank[]>(initialBanks);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [isLoadingBanks, setIsLoadingBanks] = useState(false);
   const [standardHistories, setStandardHistories] = useState<StandardHistory[]>(initialHistories);
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
+  const [editingBank, setEditingBank] = useState<BankAccount | null>(null);
+  const [isSavingBank, setIsSavingBank] = useState(false);
+  const [successModal, setSuccessModal] = useState<{ isOpen: boolean; message: string; bankName: string }>({
+    isOpen: false,
+    message: '',
+    bankName: '',
+  });
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
-  const [newBank, setNewBank] = useState({
+  const [bankForm, setBankForm] = useState({
     name: '',
-    accountNumber: '',
+    account_number: '',
     balance: '',
-    accountingAccount: '',
+    accounting_account: '',
   });
   const [newHistory, setNewHistory] = useState({
     description: '',
@@ -149,7 +127,130 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     type: 'income' as 'income' | 'expense',
   });
   const [newTransaction, setNewTransaction] = useState<NewTransactionState>(buildDefaultTransaction());
+
+  // OFFICE_CLIENT_ID is used for transactions (still required)
+  // Bank accounts use office_only flag instead
   const OFFICE_CLIENT_ID = process.env.NEXT_PUBLIC_OFFICE_CLIENT_ID ?? '';
+
+  // Funções para gerenciar bancos do escritório
+  const resetBankForm = useCallback(() => {
+    setBankForm({
+      name: '',
+      account_number: '',
+      balance: '',
+      accounting_account: '',
+    });
+    setEditingBank(null);
+  }, []);
+
+  const openBankModal = useCallback(
+    (bank?: BankAccount | null) => {
+      if (bank) {
+        setEditingBank(bank);
+        setBankForm({
+          name: bank.name,
+          account_number: bank.account_number,
+          balance: bank.balance?.toString() ?? '',
+          accounting_account: bank.accounting_account ?? '',
+        });
+      } else {
+        resetBankForm();
+      }
+      setIsBankModalOpen(true);
+    },
+    [resetBankForm]
+  );
+
+  const loadBankAccounts = useCallback(async () => {
+    setIsLoadingBanks(true);
+    try {
+      const response = await bankAccountsApi.list({
+        office_only: true,
+        limit: 200,
+      });
+      const normalized = response.items.map((bank) => ({
+        ...bank,
+        balance: Number(bank.balance) || 0,
+      }));
+      setBankAccounts(normalized);
+    } catch (error) {
+      console.error('Erro ao carregar bancos do escritório', error);
+      toast.error('Não foi possível carregar os bancos.');
+    } finally {
+      setIsLoadingBanks(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadBankAccounts();
+  }, [loadBankAccounts]);
+
+  const handleSaveBank = async () => {
+    if (!bankForm.name.trim() || !bankForm.account_number.trim()) {
+      toast.error('Informe o nome e o número da conta.');
+      return;
+    }
+
+    const balanceValue = bankForm.balance ? Number.parseFloat(bankForm.balance) : 0;
+    if (Number.isNaN(balanceValue)) {
+      toast.error('Informe um saldo válido.');
+      return;
+    }
+
+    setIsSavingBank(true);
+    try {
+      const savedBankName = bankForm.name.trim();
+      if (editingBank) {
+        await bankAccountsApi.update(editingBank.id, {
+          name: savedBankName,
+          account_number: bankForm.account_number.trim(),
+          balance: balanceValue,
+          accounting_account: bankForm.accounting_account.trim() || null,
+        });
+        setSuccessModal({
+          isOpen: true,
+          message: 'Banco atualizado com sucesso!',
+          bankName: savedBankName,
+        });
+      } else {
+        // Create office bank account (no client_id)
+        await bankAccountsApi.create({
+          name: savedBankName,
+          account_number: bankForm.account_number.trim(),
+          balance: balanceValue,
+          accounting_account: bankForm.accounting_account.trim() || null,
+        });
+        setSuccessModal({
+          isOpen: true,
+          message: 'Banco cadastrado com sucesso!',
+          bankName: savedBankName,
+        });
+      }
+      setIsBankModalOpen(false);
+      resetBankForm();
+      await loadBankAccounts();
+    } catch (error) {
+      console.error('Erro ao salvar banco', error);
+      const errorDetail = (error as { data?: { detail?: string } })?.data?.detail;
+      const message = typeof errorDetail === 'string' ? errorDetail : 'Não foi possível salvar o banco.';
+      toast.error(message);
+    } finally {
+      setIsSavingBank(false);
+    }
+  };
+
+  const handleDeleteBank = async (bankId: string) => {
+    const confirmed = window.confirm('Tem certeza que deseja excluir este banco?');
+    if (!confirmed) return;
+    try {
+      await bankAccountsApi.delete(bankId);
+      toast.success('Banco removido com sucesso.');
+      await loadBankAccounts();
+    } catch (error) {
+      console.error('Erro ao excluir banco', error);
+      toast.error('Não foi possível excluir o banco.');
+    }
+  };
 
   const { transactions, createTransaction, deleteTransaction, refresh } = useTransactions({
     filters: {
@@ -324,7 +425,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       return;
     }
 
-    const bankName = banks.find((bank) => bank.id === newTransaction.bank)?.name;
+    const bankName = bankAccounts.find((bank) => bank.id === newTransaction.bank)?.name;
     const notesParts = [];
     if (bankName) notesParts.push(`Banco: ${bankName}`);
     if (newTransaction.observation) notesParts.push(`Obs: ${newTransaction.observation}`);
@@ -372,21 +473,6 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     }
   };
 
-  const handleAddBank = () => {
-    if (!newBank.name || !newBank.accountNumber) return;
-
-    const bank: Bank = {
-      id: String(banks.length + 1),
-      name: newBank.name,
-      accountNumber: newBank.accountNumber,
-      balance: newBank.balance ? Number.parseFloat(newBank.balance) : 0,
-      accountingAccount: newBank.accountingAccount || undefined,
-    };
-
-    setBanks((prev) => [...prev, bank]);
-    setIsBankModalOpen(false);
-    setNewBank({ name: '', accountNumber: '', balance: '', accountingAccount: '' });
-  };
 
   const handleAddHistory = () => {
     if (!newHistory.description) return;
@@ -453,40 +539,76 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       <FinanceiroKPIs kpis={kpis} />
 
       <Card className="border border-default-200/50 dark:border-default-100/20">
-        <CardHeader className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            Saldo de Bancos e Caixa
-          </h3>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Saldo de Bancos e Caixa
+            </h3>
+            <p className="text-sm text-default-500">
+              Gerencie as contas bancárias do escritório
+            </p>
+          </div>
           <Button
-            variant="bordered"
-            size="sm"
+            color="primary"
+            variant="flat"
             startContent={<Plus className="h-4 w-4" />}
-            onPress={() => setIsBankModalOpen(true)}
+            onPress={() => openBankModal()}
           >
             Novo Banco
           </Button>
         </CardHeader>
         <CardBody>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {banks.map((bank) => (
-              <Card key={bank.id} className="bg-slate-50 dark:bg-slate-900/20">
-                <CardBody className="space-y-1">
-                  <p className="text-sm text-slate-600 dark:text-slate-400">{bank.name}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-500">
-                    Conta: {bank.accountNumber}
-                  </p>
-                  <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-                    {formatCurrency(bank.balance)}
-                  </p>
-                  {bank.accountingAccount && (
-                    <p className="text-xs text-slate-500 dark:text-slate-500">
-                      Conta contábil: {bank.accountingAccount}
+          {isLoadingBanks ? (
+            <p className="text-sm text-default-500">Carregando bancos...</p>
+          ) : bankAccounts.length === 0 ? (
+            <p className="text-sm text-default-500">Nenhum banco cadastrado.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {bankAccounts.map((bank) => (
+                <Card key={bank.id} className="bg-slate-50 dark:bg-slate-900/20">
+                  <CardBody className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm text-slate-600 dark:text-slate-400">{bank.name}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-500">
+                          Conta: {bank.account_number}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="light"
+                          isIconOnly
+                          aria-label="Editar banco"
+                          onPress={() => openBankModal(bank)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="light"
+                          color="danger"
+                          isIconOnly
+                          aria-label="Excluir banco"
+                          onPress={() => handleDeleteBank(bank.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                      {formatCurrency(bank.balance || 0)}
                     </p>
-                  )}
-                </CardBody>
-              </Card>
-            ))}
-          </div>
+                    {bank.accounting_account && (
+                      <p className="text-xs text-slate-500 dark:text-slate-500">
+                        Conta contábil: {bank.accounting_account}
+                      </p>
+                    )}
+                  </CardBody>
+                </Card>
+              ))}
+            </div>
+          )}
         </CardBody>
       </Card>
 
@@ -526,15 +648,16 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
             </Select>
             <Select
               label="Banco"
-              selectedKeys={[newTransaction.bank]}
+              selectedKeys={newTransaction.bank ? [newTransaction.bank] : []}
               onSelectionChange={(keys) => {
                 const value = Array.from(keys)[0] as string | undefined;
                 if (value) {
                   setNewTransaction((prev) => ({ ...prev, bank: value }));
                 }
               }}
+              placeholder="Selecione..."
             >
-              {banks.map((bank) => (
+              {bankAccounts.map((bank) => (
                 <SelectItem key={bank.id}>{bank.name}</SelectItem>
               ))}
             </Select>
@@ -670,48 +793,89 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         </CardBody>
       </Card>
 
-      <Modal isOpen={isBankModalOpen} onClose={() => setIsBankModalOpen(false)}>
+      <Modal
+        isOpen={isBankModalOpen}
+        onOpenChange={(open) => {
+          setIsBankModalOpen(open);
+          if (!open) resetBankForm();
+        }}
+      >
         <ModalContent>
           {(onClose) => (
             <>
-              <ModalHeader>Adicionar Banco</ModalHeader>
+              <ModalHeader>
+                {editingBank ? 'Editar Banco' : 'Adicionar Banco'}
+              </ModalHeader>
               <ModalBody className="space-y-3">
                 <Input
-                  label="Nome do Banco *"
+                  label="Nome do Banco"
                   placeholder="Ex: Banco do Brasil"
-                  value={newBank.name}
-                  onValueChange={(value) => setNewBank((prev) => ({ ...prev, name: value }))}
+                  value={bankForm.name}
+                  onValueChange={(value) => setBankForm((prev) => ({ ...prev, name: value }))}
                 />
                 <Input
-                  label="Número da Conta *"
+                  label="Número da Conta"
                   placeholder="Ex: 12345-6"
-                  value={newBank.accountNumber}
+                  value={bankForm.account_number}
                   onValueChange={(value) =>
-                    setNewBank((prev) => ({ ...prev, accountNumber: value }))
+                    setBankForm((prev) => ({ ...prev, account_number: value }))
                   }
                 />
                 <Input
-                  label="Saldo Inicial"
+                  label="Saldo"
                   type="number"
                   placeholder="0,00"
-                  value={newBank.balance}
-                  onValueChange={(value) => setNewBank((prev) => ({ ...prev, balance: value }))}
+                  value={bankForm.balance}
+                  onValueChange={(value) => setBankForm((prev) => ({ ...prev, balance: value }))}
                 />
                 <Input
                   label="Conta Contábil"
                   placeholder="Ex: 1.1.1.01"
-                  value={newBank.accountingAccount}
+                  value={bankForm.accounting_account}
                   onValueChange={(value) =>
-                    setNewBank((prev) => ({ ...prev, accountingAccount: value }))
+                    setBankForm((prev) => ({ ...prev, accounting_account: value }))
                   }
                 />
               </ModalBody>
               <ModalFooter>
-                <Button variant="light" onPress={onClose}>
+                <Button variant="light" onPress={onClose} isDisabled={isSavingBank}>
                   Cancelar
                 </Button>
-                <Button color="primary" onPress={handleAddBank}>
-                  Adicionar
+                <Button color="primary" onPress={handleSaveBank} isLoading={isSavingBank}>
+                  {isSavingBank ? 'Salvando...' : 'Salvar'}
+                </Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
+
+      <Modal
+        isOpen={successModal.isOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSuccessModal({ isOpen: false, message: '', bankName: '' });
+          }
+        }}
+        size="sm"
+      >
+        <ModalContent>
+          {(onClose) => (
+            <>
+              <ModalBody className="py-8 flex flex-col items-center text-center">
+                <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-4">
+                  <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
+                </div>
+                <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2">
+                  {successModal.message}
+                </h3>
+                <p className="text-slate-600 dark:text-slate-400">
+                  <span className="font-medium">{successModal.bankName}</span> foi salvo com sucesso no sistema.
+                </p>
+              </ModalBody>
+              <ModalFooter className="justify-center pb-6">
+                <Button color="primary" onPress={onClose}>
+                  Entendido
                 </Button>
               </ModalFooter>
             </>

@@ -19,11 +19,15 @@ class BankAccountRepository(BaseRepository[BankAccount]):
     async def list_with_filters(
         self,
         client_id: Optional[UUID] = None,
+        office_only: bool = False,
         skip: int = 0,
         limit: int = 100,
     ) -> tuple[list[BankAccount], int]:
         conditions = []
-        if client_id:
+        if office_only:
+            # List only office bank accounts (client_id is null)
+            conditions.append(BankAccount.client_id.is_(None))
+        elif client_id:
             conditions.append(BankAccount.client_id == client_id)
 
         count_stmt = select(func.count()).select_from(BankAccount)

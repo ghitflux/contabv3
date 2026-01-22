@@ -11,9 +11,10 @@ import type {
 } from "@/types/bank-account";
 
 export const bankAccountsApi = {
-  async list(params?: { client_id?: string; skip?: number; limit?: number }): Promise<BankAccountListResponse> {
+  async list(params?: { client_id?: string; office_only?: boolean; skip?: number; limit?: number }): Promise<BankAccountListResponse> {
     const query = new URLSearchParams();
     if (params?.client_id) query.append("client_id", params.client_id);
+    if (params?.office_only) query.append("office_only", "true");
     if (typeof params?.skip === "number") query.append("skip", String(params.skip));
     if (typeof params?.limit === "number") query.append("limit", String(params.limit));
     const qs = query.toString();

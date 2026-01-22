@@ -14,14 +14,14 @@ from app.db.models.base import Base, TimestampMixin, UUIDMixin
 
 
 class BankAccount(Base, UUIDMixin, TimestampMixin):
-    """Bank account tied to a client."""
+    """Bank account tied to a client or office (client_id=null)."""
 
     __tablename__ = "bank_accounts"
 
-    client_id: Mapped[UUID] = mapped_column(
+    client_id: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("clients.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
