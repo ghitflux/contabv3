@@ -71,9 +71,9 @@ export function FinanceiroPorEmpresa({
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [clientDetails, setClientDetails] = useState<Client | null>(null);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
-  const [monthFilter, setMonthFilter] = useState(formatISO(new Date(), { representation: "date" }).slice(0, 7));
-  const [startDate, setStartDate] = useState(formatISO(startOfMonth(new Date()), { representation: "date" }));
-  const [endDate, setEndDate] = useState(formatISO(endOfMonth(new Date()), { representation: "date" }));
+  const [monthFilter, setMonthFilter] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [isLoadingBanks, setIsLoadingBanks] = useState(false);
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
@@ -99,6 +99,13 @@ export function FinanceiroPorEmpresa({
   });
 
   useEffect(() => {
+    const now = new Date();
+    setMonthFilter(formatISO(now, { representation: "date" }).slice(0, 7));
+    setStartDate(formatISO(startOfMonth(now), { representation: "date" }));
+    setEndDate(formatISO(endOfMonth(now), { representation: "date" }));
+  }, []);
+
+  useEffect(() => {
     if (!user) return;
     let active = true;
     (async () => {
@@ -108,7 +115,6 @@ export function FinanceiroPorEmpresa({
           const client = await clientsApi.getMe();
           if (active) {
             setClients([client]);
-            console.log("Clientes carregados:", 1);
           }
           return;
         }
@@ -116,7 +122,6 @@ export function FinanceiroPorEmpresa({
         const response = await clientsApi.list({ size: 0 });
         if (active) {
           setClients(response.items);
-          console.log("Clientes carregados:", response.items.length);
         }
       } catch (error) {
         console.error("Erro ao buscar clientes", error);

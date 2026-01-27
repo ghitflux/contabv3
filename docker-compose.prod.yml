@@ -49,6 +49,10 @@ services:
       dockerfile: infra/docker/Dockerfile.web.prod
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://cicgestao.com/api}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-wss://cicgestao.com/ws}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-CIC Gestão}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://cicgestao.com}
+        NEXT_PUBLIC_OFFICE_CLIENT_ID: ${NEXT_PUBLIC_OFFICE_CLIENT_ID:-522d5b00-2a4d-4f5a-8913-5d4ee0cf8104}
     container_name: contabil-web-prod
     env_file:
       - .env.prod

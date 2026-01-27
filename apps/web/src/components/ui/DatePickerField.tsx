@@ -1,9 +1,9 @@
 'use client';
 
-import { Button, Calendar, Popover, PopoverContent, PopoverTrigger } from '@/heroui';
+import { Button, Calendar, Input, Popover, PopoverContent, PopoverTrigger } from '@/heroui';
 import { CalendarIcon, XIcon } from '@/lib/icons';
 import { CalendarDate } from '@internationalized/date';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 interface DatePickerFieldProps {
   value?: string | null;
@@ -13,6 +13,7 @@ interface DatePickerFieldProps {
   className?: string;
   size?: 'sm' | 'md' | 'lg';
   isClearable?: boolean;
+  minYear?: number;
   'aria-label'?: string;
 }
 
@@ -42,6 +43,49 @@ const parseCalendarDate = (value?: string | null) => {
   }
 };
 
+const parseUserInputDate = (raw: string, minYear?: number) => {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const separator = trimmed.includes('/') ? '/' : trimmed.includes('-') ? '-' : null;
+  if (!separator) return null;
+
+  const parts = trimmed.split(separator).map((part) => part.trim());
+  if (parts.length !== 3) return null;
+
+  const [first, second, third] = parts;
+  if (!first || !second || !third) return null;
+
+  const part1 = Number.parseInt(first, 10);
+  const part2 = Number.parseInt(second, 10);
+  const part3 = Number.parseInt(third, 10);
+  if (Number.isNaN(part1) || Number.isNaN(part2) || Number.isNaN(part3)) return null;
+
+  let year: number;
+  let month: number;
+  let day: number;
+
+  if (first.length === 4) {
+    year = part1;
+    month = part2;
+    day = part3;
+  } else if (third.length === 4) {
+    day = part1;
+    month = part2;
+    year = part3;
+  } else {
+    return null;
+  }
+
+  if (typeof minYear === 'number' && year < minYear) return null;
+
+  try {
+    return new CalendarDate(year, month, day);
+  } catch {
+    return null;
+  }
+};
+
 const formatToValue = (date: CalendarDate) => {
   const year = date.year.toString().padStart(4, '0');
   const month = date.month.toString().padStart(2, '0');
@@ -57,12 +101,45 @@ export function DatePickerField({
   className,
   size = 'sm',
   isClearable = false,
+  minYear,
   'aria-label': ariaLabel,
 }: DatePickerFieldProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const calendarValue = useMemo(() => parseCalendarDate(value), [value]);
   const displayValue = useMemo(() => formatDisplayValue(value), [value]);
+  const [inputValue, setInputValue] = useState(displayValue);
+  const minValue = useMemo(
+    () => (typeof minYear === 'number' ? new CalendarDate(minYear, 1, 1) : undefined),
+    [minYear]
+  );
+
+  useEffect(() => {
+    setInputValue(displayValue);
+  }, [displayValue]);
+
+  const commitInputValue = () => {
+    const trimmed = inputValue.trim();
+
+    if (!trimmed) {
+      if (isClearable) {
+        onChange('');
+      } else {
+        setInputValue(displayValue);
+      }
+      return;
+    }
+
+    const parsed = parseUserInputDate(trimmed, minYear);
+    if (!parsed) {
+      setInputValue(displayValue);
+      return;
+    }
+
+    const nextValue = formatToValue(parsed);
+    onChange(nextValue);
+    setInputValue(formatDisplayValue(nextValue));
+  };
 
   return (
     <div className={className}>
@@ -75,49 +152,69 @@ export function DatePickerField({
         </label>
       )}
       <Popover isOpen={isOpen} onOpenChange={setIsOpen} placement="bottom-start">
-        <div className="relative w-full">
-          <PopoverTrigger>
-            <Button
-              id={ariaLabel ?? label}
-              variant="bordered"
-              size={size}
-              className={`w-full justify-between text-left font-normal gap-2 py-2.5 ${
-                value ? 'text-foreground' : 'text-default-400'
-              } ${isClearable && value ? 'pr-10' : ''}`}
-              aria-label={ariaLabel || label || 'Selecionar data'}
-            >
-              <div className="flex-1 flex items-center gap-2 overflow-hidden">
-                <CalendarIcon className="h-4 w-4 text-default-400" />
-                <span className="truncate">{displayValue || placeholder}</span>
-              </div>
-            </Button>
-          </PopoverTrigger>
-
-          {isClearable && value ? (
-            <Button
-              isIconOnly
-              size="sm"
-              variant="light"
-              radius="sm"
-              className="absolute right-1 top-1/2 -translate-y-1/2 z-10"
-              onPress={() => onChange('')}
-              aria-label="Limpar data selecionada"
-            >
-              <XIcon className="h-4 w-4" />
-            </Button>
-          ) : null}
+        <div className="w-full">
+          <Input
+            id={ariaLabel ?? label}
+            value={inputValue}
+            onValueChange={setInputValue}
+            onBlur={commitInputValue}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                commitInputValue();
+                (event.currentTarget as HTMLElement).blur();
+              }
+            }}
+            placeholder={placeholder}
+            size={size}
+            variant="bordered"
+            aria-label={ariaLabel || label || 'Selecionar data'}
+            startContent={
+              <PopoverTrigger>
+                <Button
+                  isIconOnly
+                  size="sm"
+                  variant="light"
+                  radius="sm"
+                  aria-label="Abrir calendário"
+                >
+                  <CalendarIcon className="h-4 w-4 text-default-400" />
+                </Button>
+              </PopoverTrigger>
+            }
+            endContent={
+              isClearable && inputValue ? (
+                <Button
+                  isIconOnly
+                  size="sm"
+                  variant="light"
+                  radius="sm"
+                  onPress={() => {
+                    setInputValue('');
+                    onChange('');
+                  }}
+                  aria-label="Limpar data selecionada"
+                >
+                  <XIcon className="h-4 w-4" />
+                </Button>
+              ) : null
+            }
+          />
         </div>
         <PopoverContent className="w-auto p-0">
           <Calendar
             value={calendarValue}
             onChange={(date) => {
               if (date) {
-                onChange(formatToValue(date as CalendarDate));
+                const nextValue = formatToValue(date as CalendarDate);
+                onChange(nextValue);
+                setInputValue(formatDisplayValue(nextValue));
                 setIsOpen(false);
               }
             }}
             aria-label={ariaLabel || label || 'Calendário'}
             calendarWidth={320}
+            minValue={minValue}
           />
         </PopoverContent>
       </Popover>

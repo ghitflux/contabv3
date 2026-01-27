@@ -34,14 +34,20 @@ export function FinanceiroModule() {
   const [activeTab, setActiveTab] = useState(availableTabs[0] || "por-empresa");
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [rangeStart, setRangeStart] = useState(formatISO(startOfMonth(new Date()), { representation: "date" }));
-  const [rangeEnd, setRangeEnd] = useState(formatISO(new Date(), { representation: "date" }));
+  const [rangeStart, setRangeStart] = useState("");
+  const [rangeEnd, setRangeEnd] = useState("");
   const [selectedFormat, setSelectedFormat] = useState<ReportFormat>(ReportFormat.PDF);
   const [clientSearch, setClientSearch] = useState("");
   const [clientOptions, setClientOptions] = useState<ClientListItem[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedClientForExport, setSelectedClientForExport] = useState<ClientListItem | null>(null);
   const [isOfficeExport, setIsOfficeExport] = useState(true);
+
+  useEffect(() => {
+    const now = new Date();
+    setRangeStart(formatISO(startOfMonth(now), { representation: "date" }));
+    setRangeEnd(formatISO(now, { representation: "date" }));
+  }, []);
 
   useEffect(() => {
     if (!availableTabs.includes(activeTab)) {

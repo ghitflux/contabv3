@@ -104,6 +104,24 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
                       <p className="text-xs text-gray-600 mb-1">CNPJ</p>
                       <Snippet symbol="" size="sm">{formatCNPJ(client.cnpj)}</Snippet>
                     </div>
+                    {client.cpf_empresa && (
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">CPF</p>
+                        <Snippet symbol="" size="sm">{client.cpf_empresa}</Snippet>
+                      </div>
+                    )}
+                    {client.senha_gov && (
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">Senha GOV</p>
+                        <SnippetCopy text={client.senha_gov} hideByDefault />
+                      </div>
+                    )}
+                    {client.senha_prefeitura && (
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">Senha da Prefeitura</p>
+                        <SnippetCopy text={client.senha_prefeitura} hideByDefault />
+                      </div>
+                    )}
                     {client.inscricao_estadual && (
                       <div>
                         <p className="text-xs text-gray-600 mb-1">Inscrição Estadual</p>
@@ -118,7 +136,7 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
                     )}
                     {client.codigo_simples && (
                       <div>
-                        <p className="text-xs text-gray-600 mb-1">Código Simples</p>
+                        <p className="text-xs text-gray-600 mb-1">Código de Acesso ao Simples Nacional</p>
                         <Snippet symbol="" size="sm">{client.codigo_simples}</Snippet>
                       </div>
                     )}
@@ -379,7 +397,7 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
                         )}
                         {client.senha_nfse && (
                           <div className="bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-800/60 p-3 rounded-lg">
-                            <p className="text-xs text-warning-600 dark:text-warning-400 mb-1 font-medium">Senha NFS-e</p>
+                            <p className="text-xs text-warning-600 dark:text-warning-400 mb-1 font-medium">Senha NFS-e Nacional</p>
                             <SnippetCopy text={client.senha_nfse} hideByDefault />
                           </div>
                         )}

@@ -65,6 +65,7 @@ class ClientBase(BaseSchema):
     # Financial
     honorarios_mensais: float = Field(..., ge=0)
     dia_vencimento: int = Field(..., ge=1, le=31)
+    gerar_lancamentos_honorarios: bool = False
 
     # Tax info
     regime_tributario: RegimeTributario
@@ -151,6 +152,7 @@ class ClientUpdate(BaseSchema):
 
     honorarios_mensais: Optional[float] = Field(None, ge=0)
     dia_vencimento: Optional[int] = Field(None, ge=1, le=31)
+    gerar_lancamentos_honorarios: Optional[bool] = None
 
     regime_tributario: Optional[RegimeTributario] = None
     tipo_empresa: Optional[TipoEmpresa] = None
@@ -262,6 +264,7 @@ class ClientDraftCreate(BaseSchema):
 
     honorarios_mensais: Optional[float] = None
     dia_vencimento: Optional[int] = None
+    gerar_lancamentos_honorarios: Optional[bool] = None
 
     regime_tributario: Optional[str] = None
     tipo_empresa: Optional[str] = None

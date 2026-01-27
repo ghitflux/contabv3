@@ -5,6 +5,7 @@ Singleton pattern for configuration.
 
 from functools import lru_cache
 from typing import Any
+from uuid import UUID
 
 from pydantic import PostgresDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -91,6 +92,9 @@ class Settings(BaseSettings):
     # File Upload
     MAX_UPLOAD_SIZE: int = 10485760  # 10MB
     UPLOAD_DIR: str = "/var/uploads"
+
+    # Finance
+    OFFICE_CLIENT_ID: UUID | None = UUID("522d5b00-2a4d-4f5a-8913-5d4ee0cf8104")
 
 
 @lru_cache

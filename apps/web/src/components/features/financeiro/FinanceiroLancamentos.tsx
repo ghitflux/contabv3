@@ -57,10 +57,17 @@ export function FinanceiroLancamentos() {
   const [busca, setBusca] = useState("");
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
-  const [monthFilter, setMonthFilter] = useState(formatISO(new Date(), { representation: "date" }).slice(0, 7));
-  const [startDate, setStartDate] = useState(formatISO(startOfMonth(new Date()), { representation: "date" }));
-  const [endDate, setEndDate] = useState(formatISO(endOfMonth(new Date()), { representation: "date" }));
+  const [monthFilter, setMonthFilter] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [clients, setClients] = useState<ClientListItem[]>([]);
+
+  useEffect(() => {
+    const now = new Date();
+    setMonthFilter(formatISO(now, { representation: "date" }).slice(0, 7));
+    setStartDate(formatISO(startOfMonth(now), { representation: "date" }));
+    setEndDate(formatISO(endOfMonth(now), { representation: "date" }));
+  }, []);
 
   const transactionFilters = useMemo(
     () => ({
@@ -164,7 +171,7 @@ export function FinanceiroLancamentos() {
   // Fetch transactions from API
   const { transactions, isLoading, fetchTransactions, createTransaction } = useTransactions({
     filters: transactionFilters,
-    autoFetch: true,
+    autoFetch: Boolean(startDate && endDate),
   });
 
   const handleSaveTransaction = async (data: NovoLancamentoData) => {

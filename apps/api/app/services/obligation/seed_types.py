@@ -3,10 +3,13 @@ Seed default obligation types for automatic generation.
 """
 
 from typing import Any
+from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.client import Client
+from app.db.models.obligation import Obligation
 from app.db.models.obligation_type import ObligationType
 from app.schemas.obligation import ObligationRecurrence
 
@@ -359,9 +362,6 @@ DEFAULT_OBLIGATION_TYPES: list[dict[str, Any]] = [
 
 async def ensure_obligation_types(session: AsyncSession) -> int:
     """Insert missing obligation types and return count added."""
-    result = await session.execute(select(ObligationType.code))
-    existing_codes = {row[0] for row in result.fetchall()}
-
     existing_result = await session.execute(select(ObligationType))
     existing_by_code = {row.code: row for row in existing_result.scalars().all()}
 
@@ -376,6 +376,66 @@ async def ensure_obligation_types(session: AsyncSession) -> int:
         else:
             session.add(ObligationType(**payload))
             created += 1
+
+    def normalize_name(value: str) -> str:
+        return " ".join((value or "").strip().lower().split())
+
+    # De-duplicate by name (keeps default code when possible) and migrate references.
+    types_result = await session.execute(select(ObligationType))
+    all_types = types_result.scalars().all()
+    default_name_to_code = {
+        normalize_name(item["name"]): item["code"] for item in DEFAULT_OBLIGATION_TYPES
+    }
+
+    grouped: dict[str, list[ObligationType]] = {}
+    for ob_type in all_types:
+        key = normalize_name(ob_type.name)
+        if not key:
+            continue
+        grouped.setdefault(key, []).append(ob_type)
+
+    rewrites: dict[str, str] = {}
+    for key, group in grouped.items():
+        if len(group) <= 1:
+            continue
+
+        preferred_code = default_name_to_code.get(key)
+        canonical = None
+        if preferred_code:
+            canonical = next((item for item in group if item.code == preferred_code), None)
+        if canonical is None:
+            canonical = sorted(group, key=lambda item: str(item.id))[0]
+
+        for item in group:
+            if item.id == canonical.id:
+                continue
+            rewrites[str(item.id)] = str(canonical.id)
+            item.is_active = False
+
+    if rewrites:
+        for old_id, new_id in rewrites.items():
+            await session.execute(
+                update(Obligation)
+                .where(Obligation.obligation_type_id == UUID(old_id))
+                .values(obligation_type_id=UUID(new_id))
+            )
+
+        clients_result = await session.execute(select(Client))
+        clients = clients_result.scalars().all()
+        for client in clients:
+            ids = client.obligation_types_ids or []
+            if not isinstance(ids, list) or not ids:
+                continue
+            updated = [rewrites.get(str(value), str(value)) for value in ids]
+            seen: set[str] = set()
+            deduped: list[str] = []
+            for value in updated:
+                if value in seen:
+                    continue
+                seen.add(value)
+                deduped.append(value)
+            if deduped != ids:
+                client.obligation_types_ids = deduped
 
     await session.commit()
     return created

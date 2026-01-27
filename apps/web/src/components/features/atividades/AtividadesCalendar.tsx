@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
 import { Card, CardBody, CardHeader, Button, Spinner } from "@/heroui"
 import { ChevronLeft, ChevronRight, Calendar } from "lucide-react"
@@ -18,8 +18,16 @@ export function AtividadesCalendar({
   isLoading = false,
   onSelectActivity,
 }: AtividadesCalendarProps) {
-  const [currentDate, setCurrentDate] = useState(new Date())
+  const [currentDate, setCurrentDate] = useState<Date | null>(null)
+  const [today, setToday] = useState<Date | null>(null)
   const [view, setView] = useState<"month" | "week" | "day">("month")
+
+  useEffect(() => {
+    const now = new Date()
+    setCurrentDate(now)
+    setToday(now)
+  }, [])
+
   const activitiesByDate = useMemo(() => {
     const map: Record<string, Activity[]> = {}
     activities.forEach((activity) => {
@@ -81,12 +89,14 @@ export function AtividadesCalendar({
   }
 
   const getDaysForView = () => {
+    if (!currentDate) return []
     if (view === "month") return getDaysInMonth(currentDate)
     if (view === "week") return getDaysInWeek(currentDate)
     return [currentDate]
   }
 
   const navigateDate = (direction: number) => {
+    if (!currentDate) return
     if (view === "month") {
       setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + direction, 1))
       return
@@ -97,10 +107,11 @@ export function AtividadesCalendar({
   }
 
   const days = getDaysForView()
-  const dayHeaders = view === "day" ? [dayNames[currentDate.getDay()]] : dayNames
+  const dayHeaders = view === "day" && currentDate ? [dayNames[currentDate.getDay()]] : dayNames
   const gridColsClass = view === "day" ? "grid-cols-1" : "grid-cols-7"
 
   const headerLabel = useMemo(() => {
+    if (!currentDate) return ""
     if (view === "day") {
       return currentDate.toLocaleDateString("pt-BR", {
         day: "2-digit",
@@ -199,7 +210,7 @@ export function AtividadesCalendar({
             ))}
             {days.map((day, index) => {
               const activities = getActivitiesForDate(day)
-              const isToday = day && day.toDateString() === new Date().toDateString()
+              const isToday = day && today && day.toDateString() === today.toDateString()
               return (
                 <motion.div
                   key={index}

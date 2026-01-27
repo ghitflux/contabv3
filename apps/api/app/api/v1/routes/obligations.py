@@ -118,7 +118,9 @@ async def list_obligation_types(
     """
     from sqlalchemy import select
     from app.db.models.obligation_type import ObligationType
+    from app.services.obligation.seed_types import ensure_obligation_types
 
+    await ensure_obligation_types(db)
     query = select(ObligationType).order_by(ObligationType.name)
 
     if is_active is not None:

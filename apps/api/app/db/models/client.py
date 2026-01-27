@@ -78,6 +78,13 @@ class Client(Base, UUIDMixin, TimestampMixin):
     # Financial
     honorarios_mensais: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     dia_vencimento: Mapped[int] = mapped_column(Integer, nullable=False)
+    gerar_lancamentos_honorarios: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+        comment="Se deve lançar honorários automaticamente como despesa/receita recorrente",
+    )
 
     # Tax info
     regime_tributario: Mapped[RegimeTributario] = mapped_column(

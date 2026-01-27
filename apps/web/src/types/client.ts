@@ -31,6 +31,7 @@ export enum ServicoContratado {
 export enum LicencaNecessaria {
   LICENCA_SANITARIA = 'licenca_sanitaria',
   ARCB_BOMBEIROS = 'arcb_bombeiros',
+  ALVARA_FUNCIONAMENTO = 'alvara_funcionamento',
   LICENCA_OPERACOES = 'licenca_operacoes',
   BAIXO_RISCO = 'baixo_risco',
   CERT_ACESSIBILIDADE = 'cert_acessibilidade',
@@ -60,6 +61,7 @@ export interface ClientBase {
   // Financial
   honorarios_mensais: number;
   dia_vencimento: number;
+  gerar_lancamentos_honorarios: boolean;
 
   // Tax info
   regime_tributario: RegimeTributario;
@@ -250,6 +252,7 @@ export function getLicencaNecessariaLabel(licenca: LicencaNecessaria | string): 
   const labels: Record<string, string> = {
     [LicencaNecessaria.LICENCA_SANITARIA]: 'Licença Sanitária',
     [LicencaNecessaria.ARCB_BOMBEIROS]: 'ARCB Bombeiros',
+    [LicencaNecessaria.ALVARA_FUNCIONAMENTO]: 'Alvará de Funcionamento',
     [LicencaNecessaria.LICENCA_OPERACOES]: 'Licença de Operações',
     [LicencaNecessaria.BAIXO_RISCO]: 'Baixo Risco',
     [LicencaNecessaria.CERT_ACESSIBILIDADE]: 'Cert. de Acessibilidade',

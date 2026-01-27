@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { useForm, Controller, useWatch } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
@@ -102,6 +102,7 @@ const clientFormSchema = z.object({
 
   honorarios_mensais: z.coerce.number().min(0, "Valor inválido"),
   dia_vencimento: z.coerce.number().min(1).max(31),
+  gerar_lancamentos_honorarios: z.boolean(),
 
   regime_tributario: z.nativeEnum(RegimeTributario),
   tipo_empresa: z.nativeEnum(TipoEmpresa),
@@ -154,22 +155,18 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
   // Load obligation types when modal opens
   React.useEffect(() => {
     if (isOpen) {
-      console.log("🔍 [DEBUG] Modal aberto, carregando obligation types...");
       setLoadingObligationTypes(true);
       obligationsApi
         .getObligationTypes(true) // Only active types
         .then((types) => {
-          console.log("✅ [DEBUG] Obligation types carregados:", types.length, "tipos");
-          console.log("📋 [DEBUG] Primeiros 3 tipos:", types.slice(0, 3));
           setObligationTypes(types);
         })
         .catch((error) => {
-          console.error("❌ [DEBUG] Erro ao carregar tipos de obrigações:", error);
+          console.error("Erro ao carregar tipos de obrigações:", error);
           toast.error("Erro ao carregar tipos de obrigações");
         })
         .finally(() => {
           setLoadingObligationTypes(false);
-          console.log("🏁 [DEBUG] Carregamento finalizado");
         });
     }
   }, [isOpen]);
@@ -190,6 +187,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
           servicos_contratados: client.servicos_contratados || [],
           licencas_necessarias: client.licencas_necessarias || [],
           obligation_types_ids: client.obligation_types_ids || [],
+          gerar_lancamentos_honorarios: client.gerar_lancamentos_honorarios ?? false,
         }
       : {
           razao_social: "",
@@ -212,6 +210,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
           uf: null,
           honorarios_mensais: 0,
           dia_vencimento: 10,
+          gerar_lancamentos_honorarios: false,
           regime_tributario: RegimeTributario.SIMPLES_NACIONAL,
           tipo_empresa: TipoEmpresa.COMERCIO,
           tipos_empresa: [],
@@ -235,23 +234,18 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
         },
   });
 
-  // Watch regime and tipo_empresa to filter obligations
-  const regimeTributario = useWatch({ control, name: "regime_tributario" });
-  const tipoEmpresa = useWatch({ control, name: "tipo_empresa" });
-
   // Reset form when client data changes (for editing)
   React.useEffect(() => {
     if (isOpen && isEditing && client) {
-      console.log("🔄 [DEBUG] Resetando formulário com dados do cliente:", client.id);
       reset({
         ...client,
         tipos_empresa: client.tipos_empresa || [],
         servicos_contratados: client.servicos_contratados || [],
         licencas_necessarias: client.licencas_necessarias || [],
         obligation_types_ids: client.obligation_types_ids || [],
+        gerar_lancamentos_honorarios: client.gerar_lancamentos_honorarios ?? false,
       });
     } else if (isOpen && !isEditing) {
-      console.log("🆕 [DEBUG] Resetando formulário para novo cliente");
       reset({
         razao_social: "",
         nome_fantasia: null,
@@ -273,6 +267,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
         uf: null,
         honorarios_mensais: 0,
         dia_vencimento: 10,
+        gerar_lancamentos_honorarios: false,
         regime_tributario: RegimeTributario.SIMPLES_NACIONAL,
         tipo_empresa: TipoEmpresa.COMERCIO,
         tipos_empresa: [],
@@ -296,45 +291,6 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
       });
     }
   }, [isOpen, isEditing, client, reset]);
-
-  // Filter obligation types based on selected regime and tipo_empresa
-  const filteredObligationTypes = React.useMemo(() => {
-    console.log("🔎 [DEBUG] Filtrando obrigações. Regime:", regimeTributario, "Tipo:", tipoEmpresa);
-
-    if (!regimeTributario || !tipoEmpresa) {
-      console.log("⚠️ [DEBUG] Regime ou tipo não selecionado, mostrando todas:", obligationTypes.length);
-      return obligationTypes;
-    }
-
-    const filtered = obligationTypes.filter((ot) => {
-      // Check regime
-      let regimeMatch = false;
-      if (regimeTributario === RegimeTributario.MEI) {
-        regimeMatch = ot.applies_to_mei;
-      } else if (regimeTributario === RegimeTributario.SIMPLES_NACIONAL) {
-        regimeMatch = ot.applies_to_simples;
-      } else if (regimeTributario === RegimeTributario.LUCRO_PRESUMIDO) {
-        regimeMatch = ot.applies_to_presumido;
-      } else if (regimeTributario === RegimeTributario.LUCRO_REAL) {
-        regimeMatch = ot.applies_to_real;
-      }
-
-      // Check tipo empresa
-      let tipoMatch = false;
-      if (tipoEmpresa === TipoEmpresa.COMERCIO) {
-        tipoMatch = ot.applies_to_commerce;
-      } else if (tipoEmpresa === TipoEmpresa.SERVICO || tipoEmpresa === TipoEmpresa.FINANCEIRO) {
-        tipoMatch = ot.applies_to_service;
-      } else if (tipoEmpresa === TipoEmpresa.INDUSTRIA) {
-        tipoMatch = ot.applies_to_industry;
-      }
-
-      return regimeMatch && tipoMatch;
-    });
-
-    console.log("✨ [DEBUG] Obrigações filtradas:", filtered.length, "de", obligationTypes.length);
-    return filtered;
-  }, [obligationTypes, regimeTributario, tipoEmpresa]);
 
   const generateSystemPassword = React.useCallback(() => {
     const length = 16;
@@ -612,8 +568,8 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
                           {...field}
                           value={field.value || ""}
                           type={isFieldVisible("senha_nfse") ? "text" : "password"}
-                          label="Senha da NFS-e"
-                          placeholder="Digite a senha da NFS-e"
+                          label="Senha NFS-e Nacional"
+                          placeholder="Digite a senha NFS-e Nacional"
                           endContent={
                             <Button
                               type="button"
@@ -697,8 +653,8 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
                         <Input
                           {...field}
                           value={field.value || ""}
-                          label="Código Simples"
-                          placeholder="Código do Simples Nacional"
+                          label="Código de Acesso ao Simples Nacional"
+                          placeholder="Digite o código de acesso"
                         />
                       )}
                     />
@@ -924,6 +880,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
                           value={field.value}
                           onChange={(value) => field.onChange(value || null)}
                           isClearable
+                          minYear={1800}
                         />
                       )}
                     />
@@ -936,6 +893,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
                           value={field.value}
                           onChange={(value) => field.onChange(value || null)}
                           isClearable
+                          minYear={1800}
                         />
                       )}
                     />
@@ -981,6 +939,26 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
                           max={31}
                           isRequired
                         />
+                      )}
+                    />
+                    <Controller
+                      name="gerar_lancamentos_honorarios"
+                      control={control}
+                      render={({ field }) => (
+                        <Select
+                          label="Lançar honorários automaticamente?"
+                          placeholder="Selecione"
+                          selectedKeys={[field.value ? "true" : "false"]}
+                          onSelectionChange={(keys) => {
+                            const selected = Array.from(keys)[0] as string | undefined;
+                            field.onChange(selected === "true");
+                          }}
+                        >
+                          <SelectItem key="false">Não</SelectItem>
+                          <SelectItem key="true">
+                            Sim — lançar como despesa/receita recorrente
+                          </SelectItem>
+                        </Select>
                       )}
                     />
                   </div>
@@ -1108,25 +1086,18 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
                   <h3 className="text-lg font-semibold mb-3">Obrigações Fiscais, Contábeis e Pessoais</h3>
                   <p className="text-sm text-default-500 mb-4">
                     Selecione as obrigações que serão geradas automaticamente para este cliente.
-                    As obrigações são filtradas automaticamente de acordo com o regime tributário e tipo de empresa selecionados.
                   </p>
                   <Controller
                     name="obligation_types_ids"
                     control={control}
                     render={({ field }) => {
-                      console.log("🎨 [DEBUG] Renderizando obrigações:", {
-                        loading: loadingObligationTypes,
-                        total: filteredObligationTypes.length,
-                        totalUnfiltered: obligationTypes.length,
-                        selected: field.value.length
-                      });
                       return (
                       <>
                         {loadingObligationTypes ? (
                           <p className="text-sm text-default-400">Carregando obrigações...</p>
-                        ) : filteredObligationTypes.length === 0 ? (
+                        ) : obligationTypes.length === 0 ? (
                           <p className="text-sm text-default-400">
-                            Nenhuma obrigação disponível para o regime e tipo de empresa selecionados.
+                            Nenhuma obrigação disponível.
                           </p>
                         ) : (
                           <>
@@ -1138,7 +1109,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
                                 wrapper: "grid grid-cols-1 md:grid-cols-2 gap-2",
                               }}
                             >
-                              {filteredObligationTypes.map((obligationType) => (
+                              {obligationTypes.map((obligationType) => (
                                 <Checkbox key={obligationType.id} value={obligationType.id}>
                                   <div>
                                     <p className="font-medium text-sm">{obligationType.name}</p>
@@ -1160,7 +1131,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
                                   {field.value.length} {field.value.length === 1 ? 'obrigação selecionada' : 'obrigações selecionadas'}
                                 </p>
                                 {field.value.map((id) => {
-                                  const type = filteredObligationTypes.find((t) => t.id === id);
+                                  const type = obligationTypes.find((t) => t.id === id);
                                   return type ? (
                                     <Chip
                                       key={id}

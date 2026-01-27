@@ -102,7 +102,7 @@ export function ClientProfile({ client }: ClientProfileProps) {
           )}
           {client.codigo_simples && (
             <div>
-              <p className="text-xs text-gray-600 mb-1">Código Simples</p>
+              <p className="text-xs text-gray-600 mb-1">Código de Acesso ao Simples Nacional</p>
               <Snippet symbol="" size="sm">
                 {client.codigo_simples}
               </Snippet>
@@ -402,7 +402,7 @@ export function ClientProfile({ client }: ClientProfileProps) {
               {client.senha_nfse && (
                 <div className="bg-warning-50 dark:bg-warning-950 p-3 rounded-lg">
                   <p className="text-xs text-warning-600 dark:text-warning-400 mb-1 font-medium">
-                    Senha NFS-e
+                    Senha NFS-e Nacional
                   </p>
                   <SnippetCopy text={client.senha_nfse} hideByDefault />
                 </div>

@@ -78,8 +78,8 @@ const initialHistories: StandardHistory[] = [
   { id: '4', description: 'Internet', accountingAccount: '2.1.1.02', type: 'expense' },
 ];
 
-const buildDefaultTransaction = (): NewTransactionState => ({
-  date: formatISO(new Date(), { representation: 'date' }),
+const buildDefaultTransaction = (baseDate: Date = new Date()): NewTransactionState => ({
+  date: formatISO(baseDate, { representation: 'date' }),
   type: 'Entrada',
   bank: '1',
   history: '',
@@ -96,13 +96,9 @@ const formatCurrency = (value: number) =>
   }).format(value);
 
 export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => void }) {
-  const [monthFilter, setMonthFilter] = useState(formatISO(new Date(), { representation: 'date' }).slice(0, 7));
-  const [startDate, setStartDate] = useState(
-    formatISO(startOfMonth(new Date()), { representation: 'date' })
-  );
-  const [endDate, setEndDate] = useState(
-    formatISO(endOfMonth(new Date()), { representation: 'date' })
-  );
+  const [monthFilter, setMonthFilter] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [isLoadingBanks, setIsLoadingBanks] = useState(false);
   const [standardHistories, setStandardHistories] = useState<StandardHistory[]>(initialHistories);
@@ -126,11 +122,28 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     accountingAccount: '',
     type: 'income' as 'income' | 'expense',
   });
-  const [newTransaction, setNewTransaction] = useState<NewTransactionState>(buildDefaultTransaction());
+  const [newTransaction, setNewTransaction] = useState<NewTransactionState>(() => ({
+    date: '',
+    type: 'Entrada',
+    bank: '1',
+    history: '',
+    observation: '',
+    value: '',
+    isRecurring: false,
+    recurringDay: 1,
+  }));
 
   // OFFICE_CLIENT_ID is used for transactions (still required)
   // Bank accounts use office_only flag instead
   const OFFICE_CLIENT_ID = process.env.NEXT_PUBLIC_OFFICE_CLIENT_ID ?? '';
+
+  useEffect(() => {
+    const now = new Date();
+    setMonthFilter(formatISO(now, { representation: 'date' }).slice(0, 7));
+    setStartDate(formatISO(startOfMonth(now), { representation: 'date' }));
+    setEndDate(formatISO(endOfMonth(now), { representation: 'date' }));
+    setNewTransaction(buildDefaultTransaction(now));
+  }, []);
 
   // Funções para gerenciar bancos do escritório
   const resetBankForm = useCallback(() => {
@@ -260,7 +273,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       page: 1,
       size: 100,
     },
-    autoFetch: true,
+    autoFetch: Boolean(OFFICE_CLIENT_ID && startDate && endDate),
   });
 
   const paidTransactions = useMemo(

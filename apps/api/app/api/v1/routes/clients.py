@@ -153,7 +153,7 @@ async def get_client(
 async def create_client(
     client_data: ClientCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: User = Depends(require_admin_or_func()),
+    current_user: User = Depends(require_admin_or_func()),
 ) -> ClientCreateResult:
     """
     Create a new client (admin or func only).
@@ -170,7 +170,7 @@ async def create_client(
         HTTPException: 409 if CNPJ already exists
     """
     service = ClientService(db)
-    return await service.create_client(client_data)
+    return await service.create_client(client_data, created_by_id=current_user.id)
 
 
 @router.put("/{client_id}", response_model=ClientResponse, status_code=status.HTTP_200_OK)

@@ -44,6 +44,14 @@ export interface NovoLancamentoData {
   invoice_number?: string | null;
 }
 
+const buildDefaultDates = (baseDate: Date) => {
+  const dueDate = formatISO(baseDate, { representation: "date" });
+  return {
+    due_date: dueDate,
+    reference_month: `${dueDate.slice(0, 7)}-01`,
+  };
+};
+
 export function NovoLancamentoModal({
   isOpen,
   onOpenChange,
@@ -57,9 +65,21 @@ export function NovoLancamentoModal({
   const [formData, setFormData] = useState<Partial<NovoLancamentoData>>({
     transaction_type: TransactionType.RECEITA,
     payment_status: PaymentStatus.PENDENTE,
-    due_date: formatISO(new Date(), { representation: "date" }),
-    reference_month: formatISO(new Date(), { representation: "date" }).slice(0, 7) + "-01",
+    due_date: "",
+    reference_month: "",
   });
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const now = new Date();
+    const defaults = buildDefaultDates(now);
+    setFormData((prev) => ({
+      ...prev,
+      ...defaults,
+      transaction_type: prev.transaction_type ?? TransactionType.RECEITA,
+      payment_status: prev.payment_status ?? PaymentStatus.PENDENTE,
+    }));
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || !defaultClientId) return;
@@ -92,8 +112,8 @@ export function NovoLancamentoModal({
       setFormData({
         transaction_type: TransactionType.RECEITA,
         payment_status: PaymentStatus.PENDENTE,
-        due_date: formatISO(new Date(), { representation: "date" }),
-        reference_month: formatISO(new Date(), { representation: "date" }).slice(0, 7) + "-01",
+        due_date: "",
+        reference_month: "",
       });
     } catch (error) {
       console.error("Erro ao salvar lançamento:", error);

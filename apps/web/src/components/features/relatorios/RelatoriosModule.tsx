@@ -90,13 +90,19 @@ export function RelatoriosModule() {
   const [isGeneratingId, setIsGeneratingId] = useState<string | null>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [rangeModalOpen, setRangeModalOpen] = useState(false);
-  const [rangeStart, setRangeStart] = useState(formatISO(startOfMonth(new Date()), { representation: "date" }));
-  const [rangeEnd, setRangeEnd] = useState(formatISO(new Date(), { representation: "date" }));
+  const [rangeStart, setRangeStart] = useState("");
+  const [rangeEnd, setRangeEnd] = useState("");
   const [selectedFormat, setSelectedFormat] = useState<ReportFormat>(ReportFormat.PDF);
   const [clientSearch, setClientSearch] = useState("");
   const [clientOptions, setClientOptions] = useState<ClientListItem[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [isOfficeReport, setIsOfficeReport] = useState(false);
+
+  useEffect(() => {
+    const now = new Date();
+    setRangeStart(formatISO(startOfMonth(now), { representation: "date" }));
+    setRangeEnd(formatISO(now, { representation: "date" }));
+  }, []);
 
   useEffect(() => {
     if (!isAdminOrFunc || !rangeModalOpen) return;
@@ -569,4 +575,3 @@ export function RelatoriosModule() {
     </motion.div>
   );
 }
-
