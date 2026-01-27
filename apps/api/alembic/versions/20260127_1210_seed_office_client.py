@@ -55,11 +55,11 @@ def upgrade() -> None:
             ON CONFLICT (id) DO NOTHING
             """
         ).bindparams(
-            sa.bindparam("id", OFFICE_CLIENT_ID),
-            sa.bindparam("razao_social", "Contabil Consult - Escritório"),
-            sa.bindparam("nome_fantasia", "Escritório"),
-            sa.bindparam("cnpj", "OFFICE-CLIENT-001"),
-            sa.bindparam("email", "escritorio@contabil.consult"),
+            id=OFFICE_CLIENT_ID,
+            razao_social="Contabil Consult - Escritório",
+            nome_fantasia="Escritório",
+            cnpj="OFFICE-CLIENT-001",
+            email="escritorio@contabil.consult",
         )
     )
 
@@ -67,7 +67,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute(
         sa.text("DELETE FROM clients WHERE id = :id::uuid").bindparams(
-            sa.bindparam("id", OFFICE_CLIENT_ID)
+            id=OFFICE_CLIENT_ID
         )
     )
 
