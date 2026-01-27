@@ -24,50 +24,38 @@ def upgrade() -> None:
     # Ensure a stable "office" client exists for office financial transactions.
     # It is soft-deleted (deleted_at not null) so it won't appear in normal client lists.
     op.execute(
-        sa.text(
-            """
-            INSERT INTO clients (
-              id,
-              razao_social,
-              nome_fantasia,
-              cnpj,
-              email,
-              honorarios_mensais,
-              dia_vencimento,
-              regime_tributario,
-              tipo_empresa,
-              status,
-              deleted_at
-            )
-            VALUES (
-              :id::uuid,
-              :razao_social,
-              :nome_fantasia,
-              :cnpj,
-              :email,
-              0,
-              10,
-              'SIMPLES_NACIONAL',
-              'FINANCEIRO',
-              'INATIVO',
-              NOW()
-            )
-            ON CONFLICT (id) DO NOTHING
-            """
-        ).bindparams(
-            id=OFFICE_CLIENT_ID,
-            razao_social="Contabil Consult - Escritório",
-            nome_fantasia="Escritório",
-            cnpj="OFFICE-CLIENT-001",
-            email="escritorio@contabil.consult",
+        f"""
+        INSERT INTO clients (
+          id,
+          razao_social,
+          nome_fantasia,
+          cnpj,
+          email,
+          honorarios_mensais,
+          dia_vencimento,
+          regime_tributario,
+          tipo_empresa,
+          status,
+          deleted_at
         )
+        VALUES (
+          '{OFFICE_CLIENT_ID}'::uuid,
+          'Contabil Consult - Escritório',
+          'Escritório',
+          'OFFICE-CLIENT-001',
+          'escritorio@contabil.consult',
+          0,
+          10,
+          'SIMPLES_NACIONAL',
+          'FINANCEIRO',
+          'INATIVO',
+          NOW()
+        )
+        ON CONFLICT (id) DO NOTHING
+        """
     )
 
 
 def downgrade() -> None:
-    op.execute(
-        sa.text("DELETE FROM clients WHERE id = :id::uuid").bindparams(
-            id=OFFICE_CLIENT_ID
-        )
-    )
+    op.execute(f"DELETE FROM clients WHERE id = '{OFFICE_CLIENT_ID}'::uuid")
 
