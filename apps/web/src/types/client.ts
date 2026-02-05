@@ -155,12 +155,20 @@ export interface ClientListItem {
 
 export interface ClientFilters {
   query?: string;
+  cnpj?: string;
   status?: ClientStatus | '';
   regime_tributario?: RegimeTributario | '';
   tipo_empresa?: TipoEmpresa | '';
   starts_with?: string; // A-Z alphabetical filter
   page?: number;
   size?: number;
+}
+
+export interface ClientStatsSummaryResponse {
+  total: number;
+  by_status: Record<string, number>;
+  by_regime: Record<string, number>;
+  total_revenue: number;
 }
 
 export interface ClientListResponse {

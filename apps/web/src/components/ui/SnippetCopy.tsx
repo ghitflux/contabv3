@@ -8,9 +8,10 @@ interface SnippetCopyProps {
   text: string;
   label?: string;
   hideByDefault?: boolean;
+  textClassName?: string;
 }
 
-export function SnippetCopy({ text, label, hideByDefault = false }: SnippetCopyProps) {
+export function SnippetCopy({ text, label, hideByDefault = false, textClassName }: SnippetCopyProps) {
   const [copied, setCopied] = useState(false);
   const [isVisible, setIsVisible] = useState(!hideByDefault);
 
@@ -29,10 +30,13 @@ export function SnippetCopy({ text, label, hideByDefault = false }: SnippetCopyP
   };
 
   const displayText = isVisible ? (label || text) : '••••••••';
+  const resolvedTextClassName = textClassName ?? 'max-w-[120px]';
 
   return (
     <div className="inline-flex items-center gap-1">
-      <span className="font-mono text-xs truncate max-w-[120px]" title={text}>{displayText}</span>
+      <span className={`font-mono text-xs truncate ${resolvedTextClassName}`} title={text}>
+        {displayText}
+      </span>
       {hideByDefault && (
         <Tooltip content={isVisible ? 'Ocultar' : 'Mostrar'}>
           <Button

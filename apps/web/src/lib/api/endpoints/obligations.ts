@@ -42,6 +42,13 @@ export interface ObligationTypeResponse {
   is_active: boolean;
 }
 
+export interface ObligationAlertsResponse {
+  items: ObligationResponse[];
+  total: number;
+  start_date: string;
+  end_date: string;
+}
+
 export const obligationsApi = {
   /**
    * Get all obligation types (for selecting which obligations to generate)
@@ -95,5 +102,15 @@ export const obligationsApi = {
     }
 
     return apiClient.upload<ObligationResponse>(`/obligations/${obligationId}/receipt`, formData);
+  },
+
+  /**
+   * Get pending obligations within a due date range (for alerts/popups)
+   */
+  async getAlerts(params: { start_date: string; end_date: string }): Promise<ObligationAlertsResponse> {
+    const query = new URLSearchParams();
+    query.append("start_date", params.start_date);
+    query.append("end_date", params.end_date);
+    return apiClient.get<ObligationAlertsResponse>(`/obligations/alerts?${query.toString()}`);
   },
 };

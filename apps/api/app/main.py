@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Background task handle
 _expiration_task: asyncio.Task | None = None
+_finance_task: asyncio.Task | None = None
 
 
 async def _schedule_license_expiration_checks() -> None:
@@ -62,13 +63,60 @@ async def _schedule_license_expiration_checks() -> None:
             await asyncio.sleep(3600)
 
 
+async def _schedule_finance_automation() -> None:
+    """
+    Schedule finance automation runs.
+    Runs daily at 00:10.
+    """
+    import datetime
+
+    while True:
+        try:
+            now = datetime.datetime.now()
+            scheduled_today = now.replace(hour=0, minute=10, second=0, microsecond=0)
+
+            if now < scheduled_today:
+                wait_seconds = (scheduled_today - now).total_seconds()
+                logger.info(
+                    "Scheduling next finance automation for "
+                    f"{scheduled_today} (in {wait_seconds/3600:.1f} hours)"
+                )
+                await asyncio.sleep(wait_seconds)
+            else:
+                logger.info(
+                    "Finance automation scheduled time already passed today; running immediately"
+                )
+
+            from app.tasks.finance_automation import run_finance_daily_automation
+
+            summary = await run_finance_daily_automation()
+            logger.info(
+                "Finance automation completed. "
+                f"Overdue updated: {summary.get('overdue_transactions_updated')}; "
+                f"Client sync: {summary.get('client_status_sync')}; "
+                f"Monthly generation: {bool(summary.get('monthly_generation'))}"
+            )
+
+            # Wait until next scheduled run (tomorrow 00:10)
+            after_run = datetime.datetime.now()
+            next_run = scheduled_today + datetime.timedelta(days=1)
+            wait_seconds = max(0, (next_run - after_run).total_seconds())
+            await asyncio.sleep(wait_seconds)
+        except asyncio.CancelledError:
+            logger.info("Finance automation task cancelled")
+            break
+        except Exception as e:
+            logger.error(f"Error in scheduled finance automation: {e}", exc_info=True)
+            await asyncio.sleep(3600)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Application lifespan events.
     Startup and shutdown logic.
     """
-    global _expiration_task
+    global _expiration_task, _finance_task
 
     # Startup
     logger.info("Starting application...")
@@ -90,6 +138,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.error(f"✗ Failed to start license expiration check task: {e}")
 
+    # Start background task for finance automation
+    try:
+        _finance_task = asyncio.create_task(_schedule_finance_automation())
+        logger.info("✓ Finance automation task scheduled")
+    except Exception as e:
+        logger.error(f"✗ Failed to start finance automation task: {e}")
+
     yield
 
     # Shutdown
@@ -103,6 +158,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except asyncio.CancelledError:
             pass
         logger.info("✓ License expiration check task cancelled")
+
+    if _finance_task:
+        _finance_task.cancel()
+        try:
+            await _finance_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("✓ Finance automation task cancelled")
 
     await db_manager.close()
     logger.info("✓ Database connections closed")

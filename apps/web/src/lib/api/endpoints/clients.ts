@@ -10,6 +10,7 @@ import type {
   ClientListResponse,
   ClientFilters,
   ClientCreateResult,
+  ClientStatsSummaryResponse,
 } from "@/types/client";
 
 export const clientsApi = {
@@ -20,6 +21,7 @@ export const clientsApi = {
     const params = new URLSearchParams();
 
     if (filters?.query) params.append("query", filters.query);
+    if (filters?.cnpj) params.append("cnpj", filters.cnpj);
     if (filters?.status && filters.status !== "" as any) params.append("status", filters.status);
     if (filters?.regime_tributario && filters.regime_tributario !== "" as any) {
       params.append("regime_tributario", filters.regime_tributario);
@@ -35,6 +37,13 @@ export const clientsApi = {
     const endpoint = queryString ? `/clients?${queryString}` : "/clients";
 
     return apiClient.get<ClientListResponse>(endpoint);
+  },
+
+  /**
+   * Client KPIs/stats summary
+   */
+  async statsSummary(): Promise<ClientStatsSummaryResponse> {
+    return apiClient.get<ClientStatsSummaryResponse>("/clients/stats/summary");
   },
 
   /**

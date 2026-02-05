@@ -71,6 +71,7 @@ class ClientRepository(BaseRepository[Client]):
     async def list_with_filters(
         self,
         query: Optional[str] = None,
+        cnpj: Optional[str] = None,
         status: Optional[ClientStatus] = None,
         starts_with: Optional[str] = None,
         regime_tributario: Optional[RegimeTributario] = None,
@@ -97,13 +98,29 @@ class ClientRepository(BaseRepository[Client]):
         # Apply search query
         if query:
             search_term = f"%{query}%"
+            query_digits = "".join(filter(str.isdigit, query))
+            cnpj_digits_expr = func.regexp_replace(Client.cnpj, r"[^0-9]", "", "g")
+
+            or_conditions = [
+                Client.razao_social.ilike(search_term),
+                Client.nome_fantasia.ilike(search_term),
+                Client.cnpj.ilike(search_term),
+            ]
+            if query_digits:
+                or_conditions.append(cnpj_digits_expr.ilike(f"%{query_digits}%"))
             filters.append(
-                or_(
-                    Client.razao_social.ilike(search_term),
-                    Client.nome_fantasia.ilike(search_term),
-                    Client.cnpj.ilike(search_term),
-                )
+                or_(*or_conditions)
             )
+
+        # Apply explicit CNPJ filter (digits-only friendly)
+        if cnpj:
+            cnpj_digits = "".join(filter(str.isdigit, cnpj))
+            if cnpj_digits:
+                filters.append(
+                    func.regexp_replace(Client.cnpj, r"[^0-9]", "", "g").ilike(f"%{cnpj_digits}%")
+                )
+            else:
+                filters.append(Client.cnpj.ilike(f"%{cnpj}%"))
 
         # Apply status filter
         if status:

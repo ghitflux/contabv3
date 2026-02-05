@@ -1,15 +1,17 @@
 """Obligations API routes."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_
+from sqlalchemy.orm import selectinload
 
 from app.api.v1.deps import get_current_active_user, get_db
 from app.db.models.user import User, UserRole
-from app.db.models.obligation import ObligationStatus
+from app.db.models.obligation import Obligation, ObligationStatus
 from app.db.repositories.obligation import ObligationRepository
 from app.db.repositories.obligation_event import ObligationEventRepository
 from app.db.repositories.client import ClientRepository
@@ -103,6 +105,60 @@ async def list_obligations(
         "total": total,
         "skip": skip,
         "limit": limit,
+    }
+
+
+@router.get("/alerts", response_model=dict)
+async def get_obligation_alerts(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    start_date: date = Query(..., description="Start date (inclusive)"),
+    end_date: date = Query(..., description="End date (inclusive)"),
+) -> dict:
+    """
+    Get pending obligations within a due date range (admin/func only).
+
+    Used for dashboard/client-panel popups (e.g., due today / due in N days).
+    """
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/func can access obligation alerts",
+        )
+
+    if end_date < start_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="end_date must be greater than or equal to start_date",
+        )
+
+    stmt = (
+        select(Obligation)
+        .options(
+            selectinload(Obligation.obligation_type),
+            selectinload(Obligation.client),
+        )
+        .where(
+            and_(
+                Obligation.deleted_at.is_(None),
+                Obligation.status == ObligationStatus.PENDENTE,
+                Obligation.due_date >= start_date,
+                Obligation.due_date <= end_date,
+            )
+        )
+        .order_by(Obligation.due_date.asc())
+    )
+
+    result = await db.execute(stmt)
+    obligations = result.scalars().all()
+
+    items = [_obligation_to_response(ob) for ob in obligations]
+
+    return {
+        "items": items,
+        "total": len(items),
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
     }
 
 

@@ -569,6 +569,7 @@ class ClientService:
     async def list_clients(
         self,
         query: Optional[str] = None,
+        cnpj: Optional[str] = None,
         status: Optional[str] = None,
         starts_with: Optional[str] = None,
         regime_tributario: Optional[str] = None,
@@ -627,6 +628,7 @@ class ClientService:
 
         clients, total = await self.repo.list_with_filters(
             query=query,
+            cnpj=cnpj,
             status=status_enum,
             starts_with=starts_with,
             regime_tributario=regime_enum,
@@ -715,7 +717,7 @@ class ClientService:
         # Total revenue
         revenue_query = select(func.sum(Client.honorarios_mensais)).where(
             active_filter,
-            Client.status == ClientStatus.ATIVO
+            Client.status != ClientStatus.INATIVO,
         )
         revenue_result = await self.session.execute(revenue_query)
         total_revenue = revenue_result.scalar() or 0.0

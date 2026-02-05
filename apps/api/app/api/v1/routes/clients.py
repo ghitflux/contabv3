@@ -48,6 +48,7 @@ async def list_clients(
     db: Annotated[AsyncSession, Depends(get_db)],
     _: User = Depends(require_admin_or_func()),
     query: Optional[str] = Query(None, description="Search by razao social or CNPJ"),
+    cnpj: Optional[str] = Query(None, description="Filter by CNPJ (supports digits-only)"),
     status_filter: Optional[str] = Query(None, alias="status", description="Filter by status"),
     starts_with: Optional[str] = Query(None, description="Filter by first letter (A-Z)", max_length=1),
     regime_tributario: Optional[str] = Query(None, description="Filter by tax regime"),
@@ -73,6 +74,7 @@ async def list_clients(
     service = ClientService(db)
     return await service.list_clients(
         query=query,
+        cnpj=cnpj,
         status=status_filter,
         starts_with=starts_with,
         regime_tributario=regime_tributario,
