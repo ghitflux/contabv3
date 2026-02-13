@@ -326,15 +326,6 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       autoFetch: Boolean(OFFICE_CLIENT_ID && startDate && endDate),
     });
 
-  const paidTransactions = useMemo(
-    () =>
-      transactions.filter(
-        (transaction) =>
-          transaction.payment_status === PaymentStatus.PAGO || Boolean(transaction.paid_date)
-      ),
-    [transactions]
-  );
-
   const displayTransactions = useMemo<DisplayTransaction[]>(() => {
     return transactions.map((transaction) => ({
       id: transaction.id,
@@ -352,19 +343,20 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     }));
   }, [transactions]);
 
+  // Calcula receita e despesa com TODAS as transações (não apenas pagas)
   const receita = useMemo(
     () =>
-      paidTransactions
+      transactions
         .filter((transaction) => transaction.transaction_type === TransactionType.RECEITA)
         .reduce((sum, transaction) => sum + transaction.amount, 0),
-    [paidTransactions]
+    [transactions]
   );
   const despesa = useMemo(
     () =>
-      paidTransactions
+      transactions
         .filter((transaction) => transaction.transaction_type === TransactionType.DESPESA)
         .reduce((sum, transaction) => sum + transaction.amount, 0),
-    [paidTransactions]
+    [transactions]
   );
   const lucro = receita - despesa;
   const receivableTransactions = useMemo(
