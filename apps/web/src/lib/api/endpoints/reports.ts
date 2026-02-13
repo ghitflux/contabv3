@@ -2,7 +2,7 @@
  * Reports API endpoints
  */
 
-import { apiClient } from "../client";
+import { apiClient, resolveApiBaseUrl } from '../client';
 import type {
   ReportPreviewRequest,
   ReportPreviewResponse,
@@ -13,28 +13,28 @@ import type {
   ReportTemplateUpdate,
   ReportHistoryListResponse,
   ReportTypesListResponse,
-} from "@/types/report";
+} from '@/types/report';
 
 export const reportsApi = {
   /**
    * Get all available report types
    */
   async getReportTypes(): Promise<ReportTypesListResponse> {
-    return apiClient.get<ReportTypesListResponse>("/reports/types");
+    return apiClient.get<ReportTypesListResponse>('/reports/types');
   },
 
   /**
    * Preview a report without generating the file
    */
   async previewReport(request: ReportPreviewRequest): Promise<ReportPreviewResponse> {
-    return apiClient.post<ReportPreviewResponse>("/reports/preview", request);
+    return apiClient.post<ReportPreviewResponse>('/reports/preview', request);
   },
 
   /**
    * Export a report to file (PDF or CSV)
    */
   async exportReport(request: ReportExportRequest): Promise<ReportExportResponse> {
-    return apiClient.post<ReportExportResponse>("/reports/export", request);
+    return apiClient.post<ReportExportResponse>('/reports/export', request);
   },
 
   /**
@@ -42,10 +42,10 @@ export const reportsApi = {
    */
   async getTemplates(includeSystem: boolean = true): Promise<ReportTemplate[]> {
     const params = new URLSearchParams();
-    if (includeSystem) params.append("include_system", "true");
+    if (includeSystem) params.append('include_system', 'true');
 
     const queryString = params.toString();
-    const endpoint = queryString ? `/reports/templates?${queryString}` : "/reports/templates";
+    const endpoint = queryString ? `/reports/templates?${queryString}` : '/reports/templates';
 
     return apiClient.get<ReportTemplate[]>(endpoint);
   },
@@ -61,7 +61,7 @@ export const reportsApi = {
    * Create a new report template
    */
   async createTemplate(data: ReportTemplateCreate): Promise<ReportTemplate> {
-    return apiClient.post<ReportTemplate>("/reports/templates", data);
+    return apiClient.post<ReportTemplate>('/reports/templates', data);
   },
 
   /**
@@ -89,13 +89,13 @@ export const reportsApi = {
   }): Promise<ReportHistoryListResponse> {
     const queryParams = new URLSearchParams();
 
-    if (params?.report_type) queryParams.append("report_type", params.report_type);
-    if (params?.format) queryParams.append("format", params.format);
-    if (params?.page) queryParams.append("page", params.page.toString());
-    if (params?.size) queryParams.append("size", params.size.toString());
+    if (params?.report_type) queryParams.append('report_type', params.report_type);
+    if (params?.format) queryParams.append('format', params.format);
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.size) queryParams.append('size', params.size.toString());
 
     const queryString = queryParams.toString();
-    const endpoint = queryString ? `/reports/history?${queryString}` : "/reports/history";
+    const endpoint = queryString ? `/reports/history?${queryString}` : '/reports/history';
 
     return apiClient.get<ReportHistoryListResponse>(endpoint);
   },
@@ -103,16 +103,19 @@ export const reportsApi = {
   /**
    * Download a generated report file
    */
-  async downloadReport(reportId: string, fileName?: string): Promise<{ blob: Blob; filename: string }> {
-    const apiBase =
-      process.env.NEXT_PUBLIC_API_URL ||
-      (typeof window !== "undefined" ? `${window.location.origin}/api/v1` : "");
+  async downloadReport(
+    reportId: string,
+    fileName?: string
+  ): Promise<{ blob: Blob; filename: string }> {
+    const apiBase = resolveApiBaseUrl();
     const url = `${apiBase}/reports/download/${reportId}`;
 
+    const accessToken =
+      apiClient.getAccessToken() ||
+      (typeof window !== 'undefined' ? localStorage.getItem('access_token') : null);
+
     const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("access_token") || ""}`,
-      },
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
     });
 
     if (!response.ok) {
@@ -120,12 +123,12 @@ export const reportsApi = {
       throw new Error(`Failed to download report (${response.status}) ${detail}`);
     }
 
-    const contentDisposition = response.headers.get("content-disposition");
+    const contentDisposition = response.headers.get('content-disposition');
     const headerFileNameMatch = contentDisposition?.match(/filename=\"?([^\";]+)\"?/i);
     const resolvedName =
       fileName ||
       headerFileNameMatch?.[1] ||
-      `report_${reportId}.${contentDisposition?.includes("pdf") ? "pdf" : "csv"}`;
+      `report_${reportId}.${contentDisposition?.includes('pdf') ? 'pdf' : 'csv'}`;
 
     return { blob: await response.blob(), filename: resolvedName };
   },

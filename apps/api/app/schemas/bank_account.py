@@ -14,7 +14,7 @@ class BankAccountCreate(BaseModel):
     client_id: Optional[UUID] = Field(None, description="Client UUID (required for admin/func)")
     name: str = Field(..., min_length=1, max_length=255, description="Bank name")
     account_number: str = Field(..., min_length=1, max_length=100, description="Account number")
-    balance: Decimal = Field(0, description="Initial balance")
+    balance: Decimal = Field(0, ge=0, description="Initial balance")
     accounting_account: Optional[str] = Field(None, max_length=50, description="Accounting account")
 
 
@@ -23,7 +23,7 @@ class BankAccountUpdate(BaseModel):
 
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     account_number: Optional[str] = Field(None, min_length=1, max_length=100)
-    balance: Optional[Decimal] = Field(None)
+    balance: Optional[Decimal] = Field(None, ge=0)
     accounting_account: Optional[str] = Field(None, max_length=50)
 
 

@@ -23,7 +23,17 @@ import {
   TableRow,
   Textarea,
 } from '@/heroui';
-import { CheckCircle, DollarSign, Download, Pencil, Plus, Repeat, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
+import {
+  CheckCircle,
+  DollarSign,
+  Download,
+  Pencil,
+  Plus,
+  Repeat,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FinanceiroKPIs, type FinanceiroKpi } from './FinanceiroKPIs';
 import { useTransactions } from '@/hooks/useTransactions';
@@ -31,6 +41,8 @@ import {
   PaymentMethod,
   PaymentStatus,
   TransactionType,
+  type Transaction,
+  type TransactionUpdate,
   getPaymentMethodLabel,
 } from '@/types/finance';
 import { toast } from '@/lib/toast';
@@ -38,6 +50,9 @@ import { endOfMonth, formatISO, startOfMonth, subMonths } from 'date-fns';
 import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
 import { bankAccountsApi } from '@/lib/api/endpoints/bank-accounts';
 import type { BankAccount } from '@/types/bank-account';
+import { TransactionTrashModal } from './TransactionTrashModal';
+import { ConfirmBaixaLancamentoDialog } from './ConfirmBaixaLancamentoDialog';
+import { ConfirmDeleteLancamentoDialog } from './ConfirmDeleteLancamentoDialog';
 
 type DisplayTransactionType = 'Entrada' | 'Saída';
 
@@ -49,6 +64,8 @@ type DisplayTransaction = {
   history: string;
   observation?: string;
   value: number;
+  status: PaymentStatus;
+  raw: Transaction;
   isRecurring?: boolean;
   recurringDay?: number;
 };
@@ -95,6 +112,14 @@ const formatCurrency = (value: number) =>
     currency: 'BRL',
   }).format(value);
 
+const normalizeDecimalInput = (value: string): number => Number.parseFloat(value.replace(',', '.'));
+
+const normalizeDateInput = (value?: string | null): string => {
+  if (!value) return '';
+  const [datePart] = value.split('T');
+  return datePart ?? '';
+};
+
 export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => void }) {
   const [monthFilter, setMonthFilter] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -105,7 +130,11 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [editingBank, setEditingBank] = useState<BankAccount | null>(null);
   const [isSavingBank, setIsSavingBank] = useState(false);
-  const [successModal, setSuccessModal] = useState<{ isOpen: boolean; message: string; bankName: string }>({
+  const [successModal, setSuccessModal] = useState<{
+    isOpen: boolean;
+    message: string;
+    bankName: string;
+  }>({
     isOpen: false,
     message: '',
     bankName: '',
@@ -132,6 +161,25 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     isRecurring: false,
     recurringDay: 1,
   }));
+  const [activePendingPanel, setActivePendingPanel] = useState<'all' | 'receber' | 'pagar'>('all');
+  const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [pendingBaixaTransaction, setPendingBaixaTransaction] = useState<Transaction | null>(null);
+  const [pendingDeleteTransaction, setPendingDeleteTransaction] = useState<Transaction | null>(null);
+  const [isConfirmingBaixa, setIsConfirmingBaixa] = useState(false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [editForm, setEditForm] = useState({
+    description: '',
+    amount: '',
+    due_date: '',
+    payment_status: PaymentStatus.PENDENTE,
+    payment_method: '' as PaymentMethod | '',
+    paid_date: '',
+    category: '',
+    notes: '',
+    invoice_number: '',
+  });
 
   // OFFICE_CLIENT_ID is used for transactions (still required)
   // Bank accounts use office_only flag instead
@@ -204,9 +252,9 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       return;
     }
 
-    const balanceValue = bankForm.balance ? Number.parseFloat(bankForm.balance) : 0;
-    if (Number.isNaN(balanceValue)) {
-      toast.error('Informe um saldo válido.');
+    const balanceValue = bankForm.balance ? normalizeDecimalInput(bankForm.balance) : 0;
+    if (Number.isNaN(balanceValue) || balanceValue < 0) {
+      toast.error('Informe um saldo inicial válido (mínimo R$ 0,00).');
       return;
     }
 
@@ -245,7 +293,8 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     } catch (error) {
       console.error('Erro ao salvar banco', error);
       const errorDetail = (error as { data?: { detail?: string } })?.data?.detail;
-      const message = typeof errorDetail === 'string' ? errorDetail : 'Não foi possível salvar o banco.';
+      const message =
+        typeof errorDetail === 'string' ? errorDetail : 'Não foi possível salvar o banco.';
       toast.error(message);
     } finally {
       setIsSavingBank(false);
@@ -265,16 +314,17 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     }
   };
 
-  const { transactions, createTransaction, deleteTransaction, refresh } = useTransactions({
-    filters: {
-      client_id: OFFICE_CLIENT_ID || undefined,
-      due_date_from: startDate,
-      due_date_to: endDate,
-      page: 1,
-      size: 100,
-    },
-    autoFetch: Boolean(OFFICE_CLIENT_ID && startDate && endDate),
-  });
+  const { transactions, createTransaction, updateTransaction, deleteTransaction, refresh } =
+    useTransactions({
+      filters: {
+        client_id: OFFICE_CLIENT_ID || undefined,
+        due_date_from: startDate,
+        due_date_to: endDate,
+        page: 1,
+        size: 100,
+      },
+      autoFetch: Boolean(OFFICE_CLIENT_ID && startDate && endDate),
+    });
 
   const paidTransactions = useMemo(
     () =>
@@ -296,6 +346,8 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       history: transaction.description,
       observation: transaction.notes || undefined,
       value: transaction.amount,
+      status: transaction.payment_status,
+      raw: transaction,
       isRecurring: false,
     }));
   }, [transactions]);
@@ -315,6 +367,50 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     [paidTransactions]
   );
   const lucro = receita - despesa;
+  const receivableTransactions = useMemo(
+    () =>
+      transactions.filter(
+        (transaction) =>
+          transaction.transaction_type === TransactionType.RECEITA &&
+          transaction.payment_status !== PaymentStatus.PAGO
+      ),
+    [transactions]
+  );
+  const payableTransactions = useMemo(
+    () =>
+      transactions.filter(
+        (transaction) =>
+          transaction.transaction_type === TransactionType.DESPESA &&
+          transaction.payment_status !== PaymentStatus.PAGO
+      ),
+    [transactions]
+  );
+  const aReceber = useMemo(
+    () => receivableTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
+    [receivableTransactions]
+  );
+  const aPagar = useMemo(
+    () => payableTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
+    [payableTransactions]
+  );
+
+  const panelTransactions = useMemo<DisplayTransaction[]>(() => {
+    if (activePendingPanel === 'receber') {
+      return displayTransactions.filter(
+        (transaction) =>
+          transaction.raw.transaction_type === TransactionType.RECEITA &&
+          transaction.status !== PaymentStatus.PAGO
+      );
+    }
+    if (activePendingPanel === 'pagar') {
+      return displayTransactions.filter(
+        (transaction) =>
+          transaction.raw.transaction_type === TransactionType.DESPESA &&
+          transaction.status !== PaymentStatus.PAGO
+      );
+    }
+    return [];
+  }, [activePendingPanel, displayTransactions]);
 
   const setRangeForMonth = (monthValue: string) => {
     if (!monthValue) return;
@@ -428,11 +524,13 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       return;
     }
     if (!OFFICE_CLIENT_ID) {
-      toast.error('Configure o ID do escritório (NEXT_PUBLIC_OFFICE_CLIENT_ID) para lançar receitas/despesas.');
+      toast.error(
+        'Configure o ID do escritório (NEXT_PUBLIC_OFFICE_CLIENT_ID) para lançar receitas/despesas.'
+      );
       return;
     }
 
-    const amount = Number.parseFloat(newTransaction.value);
+    const amount = normalizeDecimalInput(newTransaction.value);
     if (Number.isNaN(amount) || amount <= 0) {
       toast.error('Informe um valor válido.');
       return;
@@ -476,16 +574,111 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     }
   };
 
-  const handleDeleteTransaction = async (id: string) => {
+  const handleDeleteTransaction = async () => {
+    if (!pendingDeleteTransaction) return;
     try {
-      await deleteTransaction(id);
+      setIsConfirmingDelete(true);
+      await deleteTransaction(pendingDeleteTransaction.id);
       toast.success('Lançamento removido.');
+      await refresh();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
+      }
+      setPendingDeleteTransaction(null);
     } catch (error) {
       console.error(error);
       toast.error('Não foi possível remover o lançamento.');
+    } finally {
+      setIsConfirmingDelete(false);
     }
   };
 
+  const handleMarkAsPaid = async () => {
+    if (!pendingBaixaTransaction) return;
+    try {
+      setIsConfirmingBaixa(true);
+      const paymentMethod = pendingBaixaTransaction.payment_method ?? PaymentMethod.TRANSFERENCIA;
+      await updateTransaction(pendingBaixaTransaction.id, {
+        payment_status: PaymentStatus.PAGO,
+        payment_method: paymentMethod,
+        paid_date: new Date().toISOString(),
+      });
+      toast.success('Lançamento baixado com sucesso.');
+      await refresh();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
+      }
+      setPendingBaixaTransaction(null);
+    } catch (error) {
+      console.error('Erro ao baixar lançamento', error);
+      toast.error('Não foi possível realizar a baixa.');
+    } finally {
+      setIsConfirmingBaixa(false);
+    }
+  };
+
+  const openEditTransaction = (transaction: Transaction) => {
+    setEditingTransaction(transaction);
+    setEditForm({
+      description: transaction.description ?? '',
+      amount: transaction.amount?.toString() ?? '',
+      due_date: normalizeDateInput(transaction.due_date),
+      payment_status: transaction.payment_status ?? PaymentStatus.PENDENTE,
+      payment_method: transaction.payment_method ?? '',
+      paid_date: normalizeDateInput(transaction.paid_date),
+      category: transaction.category ?? '',
+      notes: transaction.notes ?? '',
+      invoice_number: transaction.invoice_number ?? '',
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdateTransaction = async () => {
+    if (!editingTransaction) return;
+
+    const amountValue = normalizeDecimalInput(editForm.amount);
+    if (Number.isNaN(amountValue) || amountValue <= 0) {
+      toast.error('Informe um valor válido.');
+      return;
+    }
+    if (!editForm.description.trim()) {
+      toast.error('Informe a descrição.');
+      return;
+    }
+    if (!editForm.due_date) {
+      toast.error('Informe a data de vencimento.');
+      return;
+    }
+
+    const payload: TransactionUpdate = {
+      amount: amountValue,
+      description: editForm.description.trim(),
+      due_date: editForm.due_date,
+      payment_status: editForm.payment_status,
+      payment_method: editForm.payment_method ? editForm.payment_method : null,
+      paid_date:
+        editForm.payment_status === PaymentStatus.PAGO
+          ? editForm.paid_date || new Date().toISOString()
+          : null,
+      category: editForm.category.trim() || null,
+      notes: editForm.notes.trim() || null,
+      invoice_number: editForm.invoice_number.trim() || null,
+    };
+
+    try {
+      await updateTransaction(editingTransaction.id, payload);
+      toast.success('Lançamento atualizado com sucesso.');
+      setIsEditModalOpen(false);
+      setEditingTransaction(null);
+      await refresh();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar lançamento', error);
+      toast.error('Não foi possível atualizar o lançamento.');
+    }
+  };
 
   const handleAddHistory = () => {
     if (!newHistory.description) return;
@@ -536,8 +729,15 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
           />
         </div>
         <div className="md:ml-auto flex gap-2">
-          <Button variant="bordered" onPress={setCurrentMonthRange}>Mês atual</Button>
-          <Button variant="bordered" onPress={setPreviousMonthRange}>Mês anterior</Button>
+          <Button variant="bordered" onPress={setCurrentMonthRange}>
+            Mês atual
+          </Button>
+          <Button variant="bordered" onPress={setPreviousMonthRange}>
+            Mês anterior
+          </Button>
+          <Button variant="bordered" onPress={() => setIsTrashModalOpen(true)}>
+            Lixeira
+          </Button>
           <Button
             color="primary"
             startContent={<Download className="h-4 w-4" />}
@@ -551,15 +751,106 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
 
       <FinanceiroKPIs kpis={kpis} />
 
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card
+          isPressable
+          onPress={() => setActivePendingPanel((prev) => (prev === 'receber' ? 'all' : 'receber'))}
+          className={`border ${
+            activePendingPanel === 'receber'
+              ? 'border-green-400 bg-green-50 dark:bg-green-900/20'
+              : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/20'
+          }`}
+        >
+          <CardBody>
+            <p className="text-sm text-slate-700 dark:text-slate-400 font-medium mb-1">
+              CONTAS A RECEBER
+            </p>
+            <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+              {formatCurrency(aReceber)}
+            </p>
+            <p className="text-xs text-slate-500 mt-2">
+              {receivableTransactions.length} lançamento(s) pendente(s)
+            </p>
+          </CardBody>
+        </Card>
+        <Card
+          isPressable
+          onPress={() => setActivePendingPanel((prev) => (prev === 'pagar' ? 'all' : 'pagar'))}
+          className={`border ${
+            activePendingPanel === 'pagar'
+              ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20'
+              : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/20'
+          }`}
+        >
+          <CardBody>
+            <p className="text-sm text-slate-700 dark:text-slate-400 font-medium mb-1">
+              CONTAS A PAGAR
+            </p>
+            <p className="text-2xl font-bold text-amber-700 dark:text-amber-400">
+              {formatCurrency(aPagar)}
+            </p>
+            <p className="text-xs text-slate-500 mt-2">
+              {payableTransactions.length} lançamento(s) pendente(s)
+            </p>
+          </CardBody>
+        </Card>
+      </div>
+
+      {activePendingPanel !== 'all' && (
+        <Card className="border border-default-200/50 dark:border-default-100/20">
+          <CardHeader className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              {activePendingPanel === 'receber'
+                ? 'Lançamentos de Contas a Receber'
+                : 'Lançamentos de Contas a Pagar'}
+            </h3>
+            <Button variant="light" size="sm" onPress={() => setActivePendingPanel('all')}>
+              Limpar filtro
+            </Button>
+          </CardHeader>
+          <CardBody>
+            <Table aria-label="Tabela de baixa rápida" removeWrapper>
+              <TableHeader>
+                <TableColumn>Vencimento</TableColumn>
+                <TableColumn>Descrição</TableColumn>
+                <TableColumn className="text-right">Valor</TableColumn>
+                <TableColumn className="text-right">Ação</TableColumn>
+              </TableHeader>
+              <TableBody emptyContent="Nenhum lançamento pendente encontrado">
+                {panelTransactions.map((transaction) => (
+                  <TableRow key={transaction.id}>
+                    <TableCell>
+                      {new Date(transaction.raw.due_date).toLocaleDateString('pt-BR')}
+                    </TableCell>
+                    <TableCell>{transaction.history}</TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {formatCurrency(transaction.value)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        color="primary"
+                        variant="flat"
+                        onPress={() => setPendingBaixaTransaction(transaction.raw)}
+                      >
+                        Baixa
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardBody>
+        </Card>
+      )}
+
       <Card className="border border-default-200/50 dark:border-default-100/20">
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
               Saldo de Bancos e Caixa
             </h3>
-            <p className="text-sm text-default-500">
-              Gerencie as contas bancárias do escritório
-            </p>
+            <p className="text-sm text-default-500">Gerencie as contas bancárias do escritório</p>
           </div>
           <Button
             color="primary"
@@ -700,6 +991,8 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
               type="number"
               label="Valor"
               placeholder="0,00"
+              step="0.01"
+              min="0"
               value={newTransaction.value}
               onValueChange={(value) => setNewTransaction((prev) => ({ ...prev, value }))}
             />
@@ -762,6 +1055,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
               <TableColumn>Tipo</TableColumn>
               <TableColumn>Banco</TableColumn>
               <TableColumn>Histórico</TableColumn>
+              <TableColumn>Status</TableColumn>
               <TableColumn>Observação</TableColumn>
               <TableColumn className="text-right">Valor</TableColumn>
               <TableColumn className="text-right">Ações</TableColumn>
@@ -771,16 +1065,20 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                 <TableRow key={transaction.id}>
                   <TableCell>{new Date(transaction.date).toLocaleDateString('pt-BR')}</TableCell>
                   <TableCell>{transaction.type}</TableCell>
-                  <TableCell>
-                    {transaction.bank || '-'}
-                  </TableCell>
+                  <TableCell>{transaction.bank || '-'}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       {transaction.history}
                       {transaction.isRecurring && (
-                        <Repeat className="h-4 w-4 text-primary-600" aria-label="Lançamento recorrente" />
+                        <Repeat
+                          className="h-4 w-4 text-primary-600"
+                          aria-label="Lançamento recorrente"
+                        />
                       )}
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    {transaction.status === PaymentStatus.PAGO ? 'Pago' : 'Pendente'}
                   </TableCell>
                   <TableCell className="text-sm text-slate-600 dark:text-slate-400">
                     {transaction.observation ?? '-'}
@@ -788,13 +1086,32 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                   <TableCell className="text-right font-semibold">
                     {formatCurrency(transaction.value)}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right space-x-1">
+                    {transaction.status !== PaymentStatus.PAGO && (
+                      <Button
+                        size="sm"
+                        variant="flat"
+                        color="primary"
+                        onPress={() => setPendingBaixaTransaction(transaction.raw)}
+                      >
+                        Baixa
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="light"
+                      isIconOnly
+                      aria-label="Editar lançamento"
+                      onPress={() => openEditTransaction(transaction.raw)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
                     <Button
                       size="sm"
                       variant="light"
                       isIconOnly
                       aria-label="Excluir lançamento"
-                      onPress={() => handleDeleteTransaction(transaction.id)}
+                      onPress={() => setPendingDeleteTransaction(transaction.raw)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -816,9 +1133,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         <ModalContent>
           {(onClose) => (
             <>
-              <ModalHeader>
-                {editingBank ? 'Editar Banco' : 'Adicionar Banco'}
-              </ModalHeader>
+              <ModalHeader>{editingBank ? 'Editar Banco' : 'Adicionar Banco'}</ModalHeader>
               <ModalBody className="space-y-3">
                 <Input
                   label="Nome do Banco"
@@ -838,6 +1153,8 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                   label="Saldo"
                   type="number"
                   placeholder="0,00"
+                  step="0.01"
+                  min="0"
                   value={bankForm.balance}
                   onValueChange={(value) => setBankForm((prev) => ({ ...prev, balance: value }))}
                 />
@@ -883,7 +1200,8 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                   {successModal.message}
                 </h3>
                 <p className="text-slate-600 dark:text-slate-400">
-                  <span className="font-medium">{successModal.bankName}</span> foi salvo com sucesso no sistema.
+                  <span className="font-medium">{successModal.bankName}</span> foi salvo com sucesso
+                  no sistema.
                 </p>
               </ModalBody>
               <ModalFooter className="justify-center pb-6">
@@ -942,6 +1260,157 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
           )}
         </ModalContent>
       </Modal>
+
+      <Modal
+        isOpen={isEditModalOpen}
+        onOpenChange={(open) => {
+          setIsEditModalOpen(open);
+          if (!open) setEditingTransaction(null);
+        }}
+      >
+        <ModalContent>
+          {(onClose) => (
+            <>
+              <ModalHeader>Editar Lançamento</ModalHeader>
+              <ModalBody className="space-y-3">
+                <Input
+                  label="Descrição"
+                  placeholder="Ex: Honorários do mês"
+                  value={editForm.description}
+                  onValueChange={(value) =>
+                    setEditForm((prev) => ({ ...prev, description: value }))
+                  }
+                />
+                <Input
+                  label="Valor (R$)"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0,00"
+                  value={editForm.amount}
+                  onValueChange={(value) => setEditForm((prev) => ({ ...prev, amount: value }))}
+                />
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                    Data de Vencimento
+                  </label>
+                  <DatePickerField
+                    value={editForm.due_date}
+                    onChange={(value) => setEditForm((prev) => ({ ...prev, due_date: value }))}
+                    aria-label="Data de vencimento"
+                  />
+                </div>
+                <Select
+                  label="Status do Pagamento"
+                  selectedKeys={[editForm.payment_status]}
+                  onSelectionChange={(keys) => {
+                    const value = Array.from(keys)[0] as PaymentStatus | undefined;
+                    if (!value) return;
+                    setEditForm((prev) => ({ ...prev, payment_status: value }));
+                  }}
+                >
+                  <SelectItem key={PaymentStatus.PENDENTE}>Pendente</SelectItem>
+                  <SelectItem key={PaymentStatus.PAGO}>Pago</SelectItem>
+                  <SelectItem key={PaymentStatus.PARCIAL}>Parcial</SelectItem>
+                  <SelectItem key={PaymentStatus.ATRASADO}>Atrasado</SelectItem>
+                  <SelectItem key={PaymentStatus.CANCELADO}>Cancelado</SelectItem>
+                </Select>
+                <Select
+                  label="Método de Pagamento"
+                  selectedKeys={editForm.payment_method ? [editForm.payment_method] : []}
+                  onSelectionChange={(keys) => {
+                    const value = Array.from(keys)[0] as PaymentMethod | undefined;
+                    setEditForm((prev) => ({ ...prev, payment_method: value ?? '' }));
+                  }}
+                >
+                  <SelectItem key={PaymentMethod.PIX}>PIX</SelectItem>
+                  <SelectItem key={PaymentMethod.BOLETO}>Boleto</SelectItem>
+                  <SelectItem key={PaymentMethod.TRANSFERENCIA}>Transferência</SelectItem>
+                  <SelectItem key={PaymentMethod.DINHEIRO}>Dinheiro</SelectItem>
+                  <SelectItem key={PaymentMethod.CARTAO_CREDITO}>Cartão de Crédito</SelectItem>
+                  <SelectItem key={PaymentMethod.CARTAO_DEBITO}>Cartão de Débito</SelectItem>
+                  <SelectItem key={PaymentMethod.CHEQUE}>Cheque</SelectItem>
+                </Select>
+                {editForm.payment_status === PaymentStatus.PAGO && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                      Data de Pagamento
+                    </label>
+                    <DatePickerField
+                      value={editForm.paid_date}
+                      onChange={(value) => setEditForm((prev) => ({ ...prev, paid_date: value }))}
+                      aria-label="Data de pagamento"
+                    />
+                  </div>
+                )}
+                <Input
+                  label="Categoria"
+                  placeholder="Ex: 1.1.01"
+                  value={editForm.category}
+                  onValueChange={(value) => setEditForm((prev) => ({ ...prev, category: value }))}
+                />
+                <Input
+                  label="Número da Nota"
+                  placeholder="Ex: NF-001/2024"
+                  value={editForm.invoice_number}
+                  onValueChange={(value) =>
+                    setEditForm((prev) => ({ ...prev, invoice_number: value }))
+                  }
+                />
+                <Textarea
+                  label="Observações"
+                  placeholder="Informações adicionais..."
+                  value={editForm.notes}
+                  onValueChange={(value) => setEditForm((prev) => ({ ...prev, notes: value }))}
+                  minRows={3}
+                />
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="light" onPress={onClose}>
+                  Cancelar
+                </Button>
+                <Button color="primary" onPress={handleUpdateTransaction}>
+                  Salvar
+                </Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
+
+      <TransactionTrashModal
+        isOpen={isTrashModalOpen}
+        onOpenChange={setIsTrashModalOpen}
+        filters={{
+          client_id: OFFICE_CLIENT_ID || undefined,
+          due_date_from: startDate,
+          due_date_to: endDate,
+        }}
+        title="Lixeira do Escritório"
+        onRestored={async () => {
+          await refresh();
+        }}
+      />
+
+      <ConfirmBaixaLancamentoDialog
+        isOpen={Boolean(pendingBaixaTransaction)}
+        transaction={pendingBaixaTransaction}
+        isLoading={isConfirmingBaixa}
+        onConfirm={handleMarkAsPaid}
+        onCancel={() => {
+          if (!isConfirmingBaixa) setPendingBaixaTransaction(null);
+        }}
+      />
+
+      <ConfirmDeleteLancamentoDialog
+        isOpen={Boolean(pendingDeleteTransaction)}
+        transaction={pendingDeleteTransaction}
+        isLoading={isConfirmingDelete}
+        onConfirm={handleDeleteTransaction}
+        onCancel={() => {
+          if (!isConfirmingDelete) setPendingDeleteTransaction(null);
+        }}
+      />
     </div>
   );
 }

@@ -10,7 +10,6 @@ import {
   DropdownItem,
   DropdownMenu,
   DropdownTrigger,
-  Link,
 } from '@/heroui';
 import { useAuth } from '@/hooks/auth/AuthContext';
 import {
@@ -26,6 +25,7 @@ import {
   UsersIcon,
 } from '@/lib/icons';
 import { UserRole } from '@/types/user';
+import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
 
@@ -140,7 +140,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Main Content */}
       <div className="flex flex-1 flex-col">
         {/* Header */}
-        <header className="flex h-16 items-center justify-between border-b border-divider px-6">
+        <header className="flex h-16 items-center justify-between border-b border-divider bg-background px-6">
           <Button
             isIconOnly
             variant="light"
@@ -188,7 +188,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto p-6">{children}</main>
+        <main className="flex-1 overflow-auto bg-background p-6">{children}</main>
       </div>
       <ToastContainer />
     </div>

@@ -161,6 +161,7 @@ class TransactionResponse(BaseModel):
     created_by_id: UUID
     created_at: datetime
     updated_at: datetime
+    deleted_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

@@ -23,6 +23,11 @@ import { formatDateTime } from "@/lib/masks";
 
 const ACTION_LABELS: Record<string, string> = {
   "transaction.create": "Lançamento criado",
+  "transaction.update": "Lançamento atualizado",
+  "transaction.mark_paid": "Baixa de lançamento",
+  "transaction.delete": "Lançamento excluído",
+  "transaction.restore": "Lançamento restaurado",
+  "transaction.cancel": "Lançamento cancelado",
   "bank_account.create": "Banco criado",
   "bank_account.update": "Banco atualizado",
   "bank_account.delete": "Banco removido",
@@ -39,6 +44,7 @@ export function FinanceiroHistoricoClientes() {
   const [clientOptions, setClientOptions] = useState<ClientListItem[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("all");
   const [selectedEntity, setSelectedEntity] = useState<string>("all");
+  const [selectedOrigin, setSelectedOrigin] = useState<string>("all");
 
   useEffect(() => {
     let active = true;
@@ -66,10 +72,7 @@ export function FinanceiroHistoricoClientes() {
           limit: 200,
         });
         if (!active) return;
-        const clientOnly = response.items.filter(
-          (item) => item.user_role === "cliente"
-        );
-        setLogs(clientOnly);
+        setLogs(response.items);
       } catch (error) {
         console.error("Erro ao carregar histórico", error);
       } finally {
@@ -87,9 +90,23 @@ export function FinanceiroHistoricoClientes() {
     return map;
   }, [clientOptions]);
 
+  const getOriginKey = (log: AuditLog): "cliente" | "escritorio" => {
+    const role = (log.user_role ?? "").toLowerCase();
+    return role === "cliente" ? "cliente" : "escritorio";
+  };
+
+  const getOriginLabel = (log: AuditLog) =>
+    getOriginKey(log) === "cliente" ? "Cliente" : "Escritório";
+
   const renderClientName = (log: AuditLog) => {
     const clientId = log.payload?.client_id as string | undefined;
-    if (!clientId) return "-";
+    if (!clientId) {
+      const isOfficeAccount = Boolean(log.payload?.is_office_account);
+      if (isOfficeAccount || getOriginKey(log) === "escritorio") {
+        return "Escritório";
+      }
+      return "-";
+    }
     const client = clientMap.get(clientId);
     return client ? client.nome_fantasia || client.razao_social : clientId;
   };
@@ -139,15 +156,20 @@ export function FinanceiroHistoricoClientes() {
     return log.action;
   };
 
+  const visibleLogs = useMemo(() => {
+    if (selectedOrigin === "all") return logs;
+    return logs.filter((log) => getOriginKey(log) === selectedOrigin);
+  }, [logs, selectedOrigin]);
+
   return (
     <Card className="border border-default-200/50 dark:border-default-100/20">
       <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            Histórico de Ações de Clientes
+            Histórico de Ações Financeiras
           </h3>
           <p className="text-sm text-default-500">
-            Acompanhe alterações feitas pelos clientes no financeiro
+            Acompanhe ações feitas por usuários do escritório e clientes
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -176,6 +198,19 @@ export function FinanceiroHistoricoClientes() {
             <SelectItem key="financial_transaction">Lançamentos</SelectItem>
             <SelectItem key="bank_account">Bancos</SelectItem>
           </Select>
+          <Select
+            label="Origem"
+            selectedKeys={[selectedOrigin]}
+            onSelectionChange={(keys) => {
+              const value = Array.from(keys)[0] as string | undefined;
+              setSelectedOrigin(value ?? "all");
+            }}
+            className="min-w-[180px]"
+          >
+            <SelectItem key="all">Todos</SelectItem>
+            <SelectItem key="escritorio">Escritório</SelectItem>
+            <SelectItem key="cliente">Cliente</SelectItem>
+          </Select>
         </div>
       </CardHeader>
       <CardBody>
@@ -188,15 +223,17 @@ export function FinanceiroHistoricoClientes() {
             <TableHeader>
               <TableColumn>Data</TableColumn>
               <TableColumn>Cliente</TableColumn>
+              <TableColumn>Origem</TableColumn>
               <TableColumn>Usuário</TableColumn>
               <TableColumn>Tipo</TableColumn>
               <TableColumn>Detalhes</TableColumn>
             </TableHeader>
             <TableBody emptyContent="Nenhuma ação registrada">
-              {logs.map((log) => (
+              {visibleLogs.map((log) => (
                 <TableRow key={log.id}>
                   <TableCell>{formatDateTime(log.created_at)}</TableCell>
                   <TableCell>{renderClientName(log)}</TableCell>
+                  <TableCell>{getOriginLabel(log)}</TableCell>
                   <TableCell>{log.user_name || log.user_email || "-"}</TableCell>
                   <TableCell>{ENTITY_LABELS[log.entity] || log.entity}</TableCell>
                   <TableCell>

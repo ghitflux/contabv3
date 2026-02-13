@@ -29,15 +29,59 @@ from app.services.finance import FeeGeneratorService, FinancialReportService, In
 router = APIRouter()
 
 
+def _enum_value(value):
+    if hasattr(value, "value"):
+        return value.value
+    return value
+
+
+def _format_amount(value) -> str | None:
+    if value is None:
+        return None
+    try:
+        return f"{float(value):.2f}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _transaction_snapshot(transaction) -> dict:
+    return {
+        "client_id": str(transaction.client_id) if transaction.client_id else None,
+        "description": transaction.description,
+        "amount": _format_amount(transaction.amount),
+        "transaction_type": _enum_value(transaction.transaction_type),
+        "payment_status": _enum_value(transaction.payment_status),
+        "payment_method": _enum_value(transaction.payment_method) if transaction.payment_method else None,
+        "due_date": str(transaction.due_date) if transaction.due_date else None,
+        "paid_date": transaction.paid_date.isoformat() if transaction.paid_date else None,
+        "reference_month": str(transaction.reference_month) if transaction.reference_month else None,
+        "category": transaction.category,
+        "notes": transaction.notes,
+        "invoice_number": transaction.invoice_number,
+    }
+
+
+def _build_transaction_payload(transaction, summary: str, extra: Optional[dict] = None) -> dict:
+    payload = {
+        "summary": summary,
+        **_transaction_snapshot(transaction),
+    }
+    if extra:
+        payload.update(extra)
+    return payload
+
+
 @router.get("", response_model=TransactionListResponse)
 async def list_transactions(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
     client_id: Optional[UUID] = Query(None),
-    status: Optional[PaymentStatus] = Query(None),
+    payment_status: Optional[PaymentStatus] = Query(None, alias="status"),
     reference_month: Optional[date] = Query(None),
     due_date_from: Optional[date] = Query(None),
     due_date_to: Optional[date] = Query(None),
+    include_deleted: bool = Query(False, description="Include soft-deleted transactions"),
+    deleted_only: bool = Query(False, description="Return only soft-deleted transactions"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
 ):
@@ -59,13 +103,23 @@ async def list_transactions(
                 detail="Client profile not found",
             )
         client_id = client.id
+        if include_deleted or deleted_only:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Clients cannot access deleted transactions",
+            )
+
+    if deleted_only:
+        include_deleted = True
 
     transactions, total = await repo.list_with_filters(
         client_id=client_id,
-        status=status,
+        status=payment_status,
         reference_month=reference_month,
         due_date_from=due_date_from,
         due_date_to=due_date_to,
+        include_deleted=include_deleted,
+        deleted_only=deleted_only,
         skip=skip,
         limit=limit,
     )
@@ -94,6 +148,7 @@ async def list_transactions(
             "created_by_id": transaction.created_by_id,
             "created_at": transaction.created_at,
             "updated_at": transaction.updated_at,
+            "deleted_at": transaction.deleted_at,
         }
         response_items.append(TransactionResponse(**trans_dict))
 
@@ -169,30 +224,19 @@ async def create_transaction(
             data=data,
             created_by_id=current_user.id,
         )
-        if current_user.role == UserRole.CLIENTE:
-            audit_log = AuditLog(
-                user_id=current_user.id,
-                action="transaction.create",
-                entity="financial_transaction",
-                entity_id=str(transaction.id),
-                payload={
-                    "client_id": str(transaction.client_id),
-                    "summary": (
-                        f"Lançamento criado: {transaction.description} - "
-                        f"R$ {transaction.amount:.2f}"
-                    ),
-                    "description": transaction.description,
-                    "amount": f"{transaction.amount:.2f}",
-                    "transaction_type": transaction.transaction_type.value,
-                    "payment_status": transaction.payment_status.value,
-                    "payment_method": transaction.payment_method.value if transaction.payment_method else None,
-                    "due_date": str(transaction.due_date),
-                    "reference_month": str(transaction.reference_month),
-                },
-                ip_address=request.client.host if request.client else None,
-                user_agent=request.headers.get("user-agent"),
-            )
-            db.add(audit_log)
+        audit_log = AuditLog(
+            user_id=current_user.id,
+            action="transaction.create",
+            entity="financial_transaction",
+            entity_id=str(transaction.id),
+            payload=_build_transaction_payload(
+                transaction,
+                summary=f"Lançamento criado: {transaction.description} - R$ {_format_amount(transaction.amount)}",
+            ),
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+        db.add(audit_log)
         await db.commit()
         return transaction
     except ValueError as e:
@@ -206,6 +250,7 @@ async def create_transaction(
 async def update_transaction(
     transaction_id: UUID,
     data: TransactionUpdate,
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
 ):
@@ -221,12 +266,37 @@ async def update_transaction(
         )
 
     service = TransactionService(db)
+    repo = TransactionRepository(db)
+    before_transaction = await repo.get_by_id_with_relations(transaction_id, include_deleted=True)
+    if not before_transaction:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transaction not found",
+        )
 
     try:
+        before_snapshot = _transaction_snapshot(before_transaction)
         transaction = await service.update_transaction(
             transaction_id=transaction_id,
             data=data,
         )
+        audit_log = AuditLog(
+            user_id=current_user.id,
+            action="transaction.update",
+            entity="financial_transaction",
+            entity_id=str(transaction.id),
+            payload=_build_transaction_payload(
+                transaction,
+                summary=f"Lançamento atualizado: {transaction.description} - R$ {_format_amount(transaction.amount)}",
+                extra={
+                    "before": before_snapshot,
+                    "after": _transaction_snapshot(transaction),
+                },
+            ),
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+        db.add(audit_log)
         await db.commit()
         return transaction
     except ValueError as e:
@@ -240,6 +310,7 @@ async def update_transaction(
 async def mark_as_paid(
     transaction_id: UUID,
     data: TransactionMarkAsPaid,
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
 ):
@@ -263,6 +334,19 @@ async def mark_as_paid(
             payment_method=data.payment_method,
             notes=data.notes,
         )
+        audit_log = AuditLog(
+            user_id=current_user.id,
+            action="transaction.mark_paid",
+            entity="financial_transaction",
+            entity_id=str(transaction.id),
+            payload=_build_transaction_payload(
+                transaction,
+                summary=f"Baixa realizada: {transaction.description} - R$ {_format_amount(transaction.amount)}",
+            ),
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+        db.add(audit_log)
         await db.commit()
         return transaction
     except ValueError as e:
@@ -276,6 +360,7 @@ async def mark_as_paid(
 async def cancel_transaction(
     transaction_id: UUID,
     data: TransactionCancel,
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
 ):
@@ -297,6 +382,20 @@ async def cancel_transaction(
             transaction_id=transaction_id,
             reason=data.reason,
         )
+        audit_log = AuditLog(
+            user_id=current_user.id,
+            action="transaction.cancel",
+            entity="financial_transaction",
+            entity_id=str(transaction.id),
+            payload=_build_transaction_payload(
+                transaction,
+                summary=f"Lançamento cancelado: {transaction.description} - R$ {_format_amount(transaction.amount)}",
+                extra={"cancel_reason": data.reason},
+            ),
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+        db.add(audit_log)
         await db.commit()
         return transaction
     except ValueError as e:
@@ -309,6 +408,7 @@ async def cancel_transaction(
 @router.delete("/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_transaction(
     transaction_id: UUID,
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
 ):
@@ -324,6 +424,15 @@ async def delete_transaction(
         )
 
     service = TransactionService(db)
+    repo = TransactionRepository(db)
+    transaction = await repo.get_by_id_with_relations(transaction_id, include_deleted=True)
+    if not transaction or transaction.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transaction not found",
+        )
+    transaction_snapshot = _transaction_snapshot(transaction)
+
     deleted = await service.delete_transaction(transaction_id)
 
     if not deleted:
@@ -332,8 +441,82 @@ async def delete_transaction(
             detail="Transaction not found",
         )
 
+    audit_log = AuditLog(
+        user_id=current_user.id,
+        action="transaction.delete",
+        entity="financial_transaction",
+        entity_id=str(transaction_id),
+        payload={
+            "summary": f"Lançamento excluído: {transaction.description} - R$ {_format_amount(transaction.amount)}",
+            **transaction_snapshot,
+        },
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    db.add(audit_log)
+
     await db.commit()
     return None
+
+
+@router.post("/{transaction_id}/restore", response_model=TransactionResponse)
+async def restore_transaction(
+    transaction_id: UUID,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """
+    Restore a soft-deleted transaction.
+
+    Admin/Func only.
+    """
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/func can restore transactions",
+        )
+
+    service = TransactionService(db)
+    repo = TransactionRepository(db)
+    deleted_transaction = await repo.get_by_id_with_relations(transaction_id, include_deleted=True)
+    if not deleted_transaction or deleted_transaction.deleted_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Deleted transaction not found",
+        )
+    restored = await service.restore_transaction(transaction_id)
+
+    if not restored:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Deleted transaction not found",
+        )
+
+    transaction = await repo.get_by_id_with_relations(transaction_id, include_deleted=True)
+    if not transaction:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transaction not found",
+        )
+
+    audit_log = AuditLog(
+        user_id=current_user.id,
+        action="transaction.restore",
+        entity="financial_transaction",
+        entity_id=str(transaction.id),
+        payload=_build_transaction_payload(
+            transaction,
+            summary=f"Lançamento restaurado: {transaction.description} - R$ {_format_amount(transaction.amount)}",
+            extra={"restored_from_trash": True},
+        ),
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    db.add(audit_log)
+
+    await db.commit()
+    return transaction
 
 
 @router.post("/fees/generate", response_model=MonthlyFeeGenerateResponse)

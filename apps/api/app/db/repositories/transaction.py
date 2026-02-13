@@ -21,12 +21,16 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
         super().__init__(FinancialTransaction, db)
 
     async def get_by_id_with_relations(
-        self, transaction_id: UUID
+        self, transaction_id: UUID, include_deleted: bool = False
     ) -> Optional[FinancialTransaction]:
         """Get transaction with all relationships loaded."""
+        conditions = [FinancialTransaction.id == transaction_id]
+        if not include_deleted:
+            conditions.append(FinancialTransaction.deleted_at.is_(None))
+
         stmt = (
             select(FinancialTransaction)
-            .where(FinancialTransaction.id == transaction_id)
+            .where(and_(*conditions))
             .options(
                 selectinload(FinancialTransaction.client),
                 selectinload(FinancialTransaction.obligation),
@@ -43,14 +47,18 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
         reference_month: Optional[date] = None,
         due_date_from: Optional[date] = None,
         due_date_to: Optional[date] = None,
+        include_deleted: bool = False,
+        deleted_only: bool = False,
         skip: int = 0,
         limit: int = 100,
     ) -> tuple[Sequence[FinancialTransaction], int]:
         """List transactions for a specific client with filters."""
-        conditions = [
-            FinancialTransaction.client_id == client_id,
-            FinancialTransaction.deleted_at.is_(None),
-        ]
+        conditions = [FinancialTransaction.client_id == client_id]
+
+        if deleted_only:
+            conditions.append(FinancialTransaction.deleted_at.is_not(None))
+        elif not include_deleted:
+            conditions.append(FinancialTransaction.deleted_at.is_(None))
 
         if status:
             conditions.append(FinancialTransaction.payment_status == status)
@@ -93,11 +101,18 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
         reference_month: Optional[date] = None,
         due_date_from: Optional[date] = None,
         due_date_to: Optional[date] = None,
+        include_deleted: bool = False,
+        deleted_only: bool = False,
         skip: int = 0,
         limit: int = 100,
     ) -> tuple[Sequence[FinancialTransaction], int]:
         """List transactions with optional filters."""
-        conditions = [FinancialTransaction.deleted_at.is_(None)]
+        conditions = []
+
+        if deleted_only:
+            conditions.append(FinancialTransaction.deleted_at.is_not(None))
+        elif not include_deleted:
+            conditions.append(FinancialTransaction.deleted_at.is_(None))
 
         if client_id:
             conditions.append(FinancialTransaction.client_id == client_id)
@@ -315,8 +330,17 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
     async def soft_delete(self, transaction_id: UUID) -> bool:
         """Soft delete a transaction."""
         transaction = await self.get_by_id(transaction_id)
-        if transaction:
+        if transaction and transaction.deleted_at is None:
             transaction.deleted_at = datetime.utcnow()
+            await self.db.flush()
+            return True
+        return False
+
+    async def restore(self, transaction_id: UUID) -> bool:
+        """Restore a soft-deleted transaction."""
+        transaction = await self.get_by_id(transaction_id)
+        if transaction and transaction.deleted_at is not None:
+            transaction.deleted_at = None
             await self.db.flush()
             return True
         return False

@@ -158,6 +158,5 @@ class Client(Base, UUIDMixin, TimestampMixin):
 
     def soft_delete(self) -> None:
         """Mark client as deleted."""
-        from datetime import timezone
-        self.deleted_at = datetime.now(timezone.utc)
+        self.deleted_at = datetime.utcnow()
         self.status = ClientStatus.INATIVO

@@ -7,11 +7,11 @@ export const fadeIn: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
-    transition: { duration: 0.3 },
+    transition: { duration: 0.2, ease: "easeOut" },
   },
   exit: {
     opacity: 0,
-    transition: { duration: 0.2 },
+    transition: { duration: 0.12, ease: "easeInOut" },
   },
 }
 
@@ -130,16 +130,16 @@ export const buttonHover = {
 
 // Animação de página
 export const pageTransition: Variants = {
-  hidden: { opacity: 0, y: 20 },
+  hidden: { opacity: 0, y: 8 },
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.4 },
+    transition: { duration: 0.22, ease: "easeOut" },
   },
   exit: {
     opacity: 0,
-    y: -20,
-    transition: { duration: 0.3 },
+    y: -6,
+    transition: { duration: 0.14, ease: "easeInOut" },
   },
 }
 
@@ -155,4 +155,3 @@ export const backdropVariants: Variants = {
     transition: { duration: 0.2 },
   },
 }
-

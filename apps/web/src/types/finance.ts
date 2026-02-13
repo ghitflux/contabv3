@@ -4,26 +4,26 @@
 
 // Enums
 export enum TransactionType {
-  RECEITA = "receita",
-  DESPESA = "despesa",
+  RECEITA = 'receita',
+  DESPESA = 'despesa',
 }
 
 export enum PaymentMethod {
-  PIX = "pix",
-  BOLETO = "boleto",
-  TRANSFERENCIA = "transferencia",
-  DINHEIRO = "dinheiro",
-  CARTAO_CREDITO = "cartao_credito",
-  CARTAO_DEBITO = "cartao_debito",
-  CHEQUE = "cheque",
+  PIX = 'pix',
+  BOLETO = 'boleto',
+  TRANSFERENCIA = 'transferencia',
+  DINHEIRO = 'dinheiro',
+  CARTAO_CREDITO = 'cartao_credito',
+  CARTAO_DEBITO = 'cartao_debito',
+  CHEQUE = 'cheque',
 }
 
 export enum PaymentStatus {
-  PENDENTE = "pendente",
-  PAGO = "pago",
-  ATRASADO = "atrasado",
-  CANCELADO = "cancelado",
-  PARCIAL = "parcial",
+  PENDENTE = 'pendente',
+  PAGO = 'pago',
+  ATRASADO = 'atrasado',
+  CANCELADO = 'cancelado',
+  PARCIAL = 'parcial',
 }
 
 // Main transaction interface
@@ -48,6 +48,7 @@ export interface Transaction {
   created_by_id: string;
   created_at: string; // ISO datetime string
   updated_at: string; // ISO datetime string
+  deleted_at?: string | null; // ISO datetime string
 }
 
 // Create/Update interfaces
@@ -100,11 +101,13 @@ export interface TransactionListResponse {
 // Filters
 export interface TransactionFilters {
   client_id?: string;
-  status?: PaymentStatus | "";
-  payment_method?: PaymentMethod | "";
+  status?: PaymentStatus | '';
+  payment_method?: PaymentMethod | '';
   reference_month?: string; // YYYY-MM format
   due_date_from?: string;
   due_date_to?: string;
+  include_deleted?: boolean;
+  deleted_only?: boolean;
   page?: number;
   size?: number;
 }
@@ -193,43 +196,45 @@ export interface ClientFinancialSummary {
 
 // Helper functions
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
   }).format(amount);
 }
 
 export function getPaymentStatusLabel(status: PaymentStatus): string {
   const labels: Record<PaymentStatus, string> = {
-    [PaymentStatus.PENDENTE]: "Pendente",
-    [PaymentStatus.PAGO]: "Pago",
-    [PaymentStatus.ATRASADO]: "Atrasado",
-    [PaymentStatus.CANCELADO]: "Cancelado",
-    [PaymentStatus.PARCIAL]: "Parcial",
+    [PaymentStatus.PENDENTE]: 'Pendente',
+    [PaymentStatus.PAGO]: 'Pago',
+    [PaymentStatus.ATRASADO]: 'Atrasado',
+    [PaymentStatus.CANCELADO]: 'Cancelado',
+    [PaymentStatus.PARCIAL]: 'Parcial',
   };
   return labels[status];
 }
 
-export function getPaymentStatusColor(status: PaymentStatus): "default" | "primary" | "success" | "warning" | "danger" {
-  const colors: Record<PaymentStatus, "default" | "primary" | "success" | "warning" | "danger"> = {
-    [PaymentStatus.PENDENTE]: "warning",
-    [PaymentStatus.PAGO]: "success",
-    [PaymentStatus.ATRASADO]: "danger",
-    [PaymentStatus.CANCELADO]: "default",
-    [PaymentStatus.PARCIAL]: "primary",
+export function getPaymentStatusColor(
+  status: PaymentStatus
+): 'default' | 'primary' | 'success' | 'warning' | 'danger' {
+  const colors: Record<PaymentStatus, 'default' | 'primary' | 'success' | 'warning' | 'danger'> = {
+    [PaymentStatus.PENDENTE]: 'warning',
+    [PaymentStatus.PAGO]: 'success',
+    [PaymentStatus.ATRASADO]: 'danger',
+    [PaymentStatus.CANCELADO]: 'default',
+    [PaymentStatus.PARCIAL]: 'primary',
   };
   return colors[status];
 }
 
 export function getPaymentMethodLabel(method: PaymentMethod): string {
   const labels: Record<PaymentMethod, string> = {
-    [PaymentMethod.PIX]: "PIX",
-    [PaymentMethod.BOLETO]: "Boleto",
-    [PaymentMethod.TRANSFERENCIA]: "Transferência",
-    [PaymentMethod.DINHEIRO]: "Dinheiro",
-    [PaymentMethod.CARTAO_CREDITO]: "Cartão de Crédito",
-    [PaymentMethod.CARTAO_DEBITO]: "Cartão de Débito",
-    [PaymentMethod.CHEQUE]: "Cheque",
+    [PaymentMethod.PIX]: 'PIX',
+    [PaymentMethod.BOLETO]: 'Boleto',
+    [PaymentMethod.TRANSFERENCIA]: 'Transferência',
+    [PaymentMethod.DINHEIRO]: 'Dinheiro',
+    [PaymentMethod.CARTAO_CREDITO]: 'Cartão de Crédito',
+    [PaymentMethod.CARTAO_DEBITO]: 'Cartão de Débito',
+    [PaymentMethod.CHEQUE]: 'Cheque',
   };
   return labels[method];
 }

@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Autocomplete,
   AutocompleteItem,
@@ -24,11 +24,11 @@ import {
   TableRow,
   Textarea,
   useDisclosure,
-} from "@/heroui";
-import { Download, Pencil, Plus, Trash2 } from "lucide-react";
-import { clientsApi } from "@/lib/api/endpoints/clients";
-import { useTransactions } from "@/hooks/useTransactions";
-import type { Client, ClientListItem } from "@/types/client";
+} from '@/heroui';
+import { Download, Pencil, Plus, Trash2 } from 'lucide-react';
+import { clientsApi } from '@/lib/api/endpoints/clients';
+import { useTransactions } from '@/hooks/useTransactions';
+import type { Client, ClientListItem } from '@/types/client';
 import {
   PaymentMethod,
   PaymentStatus,
@@ -36,15 +36,18 @@ import {
   type Transaction,
   type TransactionUpdate,
   getPaymentMethodLabel,
-} from "@/types/finance";
-import { toast } from "@/lib/toast";
-import { DatePickerField } from "@/components/ui/DatePickerField";
-import { MonthYearPicker } from "@/components/ui/MonthYearPicker";
-import { endOfMonth, formatISO, startOfMonth, subMonths } from "date-fns";
-import { useAuth } from "@/hooks/auth/AuthContext";
-import { NovoLancamentoModal, type NovoLancamentoData } from "./NovoLancamentoModal";
-import { bankAccountsApi } from "@/lib/api/endpoints/bank-accounts";
-import type { BankAccount } from "@/types/bank-account";
+} from '@/types/finance';
+import { toast } from '@/lib/toast';
+import { DatePickerField } from '@/components/ui/DatePickerField';
+import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
+import { endOfMonth, formatISO, startOfMonth, subMonths } from 'date-fns';
+import { useAuth } from '@/hooks/auth/AuthContext';
+import { NovoLancamentoModal, type NovoLancamentoData } from './NovoLancamentoModal';
+import { bankAccountsApi } from '@/lib/api/endpoints/bank-accounts';
+import type { BankAccount } from '@/types/bank-account';
+import { TransactionTrashModal } from './TransactionTrashModal';
+import { ConfirmBaixaLancamentoDialog } from './ConfirmBaixaLancamentoDialog';
+import { ConfirmDeleteLancamentoDialog } from './ConfirmDeleteLancamentoDialog';
 
 interface ClientTransaction {
   id: string;
@@ -56,6 +59,8 @@ interface ClientTransaction {
   raw: Transaction;
 }
 
+const normalizeDecimalInput = (value: string): number => Number.parseFloat(value.replace(',', '.'));
+
 export function FinanceiroPorEmpresa({
   onExportLivro,
   onClientChange,
@@ -65,44 +70,50 @@ export function FinanceiroPorEmpresa({
 }) {
   const { user } = useAuth();
   const { isOpen, onOpen, onOpenChange } = useDisclosure();
-  const isAdminOrFunc = user?.role !== "cliente";
+  const isAdminOrFunc = user?.role !== 'cliente';
   const [clients, setClients] = useState<ClientListItem[]>([]);
-  const [clientSearch, setClientSearch] = useState("");
-  const [selectedClient, setSelectedClient] = useState<string>("");
+  const [clientSearch, setClientSearch] = useState('');
+  const [selectedClient, setSelectedClient] = useState<string>('');
   const [clientDetails, setClientDetails] = useState<Client | null>(null);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
-  const [monthFilter, setMonthFilter] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [monthFilter, setMonthFilter] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [isLoadingBanks, setIsLoadingBanks] = useState(false);
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [editingBank, setEditingBank] = useState<BankAccount | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [pendingBaixaTransaction, setPendingBaixaTransaction] = useState<Transaction | null>(null);
+  const [pendingDeleteTransaction, setPendingDeleteTransaction] = useState<Transaction | null>(null);
+  const [isConfirmingBaixa, setIsConfirmingBaixa] = useState(false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [activePendingPanel, setActivePendingPanel] = useState<'all' | 'receber' | 'pagar'>('all');
+  const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
   const [bankForm, setBankForm] = useState({
-    name: "",
-    account_number: "",
-    balance: "",
-    accounting_account: "",
+    name: '',
+    account_number: '',
+    balance: '',
+    accounting_account: '',
   });
   const [editForm, setEditForm] = useState({
-    description: "",
-    amount: "",
-    due_date: "",
+    description: '',
+    amount: '',
+    due_date: '',
     payment_status: PaymentStatus.PENDENTE,
-    payment_method: "" as PaymentMethod | "",
-    paid_date: "",
-    category: "",
-    notes: "",
-    invoice_number: "",
+    payment_method: '' as PaymentMethod | '',
+    paid_date: '',
+    category: '',
+    notes: '',
+    invoice_number: '',
   });
 
   useEffect(() => {
     const now = new Date();
-    setMonthFilter(formatISO(now, { representation: "date" }).slice(0, 7));
-    setStartDate(formatISO(startOfMonth(now), { representation: "date" }));
-    setEndDate(formatISO(endOfMonth(now), { representation: "date" }));
+    setMonthFilter(formatISO(now, { representation: 'date' }).slice(0, 7));
+    setStartDate(formatISO(startOfMonth(now), { representation: 'date' }));
+    setEndDate(formatISO(endOfMonth(now), { representation: 'date' }));
   }, []);
 
   useEffect(() => {
@@ -124,8 +135,8 @@ export function FinanceiroPorEmpresa({
           setClients(response.items);
         }
       } catch (error) {
-        console.error("Erro ao buscar clientes", error);
-        toast.error("Não foi possível carregar os clientes.");
+        console.error('Erro ao buscar clientes', error);
+        toast.error('Não foi possível carregar os clientes.');
       } finally {
         if (active) setIsLoadingClients(false);
       }
@@ -139,21 +150,23 @@ export function FinanceiroPorEmpresa({
     if (!selectedClient && clients.length > 0 && clients[0]) {
       // Auto-select first client
       setSelectedClient(clients[0].id);
-      setClientSearch(`${clients[0].nome_fantasia || clients[0].razao_social} — ${clients[0].cnpj}`);
+      setClientSearch(
+        `${clients[0].nome_fantasia || clients[0].razao_social} — ${clients[0].cnpj}`
+      );
     }
   }, [clients]); // Remove selectedClient from dependencies to avoid loop
 
   const setRangeForMonth = (monthValue: string) => {
     if (!monthValue) return;
-    const [year, month] = monthValue.split("-");
+    const [year, month] = monthValue.split('-');
     if (!year || !month) return;
     const parsedYear = Number.parseInt(year, 10);
     const parsedMonth = Number.parseInt(month, 10);
     if (!parsedYear || !parsedMonth) return;
-    const monthLabel = String(parsedMonth).padStart(2, "0");
+    const monthLabel = String(parsedMonth).padStart(2, '0');
     const lastDay = new Date(parsedYear, parsedMonth, 0).getDate();
     setStartDate(`${parsedYear}-${monthLabel}-01`);
-    setEndDate(`${parsedYear}-${monthLabel}-${String(lastDay).padStart(2, "0")}`);
+    setEndDate(`${parsedYear}-${monthLabel}-${String(lastDay).padStart(2, '0')}`);
   };
 
   const handleMonthChange = (value: string) => {
@@ -164,34 +177,34 @@ export function FinanceiroPorEmpresa({
   };
 
   const setCurrentMonthRange = () => {
-    const currentMonth = formatISO(new Date(), { representation: "date" }).slice(0, 7);
+    const currentMonth = formatISO(new Date(), { representation: 'date' }).slice(0, 7);
     setMonthFilter(currentMonth);
     setRangeForMonth(currentMonth);
   };
 
   const setPreviousMonthRange = () => {
     const previous = subMonths(new Date(), 1);
-    const previousMonth = formatISO(previous, { representation: "date" }).slice(0, 7);
+    const previousMonth = formatISO(previous, { representation: 'date' }).slice(0, 7);
     setMonthFilter(previousMonth);
     setRangeForMonth(previousMonth);
   };
 
   const normalizeMonthFilter = (startValue: string, endValue: string) => {
-    const [startYear, startMonth, startDay] = startValue.split("-");
-    const [endYear, endMonth, endDay] = endValue.split("-");
+    const [startYear, startMonth, startDay] = startValue.split('-');
+    const [endYear, endMonth, endDay] = endValue.split('-');
     if (!startYear || !startMonth || !startDay || !endYear || !endMonth || !endDay) {
-      return "";
+      return '';
     }
     if (startYear !== endYear || startMonth !== endMonth) {
-      return "";
+      return '';
     }
-    if (startDay !== "01") {
-      return "";
+    if (startDay !== '01') {
+      return '';
     }
     const lastDay = new Date(Number(startYear), Number(startMonth), 0).getDate();
-    const expectedEndDay = String(lastDay).padStart(2, "0");
+    const expectedEndDay = String(lastDay).padStart(2, '0');
     if (endDay !== expectedEndDay) {
-      return "";
+      return '';
     }
     return `${startYear}-${startMonth}`;
   };
@@ -202,7 +215,7 @@ export function FinanceiroPorEmpresa({
       setMonthFilter(normalized);
     }
     if (!normalized && monthFilter) {
-      setMonthFilter("");
+      setMonthFilter('');
     }
   }, [startDate, endDate, monthFilter]);
 
@@ -218,7 +231,7 @@ export function FinanceiroPorEmpresa({
         const client = await clientsApi.getById(selectedClient);
         if (active) setClientDetails(client);
       } catch (error) {
-        console.error("Erro ao buscar detalhes do cliente", error);
+        console.error('Erro ao buscar detalhes do cliente', error);
       }
     })();
 
@@ -229,10 +242,10 @@ export function FinanceiroPorEmpresa({
 
   const resetBankForm = useCallback(() => {
     setBankForm({
-      name: "",
-      account_number: "",
-      balance: "",
-      accounting_account: "",
+      name: '',
+      account_number: '',
+      balance: '',
+      accounting_account: '',
     });
     setEditingBank(null);
   }, []);
@@ -244,8 +257,8 @@ export function FinanceiroPorEmpresa({
         setBankForm({
           name: bank.name,
           account_number: bank.account_number,
-          balance: bank.balance?.toString() ?? "",
-          accounting_account: bank.accounting_account ?? "",
+          balance: bank.balance?.toString() ?? '',
+          accounting_account: bank.accounting_account ?? '',
         });
       } else {
         resetBankForm();
@@ -273,8 +286,8 @@ export function FinanceiroPorEmpresa({
         }));
         setBankAccounts(normalized);
       } catch (error) {
-        console.error("Erro ao carregar bancos", error);
-        toast.error("Não foi possível carregar os bancos.");
+        console.error('Erro ao carregar bancos', error);
+        toast.error('Não foi possível carregar os bancos.');
       } finally {
         setIsLoadingBanks(false);
       }
@@ -289,17 +302,17 @@ export function FinanceiroPorEmpresa({
 
   const handleSaveBank = async () => {
     if (!bankForm.name.trim() || !bankForm.account_number.trim()) {
-      toast.error("Informe o nome e o número da conta.");
+      toast.error('Informe o nome e o número da conta.');
       return;
     }
     if (isAdminOrFunc && !selectedClient) {
-      toast.error("Selecione uma empresa antes de cadastrar bancos.");
+      toast.error('Selecione uma empresa antes de cadastrar bancos.');
       return;
     }
 
-    const balanceValue = bankForm.balance ? Number.parseFloat(bankForm.balance) : 0;
-    if (Number.isNaN(balanceValue)) {
-      toast.error("Informe um saldo válido.");
+    const balanceValue = bankForm.balance ? normalizeDecimalInput(bankForm.balance) : 0;
+    if (Number.isNaN(balanceValue) || balanceValue < 0) {
+      toast.error('Informe um saldo inicial válido (mínimo R$ 0,00).');
       return;
     }
 
@@ -311,7 +324,7 @@ export function FinanceiroPorEmpresa({
           balance: balanceValue,
           accounting_account: bankForm.accounting_account.trim() || null,
         });
-        toast.success("Banco atualizado com sucesso.");
+        toast.success('Banco atualizado com sucesso.');
       } else {
         await bankAccountsApi.create({
           client_id: isAdminOrFunc ? selectedClient : undefined,
@@ -320,27 +333,27 @@ export function FinanceiroPorEmpresa({
           balance: balanceValue,
           accounting_account: bankForm.accounting_account.trim() || null,
         });
-        toast.success("Banco cadastrado com sucesso.");
+        toast.success('Banco cadastrado com sucesso.');
       }
       setIsBankModalOpen(false);
       resetBankForm();
       await loadBankAccounts(isAdminOrFunc ? selectedClient || undefined : undefined);
     } catch (error) {
-      console.error("Erro ao salvar banco", error);
-      toast.error("Não foi possível salvar o banco.");
+      console.error('Erro ao salvar banco', error);
+      toast.error('Não foi possível salvar o banco.');
     }
   };
 
   const handleDeleteBank = async (bankId: string) => {
-    const confirmed = window.confirm("Tem certeza que deseja excluir este banco?");
+    const confirmed = window.confirm('Tem certeza que deseja excluir este banco?');
     if (!confirmed) return;
     try {
       await bankAccountsApi.delete(bankId);
-      toast.success("Banco removido com sucesso.");
+      toast.success('Banco removido com sucesso.');
       await loadBankAccounts(isAdminOrFunc ? selectedClient || undefined : undefined);
     } catch (error) {
-      console.error("Erro ao excluir banco", error);
-      toast.error("Não foi possível excluir o banco.");
+      console.error('Erro ao excluir banco', error);
+      toast.error('Não foi possível excluir o banco.');
     }
   };
 
@@ -355,44 +368,46 @@ export function FinanceiroPorEmpresa({
     [selectedClient, startDate, endDate]
   );
 
-  const { transactions, refresh, createTransaction, updateTransaction } = useTransactions({
-    filters: transactionFilters,
-    autoFetch: Boolean(selectedClient),
-  });
+  const { transactions, refresh, createTransaction, updateTransaction, deleteTransaction } =
+    useTransactions({
+      filters: transactionFilters,
+      autoFetch: Boolean(selectedClient),
+    });
 
   const handleSaveTransaction = async (data: NovoLancamentoData) => {
     if (!selectedClient) {
-      toast.error("Selecione uma empresa antes de lançar.");
+      toast.error('Selecione uma empresa antes de lançar.');
       return;
     }
 
     try {
       await createTransaction({ ...data, client_id: selectedClient });
-      toast.success("Lançamento salvo com sucesso.");
+      toast.success('Lançamento salvo com sucesso.');
       await refresh();
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent("finance:transactions-updated"));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
       }
     } catch (error) {
-      console.error("Erro ao salvar lançamento:", error);
+      console.error('Erro ao salvar lançamento:', error);
       const errorDetail = (error as { data?: { detail?: string } })?.data?.detail;
-      const message = typeof errorDetail === "string" ? errorDetail : "Não foi possível salvar o lançamento.";
+      const message =
+        typeof errorDetail === 'string' ? errorDetail : 'Não foi possível salvar o lançamento.';
       toast.error(message);
       throw error;
     }
   };
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === 'undefined') return;
     const handleRefresh = () => {
       if (!selectedClient) return;
       refresh().catch((error) => {
-        console.error("Erro ao atualizar lançamentos", error);
+        console.error('Erro ao atualizar lançamentos', error);
       });
     };
-    window.addEventListener("finance:transactions-updated", handleRefresh);
+    window.addEventListener('finance:transactions-updated', handleRefresh);
     return () => {
-      window.removeEventListener("finance:transactions-updated", handleRefresh);
+      window.removeEventListener('finance:transactions-updated', handleRefresh);
     };
   }, [refresh, selectedClient]);
 
@@ -406,7 +421,7 @@ export function FinanceiroPorEmpresa({
         value: transaction.amount,
         payment: transaction.payment_method
           ? getPaymentMethodLabel(transaction.payment_method) || transaction.payment_method
-          : "-",
+          : '-',
         raw: transaction,
       })),
     [transactions]
@@ -417,11 +432,16 @@ export function FinanceiroPorEmpresa({
     if (!query) return clients;
 
     return clients.filter((client) => {
-      const fantasia = (client.nome_fantasia || "").toLowerCase();
+      const fantasia = (client.nome_fantasia || '').toLowerCase();
       const razao = client.razao_social.toLowerCase();
       const cnpj = client.cnpj.toLowerCase();
       const label = `${client.nome_fantasia || client.razao_social} — ${client.cnpj}`.toLowerCase();
-      return label.includes(query) || fantasia.includes(query) || razao.includes(query) || cnpj.includes(query);
+      return (
+        label.includes(query) ||
+        fantasia.includes(query) ||
+        razao.includes(query) ||
+        cnpj.includes(query)
+      );
     });
   }, [clients, clientSearch]);
 
@@ -441,34 +461,43 @@ export function FinanceiroPorEmpresa({
   );
   const lucro = receita - despesa;
 
-  const aReceber = useMemo(
+  const receivableTransactions = useMemo(
     () =>
-      transactions
-        .filter(
-          (transaction) =>
-            transaction.transaction_type === TransactionType.RECEITA &&
-            transaction.payment_status !== PaymentStatus.PAGO
-        )
-        .reduce((sum, transaction) => sum + transaction.amount, 0),
+      transactions.filter(
+        (transaction) =>
+          transaction.transaction_type === TransactionType.RECEITA &&
+          transaction.payment_status !== PaymentStatus.PAGO
+      ),
     [transactions]
+  );
+  const payableTransactions = useMemo(
+    () =>
+      transactions.filter(
+        (transaction) =>
+          transaction.transaction_type === TransactionType.DESPESA &&
+          transaction.payment_status !== PaymentStatus.PAGO
+      ),
+    [transactions]
+  );
+  const aReceber = useMemo(
+    () => receivableTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
+    [receivableTransactions]
   );
   const aPagar = useMemo(
-    () =>
-      transactions
-        .filter(
-          (transaction) =>
-            transaction.transaction_type === TransactionType.DESPESA &&
-            transaction.payment_status !== PaymentStatus.PAGO
-        )
-        .reduce((sum, transaction) => sum + transaction.amount, 0),
-    [transactions]
+    () => payableTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
+    [payableTransactions]
   );
+  const panelTransactions = useMemo(() => {
+    if (activePendingPanel === 'receber') return receivableTransactions;
+    if (activePendingPanel === 'pagar') return payableTransactions;
+    return [];
+  }, [activePendingPanel, payableTransactions, receivableTransactions]);
 
   const selectedClientListItem = clients.find((client) => client.id === selectedClient) ?? null;
   const selectedClientData = clientDetails ?? selectedClientListItem;
   const selectedClientLabel = selectedClientData
     ? `${selectedClientData.nome_fantasia || selectedClientData.razao_social} — ${selectedClientData.cnpj}`
-    : "";
+    : '';
   const selectedClientOption = selectedClientData
     ? [
         {
@@ -484,46 +513,46 @@ export function FinanceiroPorEmpresa({
   }, [onClientChange, selectedClientListItem]);
 
   const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
+    new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
     }).format(value);
 
   const normalizeDateInput = (value?: string | null): string => {
-    if (!value) return "";
-    const parts = value.split("T");
-    return parts[0] ?? "";
+    if (!value) return '';
+    const parts = value.split('T');
+    return parts[0] ?? '';
   };
 
   const openEditTransaction = (transaction: Transaction) => {
     setEditingTransaction(transaction);
     setEditForm({
-      description: transaction.description ?? "",
-      amount: transaction.amount?.toString() ?? "",
+      description: transaction.description ?? '',
+      amount: transaction.amount?.toString() ?? '',
       due_date: normalizeDateInput(transaction.due_date),
       payment_status: transaction.payment_status ?? PaymentStatus.PENDENTE,
-      payment_method: transaction.payment_method ?? "",
+      payment_method: transaction.payment_method ?? '',
       paid_date: normalizeDateInput(transaction.paid_date),
-      category: transaction.category ?? "",
-      notes: transaction.notes ?? "",
-      invoice_number: transaction.invoice_number ?? "",
+      category: transaction.category ?? '',
+      notes: transaction.notes ?? '',
+      invoice_number: transaction.invoice_number ?? '',
     });
     setIsEditModalOpen(true);
   };
 
   const handleUpdateTransaction = async () => {
     if (!editingTransaction) return;
-    const amountValue = Number.parseFloat(editForm.amount);
+    const amountValue = normalizeDecimalInput(editForm.amount);
     if (Number.isNaN(amountValue) || amountValue <= 0) {
-      toast.error("Informe um valor valido.");
+      toast.error('Informe um valor válido.');
       return;
     }
     if (!editForm.description.trim()) {
-      toast.error("Informe a descricao.");
+      toast.error('Informe a descrição.');
       return;
     }
     if (!editForm.due_date) {
-      toast.error("Informe a data de vencimento.");
+      toast.error('Informe a data de vencimento.');
       return;
     }
 
@@ -533,10 +562,7 @@ export function FinanceiroPorEmpresa({
       due_date: editForm.due_date,
       payment_status: editForm.payment_status,
       payment_method: editForm.payment_method ? editForm.payment_method : null,
-      paid_date:
-        editForm.payment_status === PaymentStatus.PAGO
-          ? editForm.paid_date || null
-          : null,
+      paid_date: editForm.payment_status === PaymentStatus.PAGO ? editForm.paid_date || null : null,
       category: editForm.category.trim() || null,
       notes: editForm.notes.trim() || null,
       invoice_number: editForm.invoice_number.trim() || null,
@@ -544,17 +570,70 @@ export function FinanceiroPorEmpresa({
 
     try {
       await updateTransaction(editingTransaction.id, payload);
-      toast.success("Lancamento atualizado com sucesso.");
+      toast.success('Lançamento atualizado com sucesso.');
       setIsEditModalOpen(false);
       setEditingTransaction(null);
       await refresh();
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent("finance:transactions-updated"));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
       }
     } catch (error) {
-      console.error("Erro ao atualizar lancamento:", error);
-      toast.error("Nao foi possivel atualizar o lancamento.");
+      console.error('Erro ao atualizar lançamento:', error);
+      toast.error('Não foi possível atualizar o lançamento.');
     }
+  };
+
+  const handleDeleteTransaction = async () => {
+    if (!isAdminOrFunc || !pendingDeleteTransaction) return;
+    try {
+      setIsConfirmingDelete(true);
+      await deleteTransaction(pendingDeleteTransaction.id);
+      toast.success('Lançamento removido com sucesso.');
+      await refresh();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
+      }
+      setPendingDeleteTransaction(null);
+    } catch (error) {
+      console.error('Erro ao remover lançamento', error);
+      toast.error('Não foi possível remover o lançamento.');
+    } finally {
+      setIsConfirmingDelete(false);
+    }
+  };
+
+  const handleMarkAsPaid = async () => {
+    if (!isAdminOrFunc || !pendingBaixaTransaction) return;
+    try {
+      setIsConfirmingBaixa(true);
+      const paymentMethod = pendingBaixaTransaction.payment_method ?? PaymentMethod.TRANSFERENCIA;
+      await updateTransaction(pendingBaixaTransaction.id, {
+        payment_status: PaymentStatus.PAGO,
+        payment_method: paymentMethod,
+        paid_date: new Date().toISOString(),
+      });
+      toast.success('Baixa realizada com sucesso.');
+      await refresh();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
+      }
+      setPendingBaixaTransaction(null);
+    } catch (error) {
+      console.error('Erro ao baixar lançamento', error);
+      toast.error('Não foi possível realizar a baixa.');
+    } finally {
+      setIsConfirmingBaixa(false);
+    }
+  };
+
+  const requestDeleteTransaction = (transaction: Transaction) => {
+    if (!isAdminOrFunc) return;
+    setPendingDeleteTransaction(transaction);
+  };
+
+  const requestMarkAsPaid = (transaction: Transaction) => {
+    if (!isAdminOrFunc) return;
+    setPendingBaixaTransaction(transaction);
   };
 
   return (
@@ -563,23 +642,29 @@ export function FinanceiroPorEmpresa({
         <CardBody className="space-y-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Selecione a empresa</label>
+              <label className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                Selecione a empresa
+              </label>
               <Autocomplete
-                selectedKey={selectedClient || ""}
+                selectedKey={selectedClient || ''}
                 onSelectionChange={(key) => {
                   if (!key) {
-                    setSelectedClient("");
-                    setClientSearch("");
+                    setSelectedClient('');
+                    setClientSearch('');
                     return;
                   }
                   const value = String(key);
                   const selected = clients.find((client) => client.id === value);
                   setSelectedClient(value);
                   if (selected) {
-                    setClientSearch(`${selected.nome_fantasia || selected.razao_social} — ${selected.cnpj}`);
+                    setClientSearch(
+                      `${selected.nome_fantasia || selected.razao_social} — ${selected.cnpj}`
+                    );
                   }
                 }}
-                placeholder={isLoadingClients ? "Carregando empresas..." : "Digite para buscar empresa..."}
+                placeholder={
+                  isLoadingClients ? 'Carregando empresas...' : 'Digite para buscar empresa...'
+                }
                 aria-label="Buscar empresa"
                 className="max-w-[420px]"
                 isDisabled={isLoadingClients || clients.length === 0}
@@ -590,7 +675,9 @@ export function FinanceiroPorEmpresa({
                 isClearable
                 allowsCustomValue={false}
                 listboxProps={{
-                  emptyContent: isLoadingClients ? "Carregando empresas..." : "Nenhuma empresa encontrada",
+                  emptyContent: isLoadingClients
+                    ? 'Carregando empresas...'
+                    : 'Nenhuma empresa encontrada',
                 }}
               >
                 {filteredClients.map((client) => (
@@ -598,31 +685,31 @@ export function FinanceiroPorEmpresa({
                     key={client.id}
                     textValue={`${client.nome_fantasia || client.razao_social} — ${client.cnpj}`}
                   >
-                    {(client.nome_fantasia || client.razao_social) ?? "-"} — {client.cnpj}
+                    {(client.nome_fantasia || client.razao_social) ?? '-'} — {client.cnpj}
                   </AutocompleteItem>
                 ))}
               </Autocomplete>
             </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-            <Button
-              color="primary"
-              variant="solid"
-              startContent={<Plus className="h-4 w-4" />}
-              onPress={onOpen}
-              isDisabled={!selectedClient || isLoadingClients}
-            >
-              Novo Lançamento
-            </Button>
-            <Button
-              color="primary"
-              variant="flat"
-              startContent={<Download className="h-4 w-4" />}
-              onPress={() => onExportLivro?.(selectedClientListItem)}
-              isDisabled={!onExportLivro}
-            >
-              Exportar Livro Caixa
-            </Button>
-          </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+              <Button
+                color="primary"
+                variant="solid"
+                startContent={<Plus className="h-4 w-4" />}
+                onPress={onOpen}
+                isDisabled={!selectedClient || isLoadingClients}
+              >
+                Novo Lançamento
+              </Button>
+              <Button
+                color="primary"
+                variant="flat"
+                startContent={<Download className="h-4 w-4" />}
+                onPress={() => onExportLivro?.(selectedClientListItem)}
+                isDisabled={!onExportLivro}
+              >
+                Exportar Livro Caixa
+              </Button>
+            </div>
           </div>
           <div className="flex flex-col md:flex-row md:items-end gap-4">
             <div className="space-y-2">
@@ -636,7 +723,9 @@ export function FinanceiroPorEmpresa({
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Início</label>
+              <label className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                Início
+              </label>
               <DatePickerField
                 value={startDate}
                 onChange={setStartDate}
@@ -662,6 +751,15 @@ export function FinanceiroPorEmpresa({
               <Button variant="bordered" onPress={setPreviousMonthRange}>
                 Mês anterior
               </Button>
+              {isAdminOrFunc && (
+                <Button
+                  variant="bordered"
+                  onPress={() => setIsTrashModalOpen(true)}
+                  isDisabled={!selectedClient}
+                >
+                  Lixeira
+                </Button>
+              )}
             </div>
           </div>
         </CardBody>
@@ -671,34 +769,118 @@ export function FinanceiroPorEmpresa({
         <Card className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900">
           <CardBody>
             <p className="text-sm text-green-700 dark:text-green-400 font-medium mb-1">RECEITA</p>
-            <p className="text-2xl font-bold text-green-700 dark:text-green-400">{formatCurrency(receita)}</p>
+            <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+              {formatCurrency(receita)}
+            </p>
           </CardBody>
         </Card>
         <Card className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900">
           <CardBody>
             <p className="text-sm text-amber-700 dark:text-amber-400 font-medium mb-1">DESPESA</p>
-            <p className="text-2xl font-bold text-amber-700 dark:text-amber-400">{formatCurrency(despesa)}</p>
+            <p className="text-2xl font-bold text-amber-700 dark:text-amber-400">
+              {formatCurrency(despesa)}
+            </p>
           </CardBody>
         </Card>
         <Card className="bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-900">
           <CardBody>
             <p className="text-sm text-teal-700 dark:text-teal-400 font-medium mb-1">LUCRO</p>
-            <p className="text-2xl font-bold text-teal-700 dark:text-teal-400">{formatCurrency(lucro)}</p>
+            <p className="text-2xl font-bold text-teal-700 dark:text-teal-400">
+              {formatCurrency(lucro)}
+            </p>
           </CardBody>
         </Card>
-        <Card className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800">
+        <Card
+          isPressable
+          onPress={() => setActivePendingPanel((prev) => (prev === 'receber' ? 'all' : 'receber'))}
+          className={`border ${
+            activePendingPanel === 'receber'
+              ? 'border-green-400 bg-green-50 dark:bg-green-900/20'
+              : 'bg-slate-50 dark:bg-slate-900/20 border-slate-200 dark:border-slate-800'
+          }`}
+        >
           <CardBody>
             <p className="text-sm text-slate-700 dark:text-slate-400 font-medium mb-1">A RECEBER</p>
-            <p className="text-2xl font-bold text-slate-700 dark:text-slate-400">{formatCurrency(aReceber)}</p>
+            <p className="text-2xl font-bold text-slate-700 dark:text-slate-400">
+              {formatCurrency(aReceber)}
+            </p>
+            <p className="text-xs text-slate-500 mt-2">
+              {receivableTransactions.length} lançamento(s) pendente(s)
+            </p>
           </CardBody>
         </Card>
-        <Card className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800">
+        <Card
+          isPressable
+          onPress={() => setActivePendingPanel((prev) => (prev === 'pagar' ? 'all' : 'pagar'))}
+          className={`border ${
+            activePendingPanel === 'pagar'
+              ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20'
+              : 'bg-slate-50 dark:bg-slate-900/20 border-slate-200 dark:border-slate-800'
+          }`}
+        >
           <CardBody>
             <p className="text-sm text-slate-700 dark:text-slate-400 font-medium mb-1">A PAGAR</p>
-            <p className="text-2xl font-bold text-slate-700 dark:text-slate-400">{formatCurrency(aPagar)}</p>
+            <p className="text-2xl font-bold text-slate-700 dark:text-slate-400">
+              {formatCurrency(aPagar)}
+            </p>
+            <p className="text-xs text-slate-500 mt-2">
+              {payableTransactions.length} lançamento(s) pendente(s)
+            </p>
           </CardBody>
         </Card>
       </div>
+
+      {activePendingPanel !== 'all' && (
+        <Card className="border border-default-200/50 dark:border-default-100/20">
+          <CardHeader className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">
+              {activePendingPanel === 'receber'
+                ? 'Lançamentos de Contas a Receber'
+                : 'Lançamentos de Contas a Pagar'}
+            </h3>
+            <Button variant="light" size="sm" onPress={() => setActivePendingPanel('all')}>
+              Limpar filtro
+            </Button>
+          </CardHeader>
+          <CardBody>
+            <Table aria-label="Tabela de baixa rápida por empresa" removeWrapper>
+              <TableHeader>
+                <TableColumn>Vencimento</TableColumn>
+                <TableColumn>Descrição</TableColumn>
+                <TableColumn className="text-right">Valor</TableColumn>
+                <TableColumn className="text-right">Ação</TableColumn>
+              </TableHeader>
+              <TableBody emptyContent="Nenhum lançamento pendente encontrado">
+                {panelTransactions.map((transaction) => (
+                  <TableRow key={transaction.id}>
+                    <TableCell>
+                      {new Date(transaction.due_date).toLocaleDateString('pt-BR')}
+                    </TableCell>
+                    <TableCell>{transaction.description}</TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {formatCurrency(transaction.amount)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {isAdminOrFunc ? (
+                        <Button
+                          size="sm"
+                          color="primary"
+                          variant="flat"
+                          onPress={() => requestMarkAsPaid(transaction)}
+                        >
+                          Baixa
+                        </Button>
+                      ) : (
+                        '-'
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardBody>
+        </Card>
+      )}
 
       <Card className="border border-default-200/50 dark:border-default-100/20">
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -781,7 +963,9 @@ export function FinanceiroPorEmpresa({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <p className="text-sm text-slate-600 dark:text-slate-400">CNPJ</p>
-              <p className="font-medium text-slate-900 dark:text-slate-100">{selectedClientData?.cnpj ?? "-"}</p>
+              <p className="font-medium text-slate-900 dark:text-slate-100">
+                {selectedClientData?.cnpj ?? '-'}
+              </p>
             </div>
             <div>
               <p className="text-sm text-slate-600 dark:text-slate-400">Honorários Mensais</p>
@@ -791,11 +975,15 @@ export function FinanceiroPorEmpresa({
             </div>
             <div>
               <p className="text-sm text-slate-600 dark:text-slate-400">Email</p>
-              <p className="font-medium text-slate-900 dark:text-slate-100">{selectedClientData?.email ?? "-"}</p>
+              <p className="font-medium text-slate-900 dark:text-slate-100">
+                {selectedClientData?.email ?? '-'}
+              </p>
             </div>
             <div>
               <p className="text-sm text-slate-600 dark:text-slate-400">Telefone</p>
-              <p className="font-medium text-slate-900 dark:text-slate-100">{clientDetails?.telefone ?? "-"}</p>
+              <p className="font-medium text-slate-900 dark:text-slate-100">
+                {clientDetails?.telefone ?? '-'}
+              </p>
             </div>
           </div>
         </CardBody>
@@ -811,27 +999,53 @@ export function FinanceiroPorEmpresa({
               <TableColumn>Histórico</TableColumn>
               <TableColumn className="text-right">Valor</TableColumn>
               <TableColumn>Recebimento</TableColumn>
-              <TableColumn className={isAdminOrFunc ? "text-right" : "hidden"}>Ações</TableColumn>
+              <TableColumn className={isAdminOrFunc ? 'text-right' : 'hidden'}>Ações</TableColumn>
             </TableHeader>
             <TableBody emptyContent="Nenhum lançamento encontrado">
               {displayTransactions.map((transaction) => (
                 <TableRow key={transaction.id}>
-                  <TableCell>{new Date(transaction.date).toLocaleDateString("pt-BR")}</TableCell>
-                  <TableCell>{transaction.type === TransactionType.RECEITA ? "Entrada" : "Saída"}</TableCell>
+                  <TableCell>{new Date(transaction.date).toLocaleDateString('pt-BR')}</TableCell>
+                  <TableCell>
+                    {transaction.type === TransactionType.RECEITA ? 'Entrada' : 'Saída'}
+                  </TableCell>
                   <TableCell>{transaction.history}</TableCell>
-                  <TableCell className="text-right font-semibold">{formatCurrency(transaction.value)}</TableCell>
+                  <TableCell className="text-right font-semibold">
+                    {formatCurrency(transaction.value)}
+                  </TableCell>
                   <TableCell>{transaction.payment}</TableCell>
-                  <TableCell className={isAdminOrFunc ? "text-right" : "hidden"}>
+                  <TableCell className={isAdminOrFunc ? 'text-right space-x-1' : 'hidden'}>
                     {isAdminOrFunc && (
-                      <Button
-                        size="sm"
-                        variant="light"
-                        isIconOnly
-                        aria-label="Editar lançamento"
-                        onPress={() => openEditTransaction(transaction.raw)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
+                      <>
+                        {transaction.raw.payment_status !== PaymentStatus.PAGO && (
+                          <Button
+                            size="sm"
+                            variant="flat"
+                            color="primary"
+                            onPress={() => requestMarkAsPaid(transaction.raw)}
+                          >
+                            Baixa
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="light"
+                          isIconOnly
+                          aria-label="Editar lançamento"
+                          onPress={() => openEditTransaction(transaction.raw)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                          <Button
+                            size="sm"
+                            variant="light"
+                            color="danger"
+                            isIconOnly
+                            aria-label="Excluir lançamento"
+                            onPress={() => requestDeleteTransaction(transaction.raw)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                      </>
                     )}
                   </TableCell>
                 </TableRow>
@@ -851,9 +1065,7 @@ export function FinanceiroPorEmpresa({
         <ModalContent>
           {(onClose) => (
             <>
-              <ModalHeader>
-                {editingBank ? "Editar Banco" : "Adicionar Banco"}
-              </ModalHeader>
+              <ModalHeader>{editingBank ? 'Editar Banco' : 'Adicionar Banco'}</ModalHeader>
               <ModalBody className="space-y-3">
                 <Input
                   label="Nome do Banco"
@@ -873,6 +1085,8 @@ export function FinanceiroPorEmpresa({
                   label="Saldo"
                   type="number"
                   placeholder="0,00"
+                  step="0.01"
+                  min="0"
                   value={bankForm.balance}
                   onValueChange={(value) => setBankForm((prev) => ({ ...prev, balance: value }))}
                 />
@@ -924,12 +1138,16 @@ export function FinanceiroPorEmpresa({
                   label="Descrição"
                   placeholder="Ex: Honorarios do mes"
                   value={editForm.description}
-                  onValueChange={(value) => setEditForm((prev) => ({ ...prev, description: value }))}
+                  onValueChange={(value) =>
+                    setEditForm((prev) => ({ ...prev, description: value }))
+                  }
                 />
                 <Input
                   label="Valor (R$)"
                   type="number"
                   placeholder="0,00"
+                  step="0.01"
+                  min="0"
                   value={editForm.amount}
                   onValueChange={(value) => setEditForm((prev) => ({ ...prev, amount: value }))}
                 />
@@ -963,7 +1181,7 @@ export function FinanceiroPorEmpresa({
                   selectedKeys={editForm.payment_method ? [editForm.payment_method] : []}
                   onSelectionChange={(keys) => {
                     const value = Array.from(keys)[0] as PaymentMethod | undefined;
-                    setEditForm((prev) => ({ ...prev, payment_method: value ?? "" }));
+                    setEditForm((prev) => ({ ...prev, payment_method: value ?? '' }));
                   }}
                 >
                   <SelectItem key={PaymentMethod.PIX}>PIX</SelectItem>
@@ -996,7 +1214,9 @@ export function FinanceiroPorEmpresa({
                   label="Numero da Nota"
                   placeholder="Ex: NF-001/2024"
                   value={editForm.invoice_number}
-                  onValueChange={(value) => setEditForm((prev) => ({ ...prev, invoice_number: value }))}
+                  onValueChange={(value) =>
+                    setEditForm((prev) => ({ ...prev, invoice_number: value }))
+                  }
                 />
                 <Textarea
                   label="Observacoes"
@@ -1018,6 +1238,40 @@ export function FinanceiroPorEmpresa({
           )}
         </ModalContent>
       </Modal>
+
+      <TransactionTrashModal
+        isOpen={isTrashModalOpen}
+        onOpenChange={setIsTrashModalOpen}
+        filters={{
+          client_id: selectedClient || undefined,
+          due_date_from: startDate,
+          due_date_to: endDate,
+        }}
+        title="Lixeira por Empresa"
+        onRestored={async () => {
+          await refresh();
+        }}
+      />
+
+      <ConfirmBaixaLancamentoDialog
+        isOpen={Boolean(pendingBaixaTransaction)}
+        transaction={pendingBaixaTransaction}
+        isLoading={isConfirmingBaixa}
+        onConfirm={handleMarkAsPaid}
+        onCancel={() => {
+          if (!isConfirmingBaixa) setPendingBaixaTransaction(null);
+        }}
+      />
+
+      <ConfirmDeleteLancamentoDialog
+        isOpen={Boolean(pendingDeleteTransaction)}
+        transaction={pendingDeleteTransaction}
+        isLoading={isConfirmingDelete}
+        onConfirm={handleDeleteTransaction}
+        onCancel={() => {
+          if (!isConfirmingDelete) setPendingDeleteTransaction(null);
+        }}
+      />
     </div>
   );
 }
