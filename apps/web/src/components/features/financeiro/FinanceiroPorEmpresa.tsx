@@ -671,7 +671,6 @@ export function FinanceiroPorEmpresa({
                 isLoading={isLoadingClients}
                 inputValue={clientSearch}
                 onInputChange={setClientSearch}
-                defaultInputValue={selectedClientLabel}
                 isClearable
                 allowsCustomValue={false}
                 listboxProps={{
