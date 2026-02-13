@@ -257,14 +257,9 @@ async def update_transaction(
     """
     Update a transaction.
 
-    Admin/Func only.
+    Admin/Func: Can update any transaction.
+    Clients: Can only update their own transactions.
     """
-    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin/func can update transactions",
-        )
-
     service = TransactionService(db)
     repo = TransactionRepository(db)
     before_transaction = await repo.get_by_id_with_relations(transaction_id, include_deleted=True)
@@ -273,6 +268,16 @@ async def update_transaction(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Transaction not found",
         )
+
+    # Check access: clients can only update their own transactions
+    if current_user.role == UserRole.CLIENTE:
+        client_repo = ClientRepository(db)
+        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
+        if not client or before_transaction.client_id != client.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to update this transaction",
+            )
 
     try:
         before_snapshot = _transaction_snapshot(before_transaction)
@@ -415,14 +420,9 @@ async def delete_transaction(
     """
     Delete a transaction (soft delete).
 
-    Admin/Func only.
+    Admin/Func: Can delete any transaction.
+    Clients: Can only delete their own transactions.
     """
-    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin/func can delete transactions",
-        )
-
     service = TransactionService(db)
     repo = TransactionRepository(db)
     transaction = await repo.get_by_id_with_relations(transaction_id, include_deleted=True)
@@ -431,6 +431,17 @@ async def delete_transaction(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Transaction not found",
         )
+
+    # Check access: clients can only delete their own transactions
+    if current_user.role == UserRole.CLIENTE:
+        client_repo = ClientRepository(db)
+        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
+        if not client or transaction.client_id != client.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to delete this transaction",
+            )
+
     transaction_snapshot = _transaction_snapshot(transaction)
 
     deleted = await service.delete_transaction(transaction_id)

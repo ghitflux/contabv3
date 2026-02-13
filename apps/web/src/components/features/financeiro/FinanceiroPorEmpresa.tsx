@@ -597,7 +597,7 @@ export function FinanceiroPorEmpresa({
   };
 
   const handleDeleteTransaction = async () => {
-    if (!isAdminOrFunc || !pendingDeleteTransaction) return;
+    if (!pendingDeleteTransaction) return;
     try {
       setIsConfirmingDelete(true);
       await deleteTransaction(pendingDeleteTransaction.id);
@@ -616,7 +616,7 @@ export function FinanceiroPorEmpresa({
   };
 
   const handleMarkAsPaid = async () => {
-    if (!isAdminOrFunc || !pendingBaixaTransaction) return;
+    if (!pendingBaixaTransaction) return;
     try {
       setIsConfirmingBaixa(true);
       const paymentMethod = pendingBaixaTransaction.payment_method ?? PaymentMethod.TRANSFERENCIA;
@@ -640,12 +640,10 @@ export function FinanceiroPorEmpresa({
   };
 
   const requestDeleteTransaction = (transaction: Transaction) => {
-    if (!isAdminOrFunc) return;
     setPendingDeleteTransaction(transaction);
   };
 
   const requestMarkAsPaid = (transaction: Transaction) => {
-    if (!isAdminOrFunc) return;
     setPendingBaixaTransaction(transaction);
   };
 
@@ -873,18 +871,14 @@ export function FinanceiroPorEmpresa({
                       {formatCurrency(transaction.amount)}
                     </TableCell>
                     <TableCell className="text-right">
-                      {isAdminOrFunc ? (
-                        <Button
-                          size="sm"
-                          color="primary"
-                          variant="flat"
-                          onPress={() => requestMarkAsPaid(transaction)}
-                        >
-                          Baixa
-                        </Button>
-                      ) : (
-                        '-'
-                      )}
+                      <Button
+                        size="sm"
+                        color="primary"
+                        variant="flat"
+                        onPress={() => requestMarkAsPaid(transaction)}
+                      >
+                        Baixa
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1011,7 +1005,7 @@ export function FinanceiroPorEmpresa({
               <TableColumn>Histórico</TableColumn>
               <TableColumn className="text-right">Valor</TableColumn>
               <TableColumn>Recebimento</TableColumn>
-              <TableColumn className={isAdminOrFunc ? 'text-right' : 'hidden'}>Ações</TableColumn>
+              <TableColumn className="text-right">Ações</TableColumn>
             </TableHeader>
             <TableBody emptyContent="Nenhum lançamento encontrado">
               {displayTransactions.map((transaction) => (
@@ -1025,40 +1019,36 @@ export function FinanceiroPorEmpresa({
                     {formatCurrency(transaction.value)}
                   </TableCell>
                   <TableCell>{transaction.payment}</TableCell>
-                  <TableCell className={isAdminOrFunc ? 'text-right space-x-1' : 'hidden'}>
-                    {isAdminOrFunc && (
-                      <>
-                        {transaction.raw.payment_status !== PaymentStatus.PAGO && (
-                          <Button
-                            size="sm"
-                            variant="flat"
-                            color="primary"
-                            onPress={() => requestMarkAsPaid(transaction.raw)}
-                          >
-                            Baixa
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="light"
-                          isIconOnly
-                          aria-label="Editar lançamento"
-                          onPress={() => openEditTransaction(transaction.raw)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                          <Button
-                            size="sm"
-                            variant="light"
-                            color="danger"
-                            isIconOnly
-                            aria-label="Excluir lançamento"
-                            onPress={() => requestDeleteTransaction(transaction.raw)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                      </>
+                  <TableCell className="text-right space-x-1">
+                    {transaction.raw.payment_status !== PaymentStatus.PAGO && (
+                      <Button
+                        size="sm"
+                        variant="flat"
+                        color="primary"
+                        onPress={() => requestMarkAsPaid(transaction.raw)}
+                      >
+                        Baixa
+                      </Button>
                     )}
+                    <Button
+                      size="sm"
+                      variant="light"
+                      isIconOnly
+                      aria-label="Editar lançamento"
+                      onPress={() => openEditTransaction(transaction.raw)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="light"
+                      color="danger"
+                      isIconOnly
+                      aria-label="Excluir lançamento"
+                      onPress={() => requestDeleteTransaction(transaction.raw)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
