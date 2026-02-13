@@ -156,6 +156,19 @@ export function FinanceiroPorEmpresa({
     }
   }, [clients]); // Remove selectedClient from dependencies to avoid loop
 
+  // Validate selectedClient exists in clients list (prevent deleted clients issue)
+  useEffect(() => {
+    if (selectedClient && clients.length > 0) {
+      const clientExists = clients.some((client) => client.id === selectedClient);
+      if (!clientExists) {
+        console.warn(`[FinanceiroPorEmpresa] Selected client ${selectedClient} not found in list, clearing selection`);
+        setSelectedClient('');
+        setClientSearch('');
+        setClientDetails(null);
+      }
+    }
+  }, [selectedClient, clients]);
+
   const setRangeForMonth = (monthValue: string) => {
     if (!monthValue) return;
     const [year, month] = monthValue.split('-');

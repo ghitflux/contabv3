@@ -9,7 +9,7 @@ import type {
   TransactionUpdate,
   TransactionFilters,
 } from '@/types/finance';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 
 interface UseTransactionsOptions {
   filters?: TransactionFilters;
@@ -22,6 +22,8 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const isFetchingRef = useRef(false);
 
   const normalizeTransaction = useCallback((transaction: Transaction): Transaction => {
     const amount =
@@ -34,28 +36,57 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
    */
   const fetchTransactions = useCallback(
     async (customFilters?: TransactionFilters) => {
+      // Prevent concurrent fetches
+      if (isFetchingRef.current) {
+        console.log('[useTransactions] Already fetching, skipping...');
+        return { items: transactions, total, page: 1, size: 100, pages: 1 };
+      }
+
+      // Cancel previous request if any
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+
+      const mergedFilters = { ...filters, ...customFilters };
+
+      // Skip fetch if no client_id
+      if (!mergedFilters.client_id) {
+        console.log('[useTransactions] No client_id, skipping fetch');
+        setTransactions([]);
+        setTotal(0);
+        return { items: [], total: 0, page: 1, size: 100, pages: 0 };
+      }
+
+      isFetchingRef.current = true;
       setIsLoading(true);
       setError(null);
 
       try {
-        const response = await financeApi.getTransactions({
-          ...filters,
-          ...customFilters,
-        });
+        abortControllerRef.current = new AbortController();
+        const response = await financeApi.getTransactions(mergedFilters);
 
         const normalizedItems = response.items.map(normalizeTransaction);
         setTransactions(normalizedItems);
         setTotal(response.total);
         return { ...response, items: normalizedItems };
       } catch (err) {
+        // Ignore abort errors
+        if (err instanceof Error && err.name === 'AbortError') {
+          console.log('[useTransactions] Request aborted');
+          return { items: transactions, total, page: 1, size: 100, pages: 1 };
+        }
+
         const message = err instanceof Error ? err.message : 'Failed to fetch transactions';
         setError(message);
+        console.error('[useTransactions] Fetch error:', message);
         throw err;
       } finally {
+        isFetchingRef.current = false;
         setIsLoading(false);
+        abortControllerRef.current = null;
       }
     },
-    [filters, normalizeTransaction]
+    [filters, normalizeTransaction, transactions, total]
   );
 
   /**
@@ -141,14 +172,22 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
     return fetchTransactions();
   }, [fetchTransactions]);
 
-  // Auto-fetch on mount
+  // Auto-fetch on mount - FIXED: only once when client_id changes
   useEffect(() => {
-    if (autoFetch) {
+    if (autoFetch && filters?.client_id) {
       fetchTransactions().catch((err) => {
-        console.error('Erro ao buscar lançamentos', err);
+        console.error('[useTransactions] Auto-fetch error:', err);
       });
     }
-  }, [autoFetch, fetchTransactions]);
+
+    return () => {
+      // Cleanup: abort ongoing requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoFetch, filters?.client_id]); // Only re-run when client_id changes
 
   return {
     transactions,
