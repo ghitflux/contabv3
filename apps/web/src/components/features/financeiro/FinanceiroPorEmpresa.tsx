@@ -1007,7 +1007,13 @@ export function FinanceiroPorEmpresa({
               <TableColumn>Recebimento</TableColumn>
               <TableColumn className="text-right">Ações</TableColumn>
             </TableHeader>
-            <TableBody emptyContent="Nenhum lançamento encontrado">
+            <TableBody
+              emptyContent={
+                !selectedClient
+                  ? 'Selecione uma empresa para visualizar os lançamentos'
+                  : 'Nenhum lançamento encontrado para o período selecionado'
+              }
+            >
               {displayTransactions.map((transaction) => (
                 <TableRow key={transaction.id}>
                   <TableCell>{new Date(transaction.date).toLocaleDateString('pt-BR')}</TableCell>

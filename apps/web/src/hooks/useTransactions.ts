@@ -49,13 +49,9 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
 
       const mergedFilters = { ...filters, ...customFilters };
 
-      // Skip fetch if no client_id
-      if (!mergedFilters.client_id) {
-        console.log('[useTransactions] No client_id, skipping fetch');
-        setTransactions([]);
-        setTotal(0);
-        return { items: [], total: 0, page: 1, size: 100, pages: 0 };
-      }
+      // Note: client_id is now optional - backend will handle authorization
+      // - Admin/Func: can fetch all transactions (no client_id) or filter by client_id
+      // - Cliente: backend will override client_id with their own
 
       isFetchingRef.current = true;
       setIsLoading(true);
