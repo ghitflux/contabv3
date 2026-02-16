@@ -6,9 +6,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse, JSONResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_active_user, get_db
+from app.db.models.client import Client
 from app.db.models.report import ReportFormat, ReportType, ReportType as DBReportType
 from app.db.models.user import User, UserRole
 from app.db.repositories.client import ClientRepository
@@ -40,6 +42,20 @@ from app.services.report.obligation_report import ObligationReportService
 from app.services.report.revenue_by_client_report import RevenueByClientReportService
 
 router = APIRouter()
+
+REPORT_DISPLAY_NAMES = {
+    ReportType.DRE: "DRE Simplificada",
+    ReportType.FLUXO_CAIXA: "Fluxo de Caixa",
+    ReportType.LIVRO_CAIXA: "Livro Caixa",
+    ReportType.RECEITAS_CLIENTE: "Receitas por Cliente",
+    ReportType.DESPESAS_CATEGORIA: "Despesas por Categoria",
+    ReportType.PROJECAO_FLUXO: "Projeção de Fluxo de Caixa",
+    ReportType.KPIS: "Indicadores Financeiros (KPIs)",
+    ReportType.CLIENTES: "Relatório de Clientes",
+    ReportType.OBRIGACOES: "Relatório de Obrigações",
+    ReportType.LICENCAS: "Relatório de Licenças",
+    ReportType.AUDITORIA: "Relatório de Auditoria",
+}
 
 
 async def _enforce_report_access(
@@ -325,17 +341,40 @@ async def export_report(
     service = get_report_service(request.report_type, db)
 
     # Generate data
-    report_data = await service.generate_data(request.filters.model_dump())
+    filters_dict = request.filters.model_dump()
+    report_data = await service.generate_data(filters_dict)
+    period_label = (
+        f"{request.filters.period_start.strftime('%d/%m/%Y')} a "
+        f"{request.filters.period_end.strftime('%d/%m/%Y')}"
+    )
+    report_type_value = (
+        request.report_type.value
+        if hasattr(request.report_type, "value")
+        else str(request.report_type)
+    )
+    try:
+        report_type_key = ReportType(report_type_value)
+    except ValueError:
+        report_type_key = None
+    summary_data = service._get_summary(filters_dict, report_data) or _extract_summary_from_report_data(
+        report_data
+    )
+    applied_filters = await _build_applied_filters(db, request.filters)
+    report_title = REPORT_DISPLAY_NAMES.get(
+        report_type_key, report_type_value.replace("_", " ").title()
+    )
 
     # Export based on format
     if request.format == ReportFormat.PDF:
         exporter = PDFExporter()
         # Prepare data for PDF export
         pdf_data = {
-            "title": f"{request.report_type.replace('_', ' ').title()} Report",
-            "period": f"{request.filters.period_start} a {request.filters.period_end}",
-            "summary": report_data.get("summary", {}),
-            "table_data": _prepare_table_data(report_data),
+            "report_type": report_type_value,
+            "title": report_title,
+            "period": period_label,
+            "filters": applied_filters,
+            "summary": summary_data,
+            "table_data": _prepare_table_data(request.report_type, report_data),
         }
         file_bytes, file_path = await exporter.export(
             pdf_data, request.filename or f"report_{request.report_type}_{datetime.now().isoformat()}"
@@ -343,10 +382,12 @@ async def export_report(
     else:  # CSV or XLS
         exporter = CSVExporter()
         csv_data = {
-            "title": request.report_type.replace("_", " ").title(),
-            "period": f"{request.filters.period_start} a {request.filters.period_end}",
-            "summary": report_data,
-            "table_data": _prepare_csv_table_data(report_data),
+            "report_type": report_type_value,
+            "title": report_title,
+            "period": period_label,
+            "filters": applied_filters,
+            "summary": summary_data,
+            "table_data": _prepare_csv_table_data(request.report_type, report_data),
         }
         file_extension = "csv" if request.format == ReportFormat.CSV else "xls"
         desired_name = request.filename or f"report_{request.report_type}_{datetime.now().isoformat()}"
@@ -456,43 +497,263 @@ async def get_history(
     }
 
 
-def _prepare_table_data(report_data: dict) -> list[list[str]]:
-    """Convert report data to table format for PDF."""
-    table_data = []
+async def _build_applied_filters(db: AsyncSession, filters: ReportFilterRequest) -> dict[str, str]:
+    """Build human-readable filter labels for export metadata."""
+    applied_filters = {
+        "Período": (
+            f"{filters.period_start.strftime('%d/%m/%Y')} "
+            f"a {filters.period_end.strftime('%d/%m/%Y')}"
+        )
+    }
 
-    # Handle different report structures
+    if not filters.client_ids:
+        applied_filters["Clientes"] = "Todos"
+        return applied_filters
+
+    stmt = (
+        select(Client.id, Client.razao_social, Client.nome_fantasia, Client.cnpj)
+        .where(Client.id.in_(filters.client_ids))
+        .where(Client.deleted_at.is_(None))
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+    labels_by_id: dict[str, str] = {}
+
+    for row in rows:
+        label = row.nome_fantasia or row.razao_social or str(row.id)
+        if row.cnpj:
+            label = f"{label} ({row.cnpj})"
+        labels_by_id[str(row.id)] = label
+
+    applied_filters["Clientes"] = ", ".join(
+        labels_by_id.get(str(client_id), str(client_id)) for client_id in filters.client_ids
+    )
+    return applied_filters
+
+
+def _extract_summary_from_report_data(report_data: dict) -> dict[str, Any]:
+    """Fallback summary when service summary is not available."""
+    summary: dict[str, Any] = {}
+    summary_fields = [
+        "total_entradas",
+        "total_saidas",
+        "saldo_inicial",
+        "saldo_final",
+        "saldo_final_periodo",
+        "receita_total",
+        "despesa_total",
+        "resultado_liquido",
+        "margem_lucro",
+        "total_receita",
+        "total_despesas",
+        "total_saldo",
+    ]
+
+    for field in summary_fields:
+        if field in report_data:
+            summary[field] = report_data[field]
+
+    if "entries" in report_data and "total_lancamentos" not in summary:
+        summary["total_lancamentos"] = len(report_data.get("entries", []))
+    if "periods" in report_data and "total_periodos" not in summary:
+        summary["total_periodos"] = len(report_data.get("periods", []))
+
+    return summary
+
+
+def _prepare_table_data(report_type: ReportType, report_data: dict) -> list[list[str]]:
+    """Convert report data to table format for PDF/CSV."""
+    if report_type == ReportType.LIVRO_CAIXA and "entries" in report_data:
+        table_data = [[
+            "Data",
+            "Tipo",
+            "Descrição",
+            "Cliente",
+            "CNPJ",
+            "Categoria",
+            "Método",
+            "Status",
+            "Valor",
+            "Saldo Acumulado",
+        ]]
+        for item in report_data.get("entries", []):
+            table_data.append([
+                _format_date(item.get("data")),
+                "Entrada" if item.get("tipo") == "entrada" else "Saída",
+                str(item.get("descricao") or "-"),
+                str(item.get("cliente") or "-"),
+                str(item.get("cnpj") or "-"),
+                str(item.get("categoria") or "-"),
+                _format_payment_method(item.get("metodo_pagamento")),
+                _format_payment_status(item.get("status_pagamento")),
+                _format_currency(item.get("valor", 0)),
+                _format_currency(item.get("saldo_acumulado", 0)),
+            ])
+        return table_data
+
     if "receitas" in report_data and "despesas" in report_data:
-        # DRE format
-        table_data.append(["Categoria", "Valor", "%"])
+        table_data = [["Categoria", "Valor", "%"]]
         for item in report_data.get("receitas", []):
             table_data.append([
-                item.get("categoria", ""),
-                f"R$ {item.get('valor', 0):,.2f}",
-                f"{item.get('percentual', 0):.2f}%",
+                str(item.get("categoria") or "-"),
+                _format_currency(item.get("valor", 0)),
+                _format_percent(item.get("percentual", 0)),
             ])
-    elif "periods" in report_data:
-        # Cash flow / projection format
-        table_data.append(["Período", "Entradas", "Saídas", "Saldo"])
-        for item in report_data.get("periods", []):
+        return table_data
+
+    if "periods" in report_data:
+        periods = report_data.get("periods", [])
+        if periods and isinstance(periods[0], dict) and "cenario_otimista" in periods[0]:
+            table_data = [["Período", "Cenário Otimista", "Cenário Realista", "Cenário Pessimista"]]
+            for item in periods:
+                table_data.append([
+                    str(item.get("periodo") or item.get("period") or "-"),
+                    _format_currency(item.get("cenario_otimista", 0)),
+                    _format_currency(item.get("cenario_realista", 0)),
+                    _format_currency(item.get("cenario_pessimista", 0)),
+                ])
+            return table_data
+
+        table_data = [["Período", "Entradas", "Saídas", "Saldo"]]
+        for item in periods:
+            entradas = item.get("entradas", item.get("receita", 0))
+            saidas = item.get("saidas", item.get("despesa", 0))
+            saldo = item.get("saldo_final", item.get("saldo", 0))
             table_data.append([
-                item.get("periodo", ""),
-                f"R$ {item.get('entradas', 0):,.2f}",
-                f"R$ {item.get('saidas', 0):,.2f}",
-                f"R$ {item.get('saldo_final', 0):,.2f}",
+                str(item.get("periodo") or item.get("period") or "-"),
+                _format_currency(entradas),
+                _format_currency(saidas),
+                _format_currency(saldo),
             ])
-    elif "clients" in report_data:
-        # Revenue by client
-        table_data.append(["Cliente", "Receita", "%"])
+        return table_data
+
+    if "clients" in report_data:
+        table_data = [["Cliente", "CNPJ", "Receita", "%"]]
         for item in report_data.get("clients", []):
             table_data.append([
-                item.get("client_name", ""),
-                f"R$ {item.get('total_receita', 0):,.2f}",
-                f"{item.get('percentual_total', 0):.2f}%",
+                str(item.get("client_name") or "-"),
+                str(item.get("client_cnpj") or "-"),
+                _format_currency(item.get("total_receita", item.get("receita", 0))),
+                _format_percent(item.get("percentual_total", item.get("percentual", 0))),
             ])
+        return table_data
 
+    if "categories" in report_data:
+        table_data = [["Categoria", "Total", "%"]]
+        for item in report_data.get("categories", []):
+            table_data.append([
+                str(item.get("categoria") or "-"),
+                _format_currency(item.get("total", 0)),
+                _format_percent(item.get("percentual_total", 0)),
+            ])
+        return table_data
+
+    return _prepare_generic_table(report_data)
+
+
+def _prepare_csv_table_data(report_type: ReportType, report_data: dict) -> list[list[str]]:
+    """Convert report data to CSV table format."""
+    return _prepare_table_data(report_type, report_data)
+
+
+def _prepare_generic_table(report_data: dict) -> list[list[str]]:
+    """Fallback table generation for reports with list-of-dict structures."""
+    array_key = next(
+        (
+            key
+            for key, value in report_data.items()
+            if isinstance(value, list) and value and isinstance(value[0], dict)
+        ),
+        None,
+    )
+    if not array_key:
+        return []
+
+    rows = report_data[array_key]
+    columns = list(rows[0].keys())
+    table_data = [[_format_column_name(col) for col in columns]]
+    for item in rows:
+        table_data.append([_format_cell_value(col, item.get(col)) for col in columns])
     return table_data
 
 
-def _prepare_csv_table_data(report_data: dict) -> list[list[str]]:
-    """Convert report data to CSV table format."""
-    return _prepare_table_data(report_data)
+def _format_column_name(column: str) -> str:
+    return column.replace("_", " ").title()
+
+
+def _format_cell_value(column: str, value: Any) -> str:
+    if value is None:
+        return "-"
+    if isinstance(value, bool):
+        return "Sim" if value else "Não"
+    if isinstance(value, (int, float)):
+        if any(token in column.lower() for token in ["valor", "total", "saldo", "receita", "despesa"]):
+            return _format_currency(value)
+        return f"{value:,.2f}" if isinstance(value, float) else str(value)
+    if isinstance(value, str) and len(value) >= 10 and value[4:5] == "-" and value[7:8] == "-":
+        return _format_date(value)
+    return str(value)
+
+
+def _format_date(value: Any) -> str:
+    if not value:
+        return "-"
+    if isinstance(value, datetime):
+        return value.strftime("%d/%m/%Y")
+    if hasattr(value, "strftime"):
+        return value.strftime("%d/%m/%Y")
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return parsed.strftime("%d/%m/%Y")
+        except ValueError:
+            return value
+    return str(value)
+
+
+def _format_currency(value: Any) -> str:
+    try:
+        numeric = float(value or 0)
+    except (TypeError, ValueError):
+        return str(value or "-")
+
+    formatted = f"{numeric:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"R$ {formatted}"
+
+
+def _format_percent(value: Any) -> str:
+    try:
+        numeric = float(value or 0)
+    except (TypeError, ValueError):
+        return str(value or "-")
+    return f"{numeric:.2f}%"
+
+
+def _format_payment_method(value: Any) -> str:
+    labels = {
+        "pix": "PIX",
+        "boleto": "Boleto",
+        "transferencia": "Transferência",
+        "dinheiro": "Dinheiro",
+        "cartao_credito": "Cartão Crédito",
+        "cartao_debito": "Cartão Débito",
+        "cheque": "Cheque",
+    }
+    if not value:
+        return "-"
+    key = str(value).lower()
+    return labels.get(key, str(value))
+
+
+def _format_payment_status(value: Any) -> str:
+    labels = {
+        "pendente": "Pendente",
+        "pago": "Pago",
+        "atrasado": "Atrasado",
+        "cancelado": "Cancelado",
+        "parcial": "Parcial",
+    }
+    if not value:
+        return "-"
+    key = str(value).lower()
+    return labels.get(key, str(value))

@@ -23,50 +23,52 @@ class CSVExporter(BaseExporter):
         Returns:
             Tuple of (csv_bytes, file_path)
         """
-        # Generate CSV in memory with UTF-8 BOM for Excel compatibility
         text_buffer = io.StringIO()
         writer = csv.writer(
             text_buffer, delimiter=";", quoting=csv.QUOTE_NONNUMERIC, lineterminator="\n"
         )
 
-        # Write header/metadata
         writer.writerow(["RELATÓRIO", data.get("title", "Relatório")])
         if "period" in data:
             writer.writerow(["PERÍODO", data["period"]])
+        if "report_type" in data:
+            writer.writerow(["TIPO", str(data["report_type"]).replace("_", " ").title()])
         writer.writerow(
             [
                 "GERADO EM",
                 datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
             ]
         )
-        writer.writerow([])  # Blank row
+        writer.writerow([])
 
-        # Write summary if exists
-        if "summary" in data:
+        filters = data.get("filters")
+        if isinstance(filters, dict) and filters:
+            writer.writerow(["FILTROS APLICADOS"])
+            for key, value in filters.items():
+                writer.writerow([self._format_key(str(key)), self._format_value(value, str(key))])
+            writer.writerow([])
+
+        if "summary" in data and isinstance(data["summary"], dict):
             writer.writerow(["RESUMO"])
             for key, value in data["summary"].items():
                 formatted_key = self._format_key(key)
-                formatted_value = self._format_value(value)
+                formatted_value = self._format_value(value, key)
                 writer.writerow([formatted_key, formatted_value])
-            writer.writerow([])  # Blank row
+            writer.writerow([])
 
-        # Write main data table
         if "table_data" in data:
             for row in data["table_data"]:
                 writer.writerow(row)
 
-        # Write additional sections if exists
         if "additional_sections" in data:
             for section_name, section_data in data["additional_sections"].items():
-                writer.writerow([])  # Blank row
+                writer.writerow([])
                 writer.writerow([section_name.upper()])
                 for row in section_data:
                     writer.writerow(row)
 
-        # Get CSV bytes (prepend BOM)
         csv_bytes = ("\ufeff" + text_buffer.getvalue()).encode("utf-8")
 
-        # Save to file
         file_path = self._save_to_file(csv_bytes, filename)
 
         return csv_bytes, file_path
@@ -81,24 +83,43 @@ class CSVExporter(BaseExporter):
             "compliance_rate": "Taxa de Compliance (%)",
             "total_clients": "Total de Clientes",
             "total_honorarios": "Total Honorários",
+            "total_entradas": "Total de Entradas",
+            "total_saidas": "Total de Saídas",
+            "saldo_inicial": "Saldo Inicial",
+            "saldo_final": "Saldo Final",
+            "saldo_final_periodo": "Saldo Final do Período",
+            "total_lancamentos": "Total de Lançamentos",
         }
         return key_map.get(key, key.replace("_", " ").title())
 
-    def _format_value(self, value: Any) -> str:
+    def _format_value(self, value: Any, key: str | None = None) -> str:
         """Format value for CSV display."""
+        if value is None:
+            return "-"
+        if isinstance(value, bool):
+            return "Sim" if value else "Não"
+        if isinstance(value, int):
+            return str(value)
         if isinstance(value, float):
-            return f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        if isinstance(value, (int, str)):
+            formatted_number = f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            normalized_key = (key or "").lower()
+            if any(token in normalized_key for token in ["margem", "percent", "percentual", "taxa"]):
+                return f"{formatted_number}%"
+            if any(
+                token in normalized_key
+                for token in ["valor", "total", "saldo", "receita", "despesa", "entrada", "saida"]
+            ):
+                return f"R$ {formatted_number}"
+            return formatted_number
+        if isinstance(value, str):
             return str(value)
         return str(value)
 
     def _save_to_file(self, csv_bytes: bytes, filename: str) -> Path:
         """Save CSV bytes to file."""
-        # Create subdirectory by date
         today = datetime.now().strftime("%Y%m%d")
         subdir = self._ensure_directory(today)
 
-        # Ensure a valid extension (.csv or .xls)
         lower = filename.lower()
         if not (lower.endswith(".csv") or lower.endswith(".xls")):
             filename += ".csv"
