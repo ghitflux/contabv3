@@ -1,0 +1,11 @@
+﻿"RELATÓRIO";"Livro Caixa"
+"PERÍODO";"2026-02-01 a 2026-02-09"
+"GERADO EM";"08/02/2026 12:40:08"
+
+"RESUMO"
+"Entries";"[{'data': datetime.date(2026, 2, 8), 'tipo': 'entrada', 'descricao': 'Receita QA 554405', 'valor': 1800.0, 'saldo_acumulado': 1800.0}]"
+"Saldo Inicial";"0,00"
+"Saldo Final";"1.800,00"
+"Total Entradas";"1.800,00"
+"Total Saidas";"0,00"
+
