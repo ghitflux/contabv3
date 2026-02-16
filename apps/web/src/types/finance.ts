@@ -26,6 +26,16 @@ export enum PaymentStatus {
   PARCIAL = 'parcial',
 }
 
+export const DUE_PAYMENT_STATUSES: PaymentStatus[] = [
+  PaymentStatus.PENDENTE,
+  PaymentStatus.ATRASADO,
+  PaymentStatus.PARCIAL,
+];
+
+export function isDuePaymentStatus(status: PaymentStatus): boolean {
+  return DUE_PAYMENT_STATUSES.includes(status);
+}
+
 // Main transaction interface
 export interface Transaction {
   id: string;

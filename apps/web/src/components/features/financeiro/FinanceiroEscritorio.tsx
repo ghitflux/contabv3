@@ -43,6 +43,8 @@ import {
   TransactionType,
   type Transaction,
   type TransactionUpdate,
+  isDuePaymentStatus,
+  getPaymentStatusLabel,
   getPaymentMethodLabel,
 } from '@/types/finance';
 import { toast } from '@/lib/toast';
@@ -364,7 +366,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       transactions.filter(
         (transaction) =>
           transaction.transaction_type === TransactionType.RECEITA &&
-          transaction.payment_status !== PaymentStatus.PAGO
+          isDuePaymentStatus(transaction.payment_status)
       ),
     [transactions]
   );
@@ -373,7 +375,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       transactions.filter(
         (transaction) =>
           transaction.transaction_type === TransactionType.DESPESA &&
-          transaction.payment_status !== PaymentStatus.PAGO
+          isDuePaymentStatus(transaction.payment_status)
       ),
     [transactions]
   );
@@ -391,14 +393,14 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       return displayTransactions.filter(
         (transaction) =>
           transaction.raw.transaction_type === TransactionType.RECEITA &&
-          transaction.status !== PaymentStatus.PAGO
+          isDuePaymentStatus(transaction.status)
       );
     }
     if (activePendingPanel === 'pagar') {
       return displayTransactions.filter(
         (transaction) =>
           transaction.raw.transaction_type === TransactionType.DESPESA &&
-          transaction.status !== PaymentStatus.PAGO
+          isDuePaymentStatus(transaction.status)
       );
     }
     return [];
@@ -1070,7 +1072,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                     </div>
                   </TableCell>
                   <TableCell>
-                    {transaction.status === PaymentStatus.PAGO ? 'Pago' : 'Pendente'}
+                    {getPaymentStatusLabel(transaction.status)}
                   </TableCell>
                   <TableCell className="text-sm text-slate-600 dark:text-slate-400">
                     {transaction.observation ?? '-'}
@@ -1079,7 +1081,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                     {formatCurrency(transaction.value)}
                   </TableCell>
                   <TableCell className="text-right space-x-1">
-                    {transaction.status !== PaymentStatus.PAGO && (
+                    {isDuePaymentStatus(transaction.status) && (
                       <Button
                         size="sm"
                         variant="flat"

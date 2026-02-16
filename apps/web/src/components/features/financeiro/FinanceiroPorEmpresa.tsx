@@ -35,6 +35,7 @@ import {
   TransactionType,
   type Transaction,
   type TransactionUpdate,
+  isDuePaymentStatus,
   getPaymentMethodLabel,
 } from '@/types/finance';
 import { toast } from '@/lib/toast';
@@ -479,7 +480,7 @@ export function FinanceiroPorEmpresa({
       transactions.filter(
         (transaction) =>
           transaction.transaction_type === TransactionType.RECEITA &&
-          transaction.payment_status !== PaymentStatus.PAGO
+          isDuePaymentStatus(transaction.payment_status)
       ),
     [transactions]
   );
@@ -488,7 +489,7 @@ export function FinanceiroPorEmpresa({
       transactions.filter(
         (transaction) =>
           transaction.transaction_type === TransactionType.DESPESA &&
-          transaction.payment_status !== PaymentStatus.PAGO
+          isDuePaymentStatus(transaction.payment_status)
       ),
     [transactions]
   );
@@ -1026,7 +1027,7 @@ export function FinanceiroPorEmpresa({
                   </TableCell>
                   <TableCell>{transaction.payment}</TableCell>
                   <TableCell className="text-right space-x-1">
-                    {transaction.raw.payment_status !== PaymentStatus.PAGO && (
+                    {isDuePaymentStatus(transaction.raw.payment_status) && (
                       <Button
                         size="sm"
                         variant="flat"

@@ -1,7 +1,7 @@
 """Add finance.create, finance.edit and finance.delete permissions to CLIENTE role
 
-Revision ID: 20260213_1400_add_cliente_finance_permissions
-Revises: 20260301_1200_add_bank_accounts_table
+Revision ID: f20260213_finance_perms
+Revises: 20260127_1210_office_client
 Create Date: 2026-02-13 14:00:00.000000
 
 """
@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision = '20260213_1400_add_cliente_finance_permissions'
-down_revision = '20260301_1200_add_bank_accounts_table'
+revision = 'f20260213_finance_perms'
+down_revision = '20260127_1210_office_client'
 branch_labels = None
 depends_on = None
 

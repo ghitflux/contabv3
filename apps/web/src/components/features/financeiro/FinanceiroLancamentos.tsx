@@ -33,6 +33,7 @@ import {
   TransactionType,
   type Transaction,
   type TransactionUpdate,
+  isDuePaymentStatus,
   getPaymentStatusColor,
   getPaymentStatusLabel,
 } from '@/types/finance';
@@ -278,7 +279,7 @@ export function FinanceiroLancamentos() {
     () =>
       lancamentos.filter(
         (lancamento) =>
-          lancamento.tipo === TransactionType.RECEITA && lancamento.status !== PaymentStatus.PAGO
+          lancamento.tipo === TransactionType.RECEITA && isDuePaymentStatus(lancamento.status)
       ),
     [lancamentos]
   );
@@ -286,7 +287,7 @@ export function FinanceiroLancamentos() {
     () =>
       lancamentos.filter(
         (lancamento) =>
-          lancamento.tipo === TransactionType.DESPESA && lancamento.status !== PaymentStatus.PAGO
+          lancamento.tipo === TransactionType.DESPESA && isDuePaymentStatus(lancamento.status)
       ),
     [lancamentos]
   );
@@ -308,10 +309,10 @@ export function FinanceiroLancamentos() {
         activePendingPanel === 'all' ||
         (activePendingPanel === 'receber' &&
           lancamento.tipo === TransactionType.RECEITA &&
-          lancamento.status !== PaymentStatus.PAGO) ||
+          isDuePaymentStatus(lancamento.status)) ||
         (activePendingPanel === 'pagar' &&
           lancamento.tipo === TransactionType.DESPESA &&
-          lancamento.status !== PaymentStatus.PAGO);
+          isDuePaymentStatus(lancamento.status));
       const matchBusca =
         query === '' ||
         lancamento.descricao.toLowerCase().includes(query) ||
@@ -694,7 +695,7 @@ export function FinanceiroLancamentos() {
                       </span>
                     </TableCell>
                     <TableCell className="text-right space-x-1">
-                      {lancamento.status !== PaymentStatus.PAGO && (
+                      {isDuePaymentStatus(lancamento.status) && (
                         <Button
                           size="sm"
                           variant="flat"
