@@ -9,12 +9,29 @@ import type {
   TransactionUpdate,
   TransactionFilters,
 } from '@/types/finance';
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 interface UseTransactionsOptions {
   filters?: TransactionFilters;
   autoFetch?: boolean;
 }
+
+const buildFiltersKey = (filters?: TransactionFilters) => {
+  const normalized = {
+    client_id: filters?.client_id ?? null,
+    status: filters?.status ?? null,
+    payment_method: filters?.payment_method ?? null,
+    reference_month: filters?.reference_month ?? null,
+    due_date_from: filters?.due_date_from ?? null,
+    due_date_to: filters?.due_date_to ?? null,
+    include_deleted: Boolean(filters?.include_deleted),
+    deleted_only: Boolean(filters?.deleted_only),
+    page: filters?.page ?? null,
+    size: filters?.size ?? null,
+  };
+
+  return JSON.stringify(normalized);
+};
 
 export function useTransactions(options: UseTransactionsOptions = {}) {
   const { filters, autoFetch = true } = options;
@@ -22,8 +39,8 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const isFetchingRef = useRef(false);
+  const filtersRef = useRef<TransactionFilters | undefined>(filters);
+  const filtersKey = useMemo(() => buildFiltersKey(filters), [filters]);
 
   const normalizeTransaction = useCallback((transaction: Transaction): Transaction => {
     const amount =
@@ -31,34 +48,28 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
     return { ...transaction, amount };
   }, []);
 
+  useEffect(() => {
+    filtersRef.current = filters;
+  }, [filters, filtersKey]);
+
   /**
    * Fetch transactions from API.
    */
   const fetchTransactions = useCallback(
     async (customFilters?: TransactionFilters) => {
-      // Prevent concurrent fetches
-      if (isFetchingRef.current) {
-        console.log('[useTransactions] Already fetching, skipping...');
-        return { items: transactions, total, page: 1, size: 100, pages: 1 };
-      }
-
-      // Cancel previous request if any
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-
-      const mergedFilters = { ...filters, ...customFilters };
+      const mergedFilters = {
+        ...(filtersRef.current ?? {}),
+        ...(customFilters ?? {}),
+      };
 
       // Note: client_id is now optional - backend will handle authorization
       // - Admin/Func: can fetch all transactions (no client_id) or filter by client_id
       // - Cliente: backend will override client_id with their own
 
-      isFetchingRef.current = true;
       setIsLoading(true);
       setError(null);
 
       try {
-        abortControllerRef.current = new AbortController();
         const response = await financeApi.getTransactions(mergedFilters);
 
         const normalizedItems = response.items.map(normalizeTransaction);
@@ -66,23 +77,15 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
         setTotal(response.total);
         return { ...response, items: normalizedItems };
       } catch (err) {
-        // Ignore abort errors
-        if (err instanceof Error && err.name === 'AbortError') {
-          console.log('[useTransactions] Request aborted');
-          return { items: transactions, total, page: 1, size: 100, pages: 1 };
-        }
-
         const message = err instanceof Error ? err.message : 'Failed to fetch transactions';
         setError(message);
         console.error('[useTransactions] Fetch error:', message);
         throw err;
       } finally {
-        isFetchingRef.current = false;
         setIsLoading(false);
-        abortControllerRef.current = null;
       }
     },
-    [filters, normalizeTransaction, transactions, total]
+    [normalizeTransaction]
   );
 
   /**
@@ -168,22 +171,14 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
     return fetchTransactions();
   }, [fetchTransactions]);
 
-  // Auto-fetch on mount - FIXED: only once when client_id changes
+  // Auto-fetch whenever active filters change
   useEffect(() => {
-    if (autoFetch && filters?.client_id) {
+    if (autoFetch) {
       fetchTransactions().catch((err) => {
         console.error('[useTransactions] Auto-fetch error:', err);
       });
     }
-
-    return () => {
-      // Cleanup: abort ongoing requests
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoFetch, filters?.client_id]); // Only re-run when client_id changes
+  }, [autoFetch, fetchTransactions, filtersKey]);
 
   return {
     transactions,

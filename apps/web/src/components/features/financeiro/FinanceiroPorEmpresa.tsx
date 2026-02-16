@@ -61,6 +61,7 @@ interface ClientTransaction {
 }
 
 const normalizeDecimalInput = (value: string): number => Number.parseFloat(value.replace(',', '.'));
+const LANCAMENTOS_PER_PAGE = 20;
 
 export function FinanceiroPorEmpresa({
   onExportLivro,
@@ -87,9 +88,12 @@ export function FinanceiroPorEmpresa({
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [pendingBaixaTransaction, setPendingBaixaTransaction] = useState<Transaction | null>(null);
-  const [pendingDeleteTransaction, setPendingDeleteTransaction] = useState<Transaction | null>(null);
+  const [pendingDeleteTransaction, setPendingDeleteTransaction] = useState<Transaction | null>(
+    null
+  );
   const [isConfirmingBaixa, setIsConfirmingBaixa] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [transactionsPage, setTransactionsPage] = useState(1);
   const [activePendingPanel, setActivePendingPanel] = useState<'all' | 'receber' | 'pagar'>('all');
   const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
   const [bankForm, setBankForm] = useState({
@@ -162,7 +166,9 @@ export function FinanceiroPorEmpresa({
     if (selectedClient && clients.length > 0) {
       const clientExists = clients.some((client) => client.id === selectedClient);
       if (!clientExists) {
-        console.warn(`[FinanceiroPorEmpresa] Selected client ${selectedClient} not found in list, clearing selection`);
+        console.warn(
+          `[FinanceiroPorEmpresa] Selected client ${selectedClient} not found in list, clearing selection`
+        );
         setSelectedClient('');
         setClientSearch('');
         setClientDetails(null);
@@ -385,7 +391,7 @@ export function FinanceiroPorEmpresa({
   const { transactions, refresh, createTransaction, updateTransaction, deleteTransaction } =
     useTransactions({
       filters: transactionFilters,
-      autoFetch: Boolean(selectedClient),
+      autoFetch: Boolean(selectedClient && startDate && endDate),
     });
 
   const handleSaveTransaction = async (data: NovoLancamentoData) => {
@@ -440,6 +446,36 @@ export function FinanceiroPorEmpresa({
       })),
     [transactions]
   );
+
+  useEffect(() => {
+    setTransactionsPage(1);
+  }, [selectedClient, startDate, endDate]);
+
+  const totalTransactionPages = useMemo(() => {
+    if (displayTransactions.length === 0) return 1;
+    return Math.ceil(displayTransactions.length / LANCAMENTOS_PER_PAGE);
+  }, [displayTransactions.length]);
+
+  useEffect(() => {
+    if (transactionsPage > totalTransactionPages) {
+      setTransactionsPage(totalTransactionPages);
+    }
+  }, [transactionsPage, totalTransactionPages]);
+
+  const paginatedDisplayTransactions = useMemo(() => {
+    const startIndex = (transactionsPage - 1) * LANCAMENTOS_PER_PAGE;
+    const endIndex = startIndex + LANCAMENTOS_PER_PAGE;
+    return displayTransactions.slice(startIndex, endIndex);
+  }, [displayTransactions, transactionsPage]);
+
+  const transactionRangeLabel = useMemo(() => {
+    if (displayTransactions.length === 0) {
+      return 'Mostrando 0 de 0';
+    }
+    const startIndex = (transactionsPage - 1) * LANCAMENTOS_PER_PAGE + 1;
+    const endIndex = Math.min(transactionsPage * LANCAMENTOS_PER_PAGE, displayTransactions.length);
+    return `Mostrando ${startIndex}-${endIndex} de ${displayTransactions.length}`;
+  }, [displayTransactions.length, transactionsPage]);
 
   const filteredClients = useMemo(() => {
     const query = clientSearch.trim().toLowerCase();
@@ -1015,7 +1051,7 @@ export function FinanceiroPorEmpresa({
                   : 'Nenhum lançamento encontrado para o período selecionado'
               }
             >
-              {displayTransactions.map((transaction) => (
+              {paginatedDisplayTransactions.map((transaction) => (
                 <TableRow key={transaction.id}>
                   <TableCell>{new Date(transaction.date).toLocaleDateString('pt-BR')}</TableCell>
                   <TableCell>
@@ -1061,6 +1097,32 @@ export function FinanceiroPorEmpresa({
               ))}
             </TableBody>
           </Table>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-default-500">{transactionRangeLabel}</p>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="bordered"
+                onPress={() => setTransactionsPage((prev) => Math.max(1, prev - 1))}
+                isDisabled={transactionsPage <= 1}
+              >
+                Anterior
+              </Button>
+              <span className="text-sm text-default-600">
+                Página {transactionsPage} de {totalTransactionPages}
+              </span>
+              <Button
+                size="sm"
+                variant="bordered"
+                onPress={() =>
+                  setTransactionsPage((prev) => Math.min(totalTransactionPages, prev + 1))
+                }
+                isDisabled={transactionsPage >= totalTransactionPages}
+              >
+                Próxima
+              </Button>
+            </div>
+          </div>
         </CardBody>
       </Card>
 

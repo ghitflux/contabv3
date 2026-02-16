@@ -67,6 +67,7 @@ interface Lancamento {
 }
 
 const normalizeDecimalInput = (value: string): number => Number.parseFloat(value.replace(',', '.'));
+const LANCAMENTOS_PER_PAGE = 20;
 
 export function FinanceiroLancamentos() {
   const { isOpen, onOpen, onOpenChange } = useDisclosure();
@@ -82,9 +83,12 @@ export function FinanceiroLancamentos() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [pendingBaixaTransaction, setPendingBaixaTransaction] = useState<Transaction | null>(null);
-  const [pendingDeleteTransaction, setPendingDeleteTransaction] = useState<Transaction | null>(null);
+  const [pendingDeleteTransaction, setPendingDeleteTransaction] = useState<Transaction | null>(
+    null
+  );
   const [isConfirmingBaixa, setIsConfirmingBaixa] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [lancamentosPage, setLancamentosPage] = useState(1);
   const [editForm, setEditForm] = useState({
     description: '',
     amount: '',
@@ -323,6 +327,36 @@ export function FinanceiroLancamentos() {
       return matchTipo && matchStatus && matchBusca && matchPanel;
     });
   }, [lancamentos, busca, filtroStatus, filtroTipo, activePendingPanel]);
+
+  useEffect(() => {
+    setLancamentosPage(1);
+  }, [startDate, endDate, busca, filtroTipo, filtroStatus, activePendingPanel]);
+
+  const totalLancamentosPages = useMemo(() => {
+    if (lancamentosFiltrados.length === 0) return 1;
+    return Math.ceil(lancamentosFiltrados.length / LANCAMENTOS_PER_PAGE);
+  }, [lancamentosFiltrados.length]);
+
+  useEffect(() => {
+    if (lancamentosPage > totalLancamentosPages) {
+      setLancamentosPage(totalLancamentosPages);
+    }
+  }, [lancamentosPage, totalLancamentosPages]);
+
+  const lancamentosPaginados = useMemo(() => {
+    const startIndex = (lancamentosPage - 1) * LANCAMENTOS_PER_PAGE;
+    const endIndex = startIndex + LANCAMENTOS_PER_PAGE;
+    return lancamentosFiltrados.slice(startIndex, endIndex);
+  }, [lancamentosFiltrados, lancamentosPage]);
+
+  const lancamentosRangeLabel = useMemo(() => {
+    if (lancamentosFiltrados.length === 0) {
+      return 'Mostrando 0 de 0';
+    }
+    const startIndex = (lancamentosPage - 1) * LANCAMENTOS_PER_PAGE + 1;
+    const endIndex = Math.min(lancamentosPage * LANCAMENTOS_PER_PAGE, lancamentosFiltrados.length);
+    return `Mostrando ${startIndex}-${endIndex} de ${lancamentosFiltrados.length}`;
+  }, [lancamentosFiltrados.length, lancamentosPage]);
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', {
@@ -640,7 +674,7 @@ export function FinanceiroLancamentos() {
               <TableColumn className="text-right">Ações</TableColumn>
             </TableHeader>
             <TableBody emptyContent="Nenhum lançamento encontrado">
-              {lancamentosFiltrados.map((lancamento) => {
+              {lancamentosPaginados.map((lancamento) => {
                 const conta = lancamento.categoria ? getContaByCodigo(lancamento.categoria) : null;
                 return (
                   <TableRow key={lancamento.id}>
@@ -730,6 +764,32 @@ export function FinanceiroLancamentos() {
               })}
             </TableBody>
           </Table>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-default-500">{lancamentosRangeLabel}</p>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="bordered"
+                onPress={() => setLancamentosPage((prev) => Math.max(1, prev - 1))}
+                isDisabled={lancamentosPage <= 1}
+              >
+                Anterior
+              </Button>
+              <span className="text-sm text-default-600">
+                Página {lancamentosPage} de {totalLancamentosPages}
+              </span>
+              <Button
+                size="sm"
+                variant="bordered"
+                onPress={() =>
+                  setLancamentosPage((prev) => Math.min(totalLancamentosPages, prev + 1))
+                }
+                isDisabled={lancamentosPage >= totalLancamentosPages}
+              >
+                Próxima
+              </Button>
+            </div>
+          </div>
         </div>
 
         <NovoLancamentoModal

@@ -115,6 +115,7 @@ const formatCurrency = (value: number) =>
   }).format(value);
 
 const normalizeDecimalInput = (value: string): number => Number.parseFloat(value.replace(',', '.'));
+const TRANSACTIONS_PER_PAGE = 20;
 
 const normalizeDateInput = (value?: string | null): string => {
   if (!value) return '';
@@ -168,9 +169,12 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [pendingBaixaTransaction, setPendingBaixaTransaction] = useState<Transaction | null>(null);
-  const [pendingDeleteTransaction, setPendingDeleteTransaction] = useState<Transaction | null>(null);
+  const [pendingDeleteTransaction, setPendingDeleteTransaction] = useState<Transaction | null>(
+    null
+  );
   const [isConfirmingBaixa, setIsConfirmingBaixa] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [transactionsPage, setTransactionsPage] = useState(1);
   const [editForm, setEditForm] = useState({
     description: '',
     amount: '',
@@ -344,6 +348,36 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       isRecurring: false,
     }));
   }, [transactions]);
+
+  useEffect(() => {
+    setTransactionsPage(1);
+  }, [startDate, endDate, OFFICE_CLIENT_ID]);
+
+  const totalTransactionPages = useMemo(() => {
+    if (displayTransactions.length === 0) return 1;
+    return Math.ceil(displayTransactions.length / TRANSACTIONS_PER_PAGE);
+  }, [displayTransactions.length]);
+
+  useEffect(() => {
+    if (transactionsPage > totalTransactionPages) {
+      setTransactionsPage(totalTransactionPages);
+    }
+  }, [transactionsPage, totalTransactionPages]);
+
+  const paginatedDisplayTransactions = useMemo(() => {
+    const startIndex = (transactionsPage - 1) * TRANSACTIONS_PER_PAGE;
+    const endIndex = startIndex + TRANSACTIONS_PER_PAGE;
+    return displayTransactions.slice(startIndex, endIndex);
+  }, [displayTransactions, transactionsPage]);
+
+  const transactionRangeLabel = useMemo(() => {
+    if (displayTransactions.length === 0) {
+      return 'Mostrando 0 de 0';
+    }
+    const startIndex = (transactionsPage - 1) * TRANSACTIONS_PER_PAGE + 1;
+    const endIndex = Math.min(transactionsPage * TRANSACTIONS_PER_PAGE, displayTransactions.length);
+    return `Mostrando ${startIndex}-${endIndex} de ${displayTransactions.length}`;
+  }, [displayTransactions.length, transactionsPage]);
 
   // Calcula receita e despesa com TODAS as transações (não apenas pagas)
   const receita = useMemo(
@@ -1055,7 +1089,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
               <TableColumn className="text-right">Ações</TableColumn>
             </TableHeader>
             <TableBody emptyContent="Nenhum lançamento cadastrado">
-              {displayTransactions.map((transaction) => (
+              {paginatedDisplayTransactions.map((transaction) => (
                 <TableRow key={transaction.id}>
                   <TableCell>{new Date(transaction.date).toLocaleDateString('pt-BR')}</TableCell>
                   <TableCell>{transaction.type}</TableCell>
@@ -1071,9 +1105,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>
-                    {getPaymentStatusLabel(transaction.status)}
-                  </TableCell>
+                  <TableCell>{getPaymentStatusLabel(transaction.status)}</TableCell>
                   <TableCell className="text-sm text-slate-600 dark:text-slate-400">
                     {transaction.observation ?? '-'}
                   </TableCell>
@@ -1114,6 +1146,32 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
               ))}
             </TableBody>
           </Table>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-default-500">{transactionRangeLabel}</p>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="bordered"
+                onPress={() => setTransactionsPage((prev) => Math.max(1, prev - 1))}
+                isDisabled={transactionsPage <= 1}
+              >
+                Anterior
+              </Button>
+              <span className="text-sm text-default-600">
+                Página {transactionsPage} de {totalTransactionPages}
+              </span>
+              <Button
+                size="sm"
+                variant="bordered"
+                onPress={() =>
+                  setTransactionsPage((prev) => Math.min(totalTransactionPages, prev + 1))
+                }
+                isDisabled={transactionsPage >= totalTransactionPages}
+              >
+                Próxima
+              </Button>
+            </div>
+          </div>
         </CardBody>
       </Card>
 
