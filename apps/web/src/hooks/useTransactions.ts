@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 interface UseTransactionsOptions {
   filters?: TransactionFilters;
   autoFetch?: boolean;
+  fetchAllPages?: boolean;
 }
 
 const buildFiltersKey = (filters?: TransactionFilters) => {
@@ -34,7 +35,7 @@ const buildFiltersKey = (filters?: TransactionFilters) => {
 };
 
 export function useTransactions(options: UseTransactionsOptions = {}) {
-  const { filters, autoFetch = true } = options;
+  const { filters, autoFetch = true, fetchAllPages = false } = options;
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,12 +71,55 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
       setError(null);
 
       try {
-        const response = await financeApi.getTransactions(mergedFilters);
+        if (!fetchAllPages) {
+          const response = await financeApi.getTransactions(mergedFilters);
+          const normalizedItems = response.items.map(normalizeTransaction);
+          setTransactions(normalizedItems);
+          setTotal(response.total);
+          return { ...response, items: normalizedItems };
+        }
 
-        const normalizedItems = response.items.map(normalizeTransaction);
-        setTransactions(normalizedItems);
-        setTotal(response.total);
-        return { ...response, items: normalizedItems };
+        const pageSize =
+          typeof mergedFilters.size === 'number' && mergedFilters.size > 0
+            ? Math.min(Math.trunc(mergedFilters.size), 100)
+            : 100;
+
+        let currentPage = 1;
+        let totalFromApi = 0;
+        const allItems: Transaction[] = [];
+
+        while (true) {
+          const response = await financeApi.getTransactions({
+            ...mergedFilters,
+            page: currentPage,
+            size: pageSize,
+          });
+
+          const normalizedItems = response.items.map(normalizeTransaction);
+          allItems.push(...normalizedItems);
+          totalFromApi = response.total;
+
+          const reachedEnd =
+            normalizedItems.length === 0 ||
+            normalizedItems.length < pageSize ||
+            allItems.length >= totalFromApi;
+
+          if (reachedEnd) {
+            break;
+          }
+
+          currentPage += 1;
+        }
+
+        setTransactions(allItems);
+        setTotal(totalFromApi);
+
+        return {
+          items: allItems,
+          total: totalFromApi,
+          skip: 0,
+          limit: pageSize,
+        };
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to fetch transactions';
         setError(message);
@@ -85,7 +129,7 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
         setIsLoading(false);
       }
     },
-    [normalizeTransaction]
+    [fetchAllPages, normalizeTransaction]
   );
 
   /**

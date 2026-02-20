@@ -13,7 +13,7 @@ import { DatePickerField } from "@/components/ui/DatePickerField";
 import { ReportFormat, ReportType } from "@/types/report";
 import { reportsApi } from "@/lib/api/endpoints/reports";
 import { toast } from "@/lib/toast";
-import { formatISO, startOfMonth } from "date-fns";
+import { formatISO, startOfYear } from "date-fns";
 import { useAuth } from "@/hooks/auth/AuthContext";
 import { clientsApi } from "@/lib/api/endpoints/clients";
 import type { ClientListItem } from "@/types/client";
@@ -45,7 +45,7 @@ export function FinanceiroModule() {
 
   useEffect(() => {
     const now = new Date();
-    setRangeStart(formatISO(startOfMonth(now), { representation: "date" }));
+    setRangeStart(formatISO(startOfYear(now), { representation: "date" }));
     setRangeEnd(formatISO(now, { representation: "date" }));
   }, []);
 

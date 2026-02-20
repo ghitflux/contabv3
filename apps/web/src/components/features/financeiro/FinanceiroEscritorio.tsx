@@ -48,7 +48,7 @@ import {
   getPaymentMethodLabel,
 } from '@/types/finance';
 import { toast } from '@/lib/toast';
-import { endOfMonth, formatISO, startOfMonth, subMonths } from 'date-fns';
+import { formatISO, subMonths } from 'date-fns';
 import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
 import { bankAccountsApi } from '@/lib/api/endpoints/bank-accounts';
 import type { BankAccount } from '@/types/bank-account';
@@ -154,16 +154,9 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     accountingAccount: '',
     type: 'income' as 'income' | 'expense',
   });
-  const [newTransaction, setNewTransaction] = useState<NewTransactionState>(() => ({
-    date: '',
-    type: 'Entrada',
-    bank: '1',
-    history: '',
-    observation: '',
-    value: '',
-    isRecurring: false,
-    recurringDay: 1,
-  }));
+  const [newTransaction, setNewTransaction] = useState<NewTransactionState>(() =>
+    buildDefaultTransaction()
+  );
   const [activePendingPanel, setActivePendingPanel] = useState<'all' | 'receber' | 'pagar'>('all');
   const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -190,14 +183,6 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   // OFFICE_CLIENT_ID is used for transactions (still required)
   // Bank accounts use office_only flag instead
   const OFFICE_CLIENT_ID = process.env.NEXT_PUBLIC_OFFICE_CLIENT_ID ?? '';
-
-  useEffect(() => {
-    const now = new Date();
-    setMonthFilter(formatISO(now, { representation: 'date' }).slice(0, 7));
-    setStartDate(formatISO(startOfMonth(now), { representation: 'date' }));
-    setEndDate(formatISO(endOfMonth(now), { representation: 'date' }));
-    setNewTransaction(buildDefaultTransaction(now));
-  }, []);
 
   // Funções para gerenciar bancos do escritório
   const resetBankForm = useCallback(() => {
@@ -329,7 +314,8 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         page: 1,
         size: 100,
       },
-      autoFetch: Boolean(OFFICE_CLIENT_ID && startDate && endDate),
+      autoFetch: true,
+      fetchAllPages: true,
     });
 
   const displayTransactions = useMemo<DisplayTransaction[]>(() => {

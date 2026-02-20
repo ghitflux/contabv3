@@ -1,9 +1,8 @@
 """Cash Book Report Service - Livro Caixa."""
 
-from datetime import datetime, time, timedelta
 from decimal import Decimal
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 
 from app.db.models.client import Client
 from app.db.models.finance import FinancialTransaction, TransactionType
@@ -28,19 +27,22 @@ class CashBookReportService(BaseReportService):
         period_start = filters["period_start"]
         period_end = filters["period_end"]
         client_ids = filters.get("client_ids")
-        period_start_at = datetime.combine(period_start, time.min)
-        period_end_exclusive = datetime.combine(period_end + timedelta(days=1), time.min)
+        movement_date_expr = func.coalesce(
+            func.date(FinancialTransaction.paid_date), FinancialTransaction.due_date
+        )
 
         # Build conditions
         conditions = [
             FinancialTransaction.deleted_at.is_(None),
-            FinancialTransaction.paid_date.isnot(None),  # Only paid transactions
+            movement_date_expr.is_not(None),
+            movement_date_expr >= period_start,
+            movement_date_expr <= period_end,
         ]
 
         if client_ids:
             conditions.append(FinancialTransaction.client_id.in_(client_ids))
 
-        # Get all transactions ordered by paid date
+        # Get all transactions ordered by movement date (paid date when available, fallback to due date)
         stmt = (
             select(
                 FinancialTransaction,
@@ -48,13 +50,9 @@ class CashBookReportService(BaseReportService):
                 Client.nome_fantasia,
                 Client.cnpj,
             )
-            .join(Client, FinancialTransaction.client_id == Client.id)
+            .outerjoin(Client, FinancialTransaction.client_id == Client.id)
             .where(and_(*conditions))
-            .filter(
-                FinancialTransaction.paid_date >= period_start_at,
-                FinancialTransaction.paid_date < period_end_exclusive,
-            )
-            .order_by(FinancialTransaction.paid_date, FinancialTransaction.created_at)
+            .order_by(movement_date_expr, FinancialTransaction.created_at)
         )
 
         result = await self.db.execute(stmt)
@@ -70,7 +68,14 @@ class CashBookReportService(BaseReportService):
             tipo = "entrada" if transaction.transaction_type == TransactionType.RECEITA else "saida"
             valor = transaction.amount
             client_name = nome_fantasia or razao_social or "Sem cliente"
-            paid_date = transaction.paid_date.date().isoformat() if transaction.paid_date else None
+            movement_date = (
+                transaction.paid_date.date()
+                if transaction.paid_date
+                else transaction.due_date
+            )
+            movement_date_iso = movement_date.isoformat() if movement_date else None
+            if client_name == "Sem cliente":
+                client_name = "Escritório"
 
             if tipo == "entrada":
                 saldo_acumulado += valor
@@ -80,7 +85,7 @@ class CashBookReportService(BaseReportService):
                 total_saidas += valor
 
             entries.append({
-                "data": paid_date,
+                "data": movement_date_iso,
                 "tipo": tipo,
                 "descricao": transaction.description,
                 "cliente": client_name,
@@ -93,6 +98,11 @@ class CashBookReportService(BaseReportService):
                     transaction.payment_status.value if transaction.payment_status else "-"
                 ),
                 "vencimento": transaction.due_date.isoformat() if transaction.due_date else None,
+                "data_pagamento": (
+                    transaction.paid_date.date().isoformat()
+                    if transaction.paid_date
+                    else None
+                ),
                 "referencia": (
                     transaction.reference_month.isoformat()
                     if transaction.reference_month

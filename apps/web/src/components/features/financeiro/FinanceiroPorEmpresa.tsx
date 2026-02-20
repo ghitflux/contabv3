@@ -41,7 +41,7 @@ import {
 import { toast } from '@/lib/toast';
 import { DatePickerField } from '@/components/ui/DatePickerField';
 import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
-import { endOfMonth, formatISO, startOfMonth, subMonths } from 'date-fns';
+import { formatISO, subMonths } from 'date-fns';
 import { useAuth } from '@/hooks/auth/AuthContext';
 import { NovoLancamentoModal, type NovoLancamentoData } from './NovoLancamentoModal';
 import { bankAccountsApi } from '@/lib/api/endpoints/bank-accounts';
@@ -113,13 +113,6 @@ export function FinanceiroPorEmpresa({
     notes: '',
     invoice_number: '',
   });
-
-  useEffect(() => {
-    const now = new Date();
-    setMonthFilter(formatISO(now, { representation: 'date' }).slice(0, 7));
-    setStartDate(formatISO(startOfMonth(now), { representation: 'date' }));
-    setEndDate(formatISO(endOfMonth(now), { representation: 'date' }));
-  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -391,7 +384,8 @@ export function FinanceiroPorEmpresa({
   const { transactions, refresh, createTransaction, updateTransaction, deleteTransaction } =
     useTransactions({
       filters: transactionFilters,
-      autoFetch: Boolean(selectedClient && startDate && endDate),
+      autoFetch: Boolean(selectedClient),
+      fetchAllPages: true,
     });
 
   const handleSaveTransaction = async (data: NovoLancamentoData) => {
