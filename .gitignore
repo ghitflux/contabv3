@@ -132,6 +132,7 @@ infra/ssl/*
 !infra/ssl/.gitkeep
 
 # Backups
+backups/
 *.backup
 *.bak
 *.tmp
