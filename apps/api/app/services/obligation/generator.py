@@ -6,6 +6,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.db.models.client import Client
 from app.db.models.obligation import Obligation, ObligationStatus
@@ -14,6 +15,10 @@ from app.db.models.obligation_event import ObligationEvent, ObligationEventType
 from app.db.repositories.obligation import ObligationRepository
 from app.db.repositories.obligation_event import ObligationEventRepository
 from app.patterns.factories.obligation_factory import ObligationFactory
+from app.services.obligation.activity_notification import (
+    send_due_soon_notifications_for_obligation,
+    sync_obligation_activities_for_list,
+)
 from app.services.obligation.seed_types import ensure_obligation_types
 
 
@@ -57,6 +62,31 @@ class ObligationGenerator:
             reference_month=reference_month,
             user_id=generated_by_id,
         )
+
+        if obligations:
+            obligation_ids = [obligation.id for obligation in obligations]
+            created_result = await self.db.execute(
+                select(Obligation)
+                .options(
+                    selectinload(Obligation.client),
+                    selectinload(Obligation.obligation_type),
+                )
+                .where(Obligation.id.in_(obligation_ids))
+            )
+            created_with_relations = created_result.scalars().all()
+
+            await sync_obligation_activities_for_list(
+                self.db,
+                created_with_relations,
+                preferred_user_id=generated_by_id,
+            )
+
+            for created_obligation in created_with_relations:
+                await send_due_soon_notifications_for_obligation(
+                    self.db,
+                    created_obligation,
+                    reminder_days=5,
+                )
 
         # Commit changes
         await self.db.commit()

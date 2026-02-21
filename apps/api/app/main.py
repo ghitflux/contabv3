@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 # Background task handle
 _expiration_task: asyncio.Task | None = None
 _finance_task: asyncio.Task | None = None
+_obligation_task: asyncio.Task | None = None
 
 
 async def _schedule_license_expiration_checks() -> None:
@@ -110,13 +111,58 @@ async def _schedule_finance_automation() -> None:
             await asyncio.sleep(3600)
 
 
+async def _schedule_obligation_automation() -> None:
+    """
+    Schedule obligation automation runs.
+    Runs daily at 00:20.
+    """
+    import datetime
+
+    while True:
+        try:
+            now = datetime.datetime.now()
+            scheduled_today = now.replace(hour=0, minute=20, second=0, microsecond=0)
+
+            if now < scheduled_today:
+                wait_seconds = (scheduled_today - now).total_seconds()
+                logger.info(
+                    "Scheduling next obligation automation for "
+                    f"{scheduled_today} (in {wait_seconds/3600:.1f} hours)"
+                )
+                await asyncio.sleep(wait_seconds)
+            else:
+                logger.info(
+                    "Obligation automation scheduled time already passed today; running immediately"
+                )
+
+            from app.tasks.obligation_automation import run_obligation_daily_automation
+
+            summary = await run_obligation_daily_automation()
+            logger.info(
+                "Obligation automation completed. "
+                f"Activity sync: {summary.get('activity_sync')}; "
+                f"Reminders: {summary.get('reminders')}"
+            )
+
+            after_run = datetime.datetime.now()
+            next_run = scheduled_today + datetime.timedelta(days=1)
+            wait_seconds = max(0, (next_run - after_run).total_seconds())
+            await asyncio.sleep(wait_seconds)
+        except asyncio.CancelledError:
+            logger.info("Obligation automation task cancelled")
+            break
+        except Exception as e:
+            logger.error(f"Error in scheduled obligation automation: {e}", exc_info=True)
+            await asyncio.sleep(3600)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Application lifespan events.
     Startup and shutdown logic.
     """
-    global _expiration_task, _finance_task
+    global _expiration_task, _finance_task, _obligation_task
 
     # Startup
     logger.info("Starting application...")
@@ -145,6 +191,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.error(f"✗ Failed to start finance automation task: {e}")
 
+    # Start background task for obligation automation
+    try:
+        _obligation_task = asyncio.create_task(_schedule_obligation_automation())
+        logger.info("✓ Obligation automation task scheduled")
+    except Exception as e:
+        logger.error(f"✗ Failed to start obligation automation task: {e}")
+
     yield
 
     # Shutdown
@@ -166,6 +219,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except asyncio.CancelledError:
             pass
         logger.info("✓ Finance automation task cancelled")
+
+    if _obligation_task:
+        _obligation_task.cancel()
+        try:
+            await _obligation_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("✓ Obligation automation task cancelled")
 
     await db_manager.close()
     logger.info("✓ Database connections closed")

@@ -32,6 +32,10 @@ from app.schemas.obligation import (
 )
 from app.services.obligation.processor import ObligationProcessor
 from app.services.obligation.generator import ObligationGenerator
+from app.services.obligation.activity_notification import (
+    send_due_soon_notifications_for_obligation,
+    upsert_obligation_activity,
+)
 from app.websockets.manager import manager as websocket_manager
 
 router = APIRouter()
@@ -516,6 +520,19 @@ async def create_obligation(
         )
     )
 
+    created_for_sync = await repo.get_by_id_with_relations(obligation.id, include_deleted=True)
+    if created_for_sync:
+        await upsert_obligation_activity(
+            db,
+            created_for_sync,
+            preferred_user_id=current_user.id,
+        )
+        await send_due_soon_notifications_for_obligation(
+            db,
+            created_for_sync,
+            reminder_days=5,
+        )
+
     await db.commit()
     created = await repo.get_by_id_with_relations(obligation.id)
     if not created:
@@ -595,6 +612,17 @@ async def update_obligation(
             user_id=current_user.id,
             extra_data={"before": before, "after": after},
         )
+    )
+
+    await upsert_obligation_activity(
+        db,
+        obligation,
+        preferred_user_id=current_user.id,
+    )
+    await send_due_soon_notifications_for_obligation(
+        db,
+        obligation,
+        reminder_days=5,
     )
 
     await db.commit()
@@ -693,6 +721,17 @@ async def restore_obligation(
             user_id=current_user.id,
             extra_data={"restored_from_trash": True},
         )
+    )
+
+    await upsert_obligation_activity(
+        db,
+        obligation,
+        preferred_user_id=current_user.id,
+    )
+    await send_due_soon_notifications_for_obligation(
+        db,
+        obligation,
+        reminder_days=5,
     )
 
     await db.commit()
