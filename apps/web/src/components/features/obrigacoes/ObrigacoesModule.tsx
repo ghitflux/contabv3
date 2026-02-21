@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
+import { DatePickerField } from '@/components/ui/DatePickerField';
 import { pageTransition } from "@/lib/animations";
 import {
   Accordion,
@@ -14,6 +15,8 @@ import {
   Progress,
   Select,
   SelectItem,
+  Tab,
+  Tabs,
 } from '@/heroui';
 import { CheckCircleIcon, DownloadIcon, RefreshIcon, SearchIcon } from '@/lib/icons';
 import { useMemo, useState } from 'react';
@@ -82,6 +85,8 @@ const REGIME_ORDER = [
 ];
 
 const statusButtonClass = 'bg-slate-900 hover:bg-slate-800 text-white';
+const QUICK_LETTERS = ['todos', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
+type MatrixCategory = 'clients' | 'office';
 
 const formatDueDate = (value?: string) => {
   if (!value) return '-';
@@ -103,11 +108,17 @@ export function ObrigacoesModule() {
   const [competency, setCompetency] = useState(
     `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`
   );
+  const [categoryTab, setCategoryTab] = useState<MatrixCategory>('clients');
   const [search, setSearch] = useState('');
+  const [startsWith, setStartsWith] = useState<string>('todos');
   const [regimeFilter, setRegimeFilter] = useState<string>('todos');
   const [tipoFilter, setTipoFilter] = useState<string>('todos');
+  const [dueDateFrom, setDueDateFrom] = useState('');
+  const [dueDateTo, setDueDateTo] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedObligation, setSelectedObligation] = useState<ObligationResponse | null>(null);
+  const normalizedSearch = search.trim();
+  const invalidPeriod = Boolean(dueDateFrom && dueDateTo && dueDateFrom > dueDateTo);
 
   // Parse competency to get month and year
   const [yearStr, monthStr] = competency.split('-');
@@ -118,26 +129,39 @@ export function ObrigacoesModule() {
   const { data: matrixData, loading, error, fetchMatrix, undoObligation } = useObligationsMatrix({
     month,
     year,
-    search: search.trim() || undefined,
+    search: normalizedSearch || undefined,
+    startsWith: categoryTab === 'clients' && startsWith !== 'todos' ? startsWith : undefined,
+    category: categoryTab,
+    dueDateFrom: invalidPeriod ? undefined : dueDateFrom || undefined,
+    dueDateTo: invalidPeriod ? undefined : dueDateTo || undefined,
   });
 
   const filteredRows = useMemo(() => {
     return matrixData.filter((row) => {
+      if (categoryTab === 'office') {
+        return true;
+      }
       if (regimeFilter !== 'todos' && row.client_regime_tributario !== regimeFilter) {
         return false;
       }
       if (tipoFilter !== 'todos' && row.client_tipo_empresa !== tipoFilter) {
         return false;
       }
-      if (!search) return true;
+      if (!normalizedSearch) return true;
       return (
-        row.client_name.toLowerCase().includes(search.toLowerCase()) ||
-        row.client_cnpj.includes(search)
+        row.client_name.toLowerCase().includes(normalizedSearch.toLowerCase()) ||
+        row.client_cnpj.includes(normalizedSearch)
       );
     });
-  }, [matrixData, regimeFilter, tipoFilter, search]);
+  }, [matrixData, categoryTab, regimeFilter, tipoFilter, normalizedSearch]);
 
-  const groupedByRegime = useMemo(() => {
+  const groupedRows = useMemo(() => {
+    if (categoryTab === 'office') {
+      return {
+        escritorio: filteredRows,
+      };
+    }
+
     const groups: Record<string, typeof filteredRows> = {};
     for (const row of filteredRows) {
       const key = row.client_regime_tributario || 'indefinido';
@@ -147,14 +171,26 @@ export function ObrigacoesModule() {
       groups[key].push(row);
     }
     return groups;
-  }, [filteredRows]);
+  }, [filteredRows, categoryTab]);
 
-  const orderedRegimes = useMemo(() => {
-    const extra = Object.keys(groupedByRegime).filter(
+  const orderedGroups = useMemo(() => {
+    if (categoryTab === 'office') {
+      return ['escritorio'];
+    }
+    const extra = Object.keys(groupedRows).filter(
       (regime) => !REGIME_ORDER.includes(regime as RegimeTributario)
     );
     return [...REGIME_ORDER, ...extra] as string[];
-  }, [groupedByRegime]);
+  }, [groupedRows, categoryTab]);
+
+  const resetFilters = () => {
+    setSearch('');
+    setStartsWith('todos');
+    setRegimeFilter('todos');
+    setTipoFilter('todos');
+    setDueDateFrom('');
+    setDueDateTo('');
+  };
 
   const handleOpenModal = (row: typeof matrixData[number], obligation: (typeof row.obligations)[number]) => {
     if (!obligation?.id) {
@@ -225,6 +261,310 @@ export function ObrigacoesModule() {
     }
   };
 
+  const emptyStateLabel =
+    categoryTab === 'office'
+      ? 'Nenhuma obrigação do escritório encontrada para os filtros selecionados.'
+      : 'Nenhuma empresa encontrada para os filtros selecionados.';
+
+  const renderPanelContent = () => (
+    <Card className="mt-6">
+      <CardBody className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-end">
+          <MonthYearPicker
+            label="Competência"
+            value={competency}
+            onChange={setCompetency}
+            size="sm"
+          />
+          <DatePickerField
+            label="Vencimento de"
+            value={dueDateFrom}
+            onChange={setDueDateFrom}
+            size="sm"
+          />
+          <DatePickerField
+            label="Vencimento até"
+            value={dueDateTo}
+            onChange={setDueDateTo}
+            size="sm"
+          />
+          <Input
+            placeholder={categoryTab === 'office' ? 'Buscar no escritório...' : 'Buscar empresa...'}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            startContent={<SearchIcon className="text-default-400" />}
+            size="sm"
+            classNames={{
+              input: 'text-sm',
+              inputWrapper: 'h-10',
+            }}
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button size="sm" variant="bordered" onPress={resetFilters}>
+            Limpar filtros
+          </Button>
+        </div>
+
+        {categoryTab === 'clients' && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+              <Select
+                selectedKeys={[regimeFilter]}
+                onSelectionChange={(keys) => {
+                  const selected = Array.from(keys)[0] as string;
+                  setRegimeFilter(selected || 'todos');
+                }}
+                label="Regime"
+                size="sm"
+              >
+                {[
+                  <SelectItem key="todos">Todos os regimes</SelectItem>,
+                  ...Object.values(RegimeTributario).map((regime) => (
+                    <SelectItem key={regime}>{getRegimeLabel(regime)}</SelectItem>
+                  ))
+                ]}
+              </Select>
+              <Select
+                selectedKeys={[tipoFilter]}
+                onSelectionChange={(keys) => {
+                  const selected = Array.from(keys)[0] as string;
+                  setTipoFilter(selected || 'todos');
+                }}
+                label="Tipo de Empresa"
+                size="sm"
+              >
+                {[
+                  <SelectItem key="todos">Todos os tipos</SelectItem>,
+                  ...Object.values(TipoEmpresa).map((tipo) => (
+                    <SelectItem key={tipo}>{getTipoEmpresaLabel(tipo)}</SelectItem>
+                  ))
+                ]}
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs text-default-500">Filtro rápido por letra</p>
+              <div className="flex flex-wrap gap-1">
+                {QUICK_LETTERS.map((letter) => (
+                  <Button
+                    key={letter}
+                    size="sm"
+                    variant={startsWith === letter ? 'solid' : 'bordered'}
+                    onPress={() => setStartsWith(letter)}
+                  >
+                    {letter === 'todos' ? 'Todos' : letter}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {invalidPeriod && (
+          <div className="text-sm text-danger">
+            O período de vencimento é inválido: a data inicial deve ser anterior à final.
+          </div>
+        )}
+
+        {loading && (
+          <div className="text-center py-12">
+            <p className="text-default-500">Carregando obrigações...</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="text-center py-12">
+            <p className="text-danger">{error}</p>
+          </div>
+        )}
+
+        {!loading && !error && filteredRows.length === 0 && (
+          <div className="text-center py-12 text-default-400 text-sm">
+            {emptyStateLabel}
+          </div>
+        )}
+
+        {!loading && !error && filteredRows.length > 0 && (
+          <div className="space-y-6">
+            {orderedGroups.map((group) => {
+              const rows = groupedRows[group] || [];
+              if (rows.length === 0) return null;
+
+              return (
+                <section key={group} className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-default-800">
+                      {categoryTab === 'office' ? 'Escritório' : getRegimeLabelSafe(group)}
+                    </h3>
+                    <span className="text-xs text-default-400">
+                      {rows.length} {rows.length === 1 ? 'empresa' : 'empresas'}
+                    </span>
+                  </div>
+                  <Accordion
+                    variant="splitted"
+                    className="gap-3"
+                    selectionMode="multiple"
+                  >
+                    {rows.map((row) => {
+                      const progressValue = row.total > 0 ? (row.completed / row.total) * 100 : 0;
+                      const sortedObligations = [...row.obligations].sort((a, b) => {
+                        const aDate = a.due_date ? new Date(a.due_date).getTime() : 0;
+                        const bDate = b.due_date ? new Date(b.due_date).getTime() : 0;
+                        return aDate - bDate;
+                      });
+
+                      return (
+                        <AccordionItem
+                          key={row.client_id}
+                          aria-label={row.client_name}
+                          title={
+                            <div className="flex w-full flex-wrap items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="font-semibold text-sm text-default-900">
+                                  {row.client_name}
+                                </p>
+                                <p className="text-xs text-default-500">{row.client_cnpj}</p>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                {row.client_tipo_empresa && (
+                                  <Chip size="sm" variant="flat" color="primary">
+                                    {getTipoEmpresaLabel(row.client_tipo_empresa)}
+                                  </Chip>
+                                )}
+                                <div className="flex items-center gap-2">
+                                  <Progress
+                                    aria-label="Progresso de obrigações"
+                                    value={progressValue}
+                                    size="sm"
+                                    className="w-24"
+                                  />
+                                  <span className="text-xs font-medium text-default-500">
+                                    {row.completed}/{row.total}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          }
+                        >
+                          {sortedObligations.length === 0 ? (
+                            <div className="py-6 text-sm text-default-400">
+                              Nenhuma obrigação gerada para esta competência.
+                            </div>
+                          ) : (
+                            <div className="overflow-x-auto">
+                              <table className="w-full border-collapse">
+                                <thead>
+                                  <tr className="border-b border-default-200 text-left text-xs uppercase text-default-500">
+                                    <th className="px-3 py-2">Obrigação</th>
+                                    <th className="px-3 py-2">Tipo</th>
+                                    <th className="px-3 py-2">Periodicidade</th>
+                                    <th className="px-3 py-2">Vencimento</th>
+                                    <th className="px-3 py-2">Status</th>
+                                    <th className="px-3 py-2 text-right">Ações</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {sortedObligations.map((obligation) => {
+                                    const category = CATEGORY_MAP[obligation.obligation_type_code || ''] || '-';
+                                    const periodicity =
+                                      RECURRENCE_LABELS[obligation.recurrence || ''] ||
+                                      obligation.recurrence ||
+                                      '-';
+                                    const statusLabel = STATUS_LABELS[obligation.status] || obligation.status;
+                                    const statusColor = STATUS_COLORS[obligation.status] || 'default';
+                                    const isCompleted = obligation.status === 'concluida';
+
+                                    return (
+                                      <tr
+                                        key={obligation.id}
+                                        className="border-b border-default-100 text-sm"
+                                      >
+                                        <td className="px-3 py-3 font-medium text-default-900">
+                                          {obligation.obligation_type_name ||
+                                            obligation.obligation_type_code ||
+                                            'Obrigação'}
+                                        </td>
+                                        <td className="px-3 py-3 text-default-600">{category}</td>
+                                        <td className="px-3 py-3 text-default-600">{periodicity}</td>
+                                        <td className="px-3 py-3 text-default-600">
+                                          {formatDueDate(obligation.due_date)}
+                                        </td>
+                                        <td className="px-3 py-3">
+                                          <Chip size="sm" variant="flat" color={statusColor}>
+                                            {statusLabel}
+                                          </Chip>
+                                        </td>
+                                        <td className="px-3 py-3 text-right">
+                                          {isCompleted ? (
+                                            <div className="flex items-center justify-end gap-1">
+                                              <Button
+                                                isIconOnly
+                                                size="sm"
+                                                variant="light"
+                                                color="success"
+                                                className="min-w-unit-6"
+                                                title="Obrigação concluída"
+                                              >
+                                                <CheckCircleIcon className="h-4 w-4" />
+                                              </Button>
+                                              <Button
+                                                isIconOnly
+                                                size="sm"
+                                                variant="light"
+                                                onPress={() => handleUndo(obligation.id)}
+                                                className="min-w-unit-6"
+                                                title="Desfazer baixa"
+                                              >
+                                                <RefreshIcon className="h-4 w-4" />
+                                              </Button>
+                                              {obligation.receipt_url && (
+                                                <Button
+                                                  isIconOnly
+                                                  size="sm"
+                                                  variant="light"
+                                                  onPress={() =>
+                                                    handleDownloadReceipt(obligation.receipt_url as string)
+                                                  }
+                                                  className="min-w-unit-6"
+                                                  title="Baixar comprovante"
+                                                >
+                                                  <DownloadIcon className="h-4 w-4" />
+                                                </Button>
+                                              )}
+                                            </div>
+                                          ) : (
+                                            <Button
+                                              size="sm"
+                                              radius="sm"
+                                              className={statusButtonClass}
+                                              onPress={() => handleOpenModal(row, obligation)}
+                                            >
+                                              Baixar
+                                            </Button>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </AccordionItem>
+                      );
+                    })}
+                  </Accordion>
+                </section>
+              );
+            })}
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  );
+
   return (
     <motion.div
       initial="hidden"
@@ -240,255 +580,18 @@ export function ObrigacoesModule() {
         </p>
       </div>
 
-      <Card>
-        <CardBody className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-end">
-            <MonthYearPicker
-              label="Competência"
-              value={competency}
-              onChange={setCompetency}
-              size="sm"
-            />
-            <Select
-              selectedKeys={[regimeFilter]}
-              onSelectionChange={(keys) => {
-                const selected = Array.from(keys)[0] as string;
-                setRegimeFilter(selected || 'todos');
-              }}
-              label="Regime"
-              size="sm"
-            >
-              {[
-                <SelectItem key="todos">Todos os regimes</SelectItem>,
-                ...Object.values(RegimeTributario).map((regime) => (
-                  <SelectItem key={regime}>{getRegimeLabel(regime)}</SelectItem>
-                ))
-              ]}
-            </Select>
-            <Select
-              selectedKeys={[tipoFilter]}
-              onSelectionChange={(keys) => {
-                const selected = Array.from(keys)[0] as string;
-                setTipoFilter(selected || 'todos');
-              }}
-              label="Tipo de Empresa"
-              size="sm"
-            >
-              {[
-                <SelectItem key="todos">Todos os tipos</SelectItem>,
-                ...Object.values(TipoEmpresa).map((tipo) => (
-                  <SelectItem key={tipo}>{getTipoEmpresaLabel(tipo)}</SelectItem>
-                ))
-              ]}
-            </Select>
-            <Input
-              placeholder="Buscar empresa..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              startContent={<SearchIcon className="text-default-400" />}
-              size="sm"
-              classNames={{
-                input: 'text-sm',
-                inputWrapper: 'h-10',
-              }}
-            />
-          </div>
-
-          {loading && (
-            <div className="text-center py-12">
-              <p className="text-default-500">Carregando obrigações...</p>
-            </div>
-          )}
-
-          {error && (
-            <div className="text-center py-12">
-              <p className="text-danger">{error}</p>
-            </div>
-          )}
-
-          {!loading && !error && filteredRows.length === 0 && (
-            <div className="text-center py-12 text-default-400 text-sm">
-              Nenhuma empresa encontrada para os filtros selecionados.
-            </div>
-          )}
-
-          {!loading && !error && filteredRows.length > 0 && (
-            <div className="space-y-6">
-              {orderedRegimes.map((regime) => {
-                const rows = groupedByRegime[regime] || [];
-                if (rows.length === 0) return null;
-
-                return (
-                  <section key={regime} className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold text-default-800">
-                        {getRegimeLabelSafe(regime)}
-                      </h3>
-                      <span className="text-xs text-default-400">
-                        {rows.length} {rows.length === 1 ? 'empresa' : 'empresas'}
-                      </span>
-                    </div>
-                    <Accordion
-                      variant="splitted"
-                      className="gap-3"
-                      selectionMode="multiple"
-                    >
-                      {rows.map((row) => {
-                        const progressValue = row.total > 0 ? (row.completed / row.total) * 100 : 0;
-                        const sortedObligations = [...row.obligations].sort((a, b) => {
-                          const aDate = a.due_date ? new Date(a.due_date).getTime() : 0;
-                          const bDate = b.due_date ? new Date(b.due_date).getTime() : 0;
-                          return aDate - bDate;
-                        });
-
-                        return (
-                          <AccordionItem
-                            key={row.client_id}
-                            aria-label={row.client_name}
-                            title={
-                              <div className="flex w-full flex-wrap items-center justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className="font-semibold text-sm text-default-900">
-                                    {row.client_name}
-                                  </p>
-                                  <p className="text-xs text-default-500">{row.client_cnpj}</p>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                  {row.client_tipo_empresa && (
-                                    <Chip size="sm" variant="flat" color="primary">
-                                      {getTipoEmpresaLabel(row.client_tipo_empresa)}
-                                    </Chip>
-                                  )}
-                                  <div className="flex items-center gap-2">
-                                    <Progress
-                                      aria-label="Progresso de obrigações"
-                                      value={progressValue}
-                                      size="sm"
-                                      className="w-24"
-                                    />
-                                    <span className="text-xs font-medium text-default-500">
-                                      {row.completed}/{row.total}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            }
-                          >
-                            {sortedObligations.length === 0 ? (
-                              <div className="py-6 text-sm text-default-400">
-                                Nenhuma obrigação gerada para esta competência.
-                              </div>
-                            ) : (
-                              <div className="overflow-x-auto">
-                                <table className="w-full border-collapse">
-                                  <thead>
-                                    <tr className="border-b border-default-200 text-left text-xs uppercase text-default-500">
-                                      <th className="px-3 py-2">Obrigação</th>
-                                      <th className="px-3 py-2">Tipo</th>
-                                      <th className="px-3 py-2">Periodicidade</th>
-                                      <th className="px-3 py-2">Vencimento</th>
-                                      <th className="px-3 py-2">Status</th>
-                                      <th className="px-3 py-2 text-right">Ações</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {sortedObligations.map((obligation) => {
-                                      const category = CATEGORY_MAP[obligation.obligation_type_code || ''] || '-';
-                                      const periodicity =
-                                        RECURRENCE_LABELS[obligation.recurrence || ''] ||
-                                        obligation.recurrence ||
-                                        '-';
-                                      const statusLabel = STATUS_LABELS[obligation.status] || obligation.status;
-                                      const statusColor = STATUS_COLORS[obligation.status] || 'default';
-                                      const isCompleted = obligation.status === 'concluida';
-
-                                      return (
-                                        <tr
-                                          key={obligation.id}
-                                          className="border-b border-default-100 text-sm"
-                                        >
-                                          <td className="px-3 py-3 font-medium text-default-900">
-                                            {obligation.obligation_type_name ||
-                                              obligation.obligation_type_code ||
-                                              'Obrigação'}
-                                          </td>
-                                          <td className="px-3 py-3 text-default-600">{category}</td>
-                                          <td className="px-3 py-3 text-default-600">{periodicity}</td>
-                                          <td className="px-3 py-3 text-default-600">
-                                            {formatDueDate(obligation.due_date)}
-                                          </td>
-                                          <td className="px-3 py-3">
-                                            <Chip size="sm" variant="flat" color={statusColor}>
-                                              {statusLabel}
-                                            </Chip>
-                                          </td>
-                                          <td className="px-3 py-3 text-right">
-                                            {isCompleted ? (
-                                              <div className="flex items-center justify-end gap-1">
-                                                <Button
-                                                  isIconOnly
-                                                  size="sm"
-                                                  variant="light"
-                                                  color="success"
-                                                  className="min-w-unit-6"
-                                                  title="Obrigação concluída"
-                                                >
-                                                  <CheckCircleIcon className="h-4 w-4" />
-                                                </Button>
-                                                <Button
-                                                  isIconOnly
-                                                  size="sm"
-                                                  variant="light"
-                                                  onPress={() => handleUndo(obligation.id)}
-                                                  className="min-w-unit-6"
-                                                  title="Desfazer baixa"
-                                                >
-                                                  <RefreshIcon className="h-4 w-4" />
-                                                </Button>
-                                                {obligation.receipt_url && (
-                                                  <Button
-                                                    isIconOnly
-                                                    size="sm"
-                                                    variant="light"
-                                                    onPress={() =>
-                                                      handleDownloadReceipt(obligation.receipt_url as string)
-                                                    }
-                                                    className="min-w-unit-6"
-                                                    title="Baixar comprovante"
-                                                  >
-                                                    <DownloadIcon className="h-4 w-4" />
-                                                  </Button>
-                                                )}
-                                              </div>
-                                            ) : (
-                                              <Button
-                                                size="sm"
-                                                radius="sm"
-                                                className={statusButtonClass}
-                                                onPress={() => handleOpenModal(row, obligation)}
-                                              >
-                                                Baixar
-                                              </Button>
-                                            )}
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
-                          </AccordionItem>
-                        );
-                      })}
-                    </Accordion>
-                  </section>
-                );
-              })}
-            </div>
-          )}
-        </CardBody>
-      </Card>
+      <Tabs
+        selectedKey={categoryTab}
+        onSelectionChange={(key) => setCategoryTab(key as MatrixCategory)}
+        color="primary"
+      >
+        <Tab key="clients" title="Empresas">
+          {renderPanelContent()}
+        </Tab>
+        <Tab key="office" title="Escritório">
+          {renderPanelContent()}
+        </Tab>
+      </Tabs>
 
       {selectedObligation && (
         <ObligationCompletionModal

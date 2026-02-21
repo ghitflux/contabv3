@@ -64,17 +64,37 @@ export const obligationsApi = {
   /**
    * Get obligations matrix for minimalist panel
    */
-  async getMatrix(month: number, year: number, search?: string): Promise<ClientMatrixRow[]> {
-    const params = new URLSearchParams({
-      month: month.toString(),
-      year: year.toString(),
+  async getMatrix(params: {
+    month: number;
+    year: number;
+    search?: string;
+    starts_with?: string;
+    category?: "clients" | "office";
+    due_date_from?: string;
+    due_date_to?: string;
+  }): Promise<ClientMatrixRow[]> {
+    const query = new URLSearchParams({
+      month: params.month.toString(),
+      year: params.year.toString(),
     });
 
-    if (search) {
-      params.append("search", search);
+    if (params.search) {
+      query.append("search", params.search);
+    }
+    if (params.starts_with) {
+      query.append("starts_with", params.starts_with);
+    }
+    if (params.category) {
+      query.append("category", params.category);
+    }
+    if (params.due_date_from) {
+      query.append("due_date_from", params.due_date_from);
+    }
+    if (params.due_date_to) {
+      query.append("due_date_to", params.due_date_to);
     }
 
-    return apiClient.get<ClientMatrixRow[]>(`/obligations/matrix?${params}`);
+    return apiClient.get<ClientMatrixRow[]>(`/obligations/matrix?${query}`);
   },
 
   /**

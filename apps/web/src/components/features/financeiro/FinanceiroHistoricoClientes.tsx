@@ -20,6 +20,7 @@ import { clientsApi } from "@/lib/api/endpoints/clients";
 import type { AuditLog } from "@/types/audit";
 import type { ClientListItem } from "@/types/client";
 import { formatDateTime } from "@/lib/masks";
+import { useAuth } from "@/hooks/auth/AuthContext";
 
 const ACTION_LABELS: Record<string, string> = {
   "transaction.create": "Lançamento criado",
@@ -39,6 +40,8 @@ const ENTITY_LABELS: Record<string, string> = {
 };
 
 export function FinanceiroHistoricoClientes() {
+  const { user } = useAuth();
+  const isCliente = user?.role === "cliente";
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [clientOptions, setClientOptions] = useState<ClientListItem[]>([]);
@@ -47,11 +50,47 @@ export function FinanceiroHistoricoClientes() {
   const [selectedOrigin, setSelectedOrigin] = useState<string>("all");
 
   useEffect(() => {
+    if (!user) return;
     let active = true;
     (async () => {
       try {
+        if (isCliente) {
+          const client = await clientsApi.getMe();
+          if (active) {
+            setClientOptions([
+              {
+                id: client.id,
+                razao_social: client.razao_social,
+                nome_fantasia: client.nome_fantasia,
+                cnpj: client.cnpj,
+                email: client.email,
+                status: client.status,
+                honorarios_mensais: client.honorarios_mensais,
+                regime_tributario: client.regime_tributario,
+                tipo_empresa: client.tipo_empresa,
+                created_at: client.created_at,
+                updated_at: client.updated_at,
+                codigo_simples: client.codigo_simples,
+                cpf_empresa: client.cpf_empresa,
+                senha_sistema: client.senha_sistema,
+                senha_gov: client.senha_gov,
+                senha_prefeitura: client.senha_prefeitura,
+                login_seg_desemp: client.login_seg_desemp,
+                senha_seg_desemp: client.senha_seg_desemp,
+                email_seg_desemp: client.email_seg_desemp,
+                senha_nfse: client.senha_nfse,
+                senha_certificado_digital: client.senha_certificado_digital,
+              },
+            ]);
+            setSelectedClientId(client.id);
+          }
+          return;
+        }
+
         const response = await clientsApi.list({ size: 0 });
-        if (active) setClientOptions(response.items);
+        if (active) {
+          setClientOptions(response.items);
+        }
       } catch (error) {
         console.error("Erro ao carregar clientes", error);
       }
@@ -59,7 +98,7 @@ export function FinanceiroHistoricoClientes() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [isCliente, user]);
 
   useEffect(() => {
     let active = true;
@@ -173,18 +212,20 @@ export function FinanceiroHistoricoClientes() {
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Select
-            label="Cliente"
-            selectedKeys={[selectedClientId]}
-            onSelectionChange={(keys) => {
-              const value = Array.from(keys)[0] as string | undefined;
-              setSelectedClientId(value ?? "all");
-            }}
-            className="min-w-[220px]"
-            items={[{ id: 'all', label: 'Todos' }, ...clientOptions.map(c => ({ id: c.id, label: c.nome_fantasia || c.razao_social }))]}
-          >
-            {(item) => <SelectItem key={item.id}>{item.label}</SelectItem>}
-          </Select>
+          {!isCliente && (
+            <Select
+              label="Cliente"
+              selectedKeys={[selectedClientId]}
+              onSelectionChange={(keys) => {
+                const value = Array.from(keys)[0] as string | undefined;
+                setSelectedClientId(value ?? "all");
+              }}
+              className="min-w-[220px]"
+              items={[{ id: "all", label: "Todos" }, ...clientOptions.map((c) => ({ id: c.id, label: c.nome_fantasia || c.razao_social }))]}
+            >
+              {(item) => <SelectItem key={item.id}>{item.label}</SelectItem>}
+            </Select>
+          )}
           <Select
             label="Tipo"
             selectedKeys={[selectedEntity]}

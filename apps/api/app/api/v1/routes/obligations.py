@@ -6,10 +6,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload
 
 from app.api.v1.deps import get_current_active_user, get_db
+from app.core.config import settings
 from app.db.models.user import User, UserRole
 from app.db.models.obligation import Obligation, ObligationStatus
 from app.db.repositories.obligation import ObligationRepository
@@ -213,7 +214,11 @@ async def get_obligations_matrix(
     current_user: Annotated[User, Depends(get_current_active_user)],
     month: int = Query(..., ge=1, le=12, description="Month"),
     year: int = Query(..., ge=2020, le=2100, description="Year"),
-    search: Optional[str] = Query(None, description="Search by company name"),
+    search: Optional[str] = Query(None, description="Search by company name, fantasy name or CNPJ"),
+    starts_with: Optional[str] = Query(None, min_length=1, max_length=1, description="Initial letter"),
+    due_date_from: Optional[date] = Query(None, description="Filter obligations with due_date >= this date"),
+    due_date_to: Optional[date] = Query(None, description="Filter obligations with due_date <= this date"),
+    category: str = Query("clients", description="Category: clients or office"),
 ):
     """
     Get obligations matrix (Companies x Obligation Types).
@@ -228,63 +233,132 @@ async def get_obligations_matrix(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin/func can access obligations matrix",
         )
-    from sqlalchemy import select, func
-    from sqlalchemy.orm import selectinload
+
+    if category not in {"clients", "office"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid category. Use 'clients' or 'office'.",
+        )
+
+    if due_date_from and due_date_to and due_date_from > due_date_to:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="due_date_from must be before or equal to due_date_to",
+        )
+
+    normalized_search = (search or "").strip()
+    normalized_starts_with = (starts_with or "").strip().upper()
+    reference_label = f"Referência: {month:02d}/{year}"
+
     from app.db.models.client import Client
-    from app.db.models.obligation import Obligation
-    from app.db.models.obligation_type import ObligationType
 
-    # Query clients
-    query = select(Client).where(Client.deleted_at.is_(None))
-    if search:
-        query = query.where(Client.razao_social.ilike(f"%{search}%"))
-    query = query.order_by(Client.razao_social)
+    clients = []
+    office_client_id = settings.OFFICE_CLIENT_ID
+    if category == "office":
+        if not office_client_id:
+            return []
+        office_stmt = select(Client).where(Client.id == office_client_id)
+        office_result = await db.execute(office_stmt)
+        office_client = office_result.scalar_one_or_none()
+        if not office_client:
+            return []
+        clients = [office_client]
+    else:
+        client_query = select(Client).where(Client.deleted_at.is_(None))
 
-    result = await db.execute(query)
-    clients = result.scalars().all()
+        if office_client_id:
+            client_query = client_query.where(Client.id != office_client_id)
 
-    # Build matrix
+        if normalized_search:
+            cnpj_digits = "".join(ch for ch in normalized_search if ch.isdigit())
+            search_conditions = [
+                Client.razao_social.ilike(f"%{normalized_search}%"),
+                Client.nome_fantasia.ilike(f"%{normalized_search}%"),
+                Client.cnpj.ilike(f"%{normalized_search}%"),
+            ]
+            if cnpj_digits:
+                search_conditions.append(
+                    func.regexp_replace(Client.cnpj, r"\D", "", "g").ilike(f"%{cnpj_digits}%")
+                )
+            client_query = client_query.where(or_(*search_conditions))
+
+        if normalized_starts_with:
+            client_query = client_query.where(
+                or_(
+                    func.upper(func.left(Client.razao_social, 1)) == normalized_starts_with,
+                    func.upper(func.left(func.coalesce(Client.nome_fantasia, ""), 1)) == normalized_starts_with,
+                )
+            )
+
+        client_query = client_query.order_by(Client.razao_social)
+        clients_result = await db.execute(client_query)
+        clients = clients_result.scalars().all()
+
+    if not clients:
+        return []
+
+    client_ids = [client.id for client in clients]
+    obligations_query = (
+        select(Obligation)
+        .options(selectinload(Obligation.obligation_type))
+        .where(
+            Obligation.client_id.in_(client_ids),
+            Obligation.deleted_at.is_(None),
+            or_(
+                Obligation.description == reference_label,
+                and_(
+                    func.extract("month", Obligation.due_date) == month,
+                    func.extract("year", Obligation.due_date) == year,
+                ),
+            ),
+        )
+        .order_by(Obligation.due_date.asc())
+    )
+
+    if due_date_from:
+        obligations_query = obligations_query.where(Obligation.due_date >= due_date_from)
+    if due_date_to:
+        obligations_query = obligations_query.where(Obligation.due_date <= due_date_to)
+
+    obligations_result = await db.execute(obligations_query)
+    obligations = obligations_result.scalars().all()
+
+    obligations_by_client: dict[UUID, list[dict]] = {}
+    for ob in obligations:
+        recurrence = None
+        if ob.obligation_type and ob.obligation_type.recurrence is not None:
+            recurrence = getattr(ob.obligation_type.recurrence, "value", ob.obligation_type.recurrence)
+
+        obligation_data = {
+            "id": str(ob.id),
+            "status": str(ob.status.value if hasattr(ob.status, "value") else ob.status),
+            "receipt_url": ob.receipt_url,
+            "due_date": ob.due_date.isoformat() if ob.due_date else None,
+            "obligation_type_name": ob.obligation_type.name if ob.obligation_type else "",
+            "obligation_type_code": ob.obligation_type.code if ob.obligation_type else "",
+            "recurrence": recurrence,
+        }
+        obligations_by_client.setdefault(ob.client_id, []).append(obligation_data)
+
     matrix = []
     for client in clients:
-        # Get client's obligations for this month/year
-        oblig_query = (
-            select(Obligation)
-            .options(selectinload(Obligation.obligation_type))
-            .where(
-                Obligation.client_id == client.id,
-                func.extract('month', Obligation.due_date) == month,
-                func.extract('year', Obligation.due_date) == year,
-            )
-        )
-        oblig_result = await db.execute(oblig_query)
-        obligations = oblig_result.scalars().all()
-
-        obligations_list = []
-        for ob in obligations:
-            obligations_list.append({
-                "id": str(ob.id),
-                "status": str(ob.status.value if hasattr(ob.status, 'value') else ob.status),
-                "receipt_url": ob.receipt_url,
-                "due_date": ob.due_date.isoformat() if ob.due_date else None,
-                "obligation_type_name": ob.obligation_type.name if ob.obligation_type else "",
-                "obligation_type_code": ob.obligation_type.code if ob.obligation_type else "",
-                "recurrence": ob.obligation_type.recurrence if ob.obligation_type else None,
-            })
-
-        # Calculate progress
+        obligations_list = obligations_by_client.get(client.id, [])
         completed = sum(1 for ob_data in obligations_list if ob_data["status"] == "concluida")
         total = len(obligations_list)
 
-        matrix.append({
-            "client_id": str(client.id),
-            "client_name": client.razao_social,
-            "client_cnpj": client.cnpj,
-            "client_regime_tributario": getattr(client.regime_tributario, "value", client.regime_tributario),
-            "client_tipo_empresa": getattr(client.tipo_empresa, "value", client.tipo_empresa),
-            "obligations": obligations_list,
-            "completed": completed,  # Flat instead of nested
-            "total": total  # Flat instead of nested
-        })
+        display_name = client.nome_fantasia or client.razao_social or "Escritório"
+        matrix.append(
+            {
+                "client_id": str(client.id),
+                "client_name": display_name,
+                "client_cnpj": client.cnpj,
+                "client_regime_tributario": getattr(client.regime_tributario, "value", client.regime_tributario),
+                "client_tipo_empresa": getattr(client.tipo_empresa, "value", client.tipo_empresa),
+                "obligations": obligations_list,
+                "completed": completed,
+                "total": total,
+            }
+        )
 
     return matrix
 

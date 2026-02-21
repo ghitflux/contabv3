@@ -28,7 +28,7 @@ export function FinanceiroModule() {
     () =>
       isAdminOrFunc
         ? ["escritorio", "por-empresa", "lancamentos", "historico"]
-        : ["por-empresa"],
+        : ["por-empresa", "historico"],
     [isAdminOrFunc]
   );
   const [activeTab, setActiveTab] = useState(availableTabs[0] || "por-empresa");
@@ -236,20 +236,18 @@ export function FinanceiroModule() {
             </motion.div>
           </Tab>
         )}
-        {isAdminOrFunc && (
-          <Tab key="historico" title="Histórico">
-            <motion.div
-              key="historico"
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              variants={fadeIn}
-              className="mt-6"
-            >
-              <FinanceiroHistoricoClientes />
-            </motion.div>
-          </Tab>
-        )}
+        <Tab key="historico" title="Histórico">
+          <motion.div
+            key="historico"
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            variants={fadeIn}
+            className="mt-6"
+          >
+            <FinanceiroHistoricoClientes />
+          </motion.div>
+        </Tab>
       </Tabs>
 
       <Modal isOpen={isExportOpen} onOpenChange={(open) => setIsExportOpen(open)}>

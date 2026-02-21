@@ -792,15 +792,13 @@ export function FinanceiroPorEmpresa({
               <Button variant="bordered" onPress={setPreviousMonthRange}>
                 Mês anterior
               </Button>
-              {isAdminOrFunc && (
-                <Button
-                  variant="bordered"
-                  onPress={() => setIsTrashModalOpen(true)}
-                  isDisabled={!selectedClient}
-                >
-                  Lixeira
-                </Button>
-              )}
+              <Button
+                variant="bordered"
+                onPress={() => setIsTrashModalOpen(true)}
+                isDisabled={!selectedClient}
+              >
+                Lixeira
+              </Button>
             </div>
           </div>
         </CardBody>

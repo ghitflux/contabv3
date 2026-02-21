@@ -89,7 +89,7 @@ async def list_transactions(
     List financial transactions with filters.
 
     - Admin/Func: Can see all transactions
-    - Client: Can only see their own transactions
+    - Client: Can only see their own transactions (including deleted, if requested)
     """
     repo = TransactionRepository(db)
 
@@ -103,11 +103,6 @@ async def list_transactions(
                 detail="Client profile not found",
             )
         client_id = client.id
-        if include_deleted or deleted_only:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Clients cannot access deleted transactions",
-            )
 
     if deleted_only:
         include_deleted = True
@@ -480,12 +475,13 @@ async def restore_transaction(
     """
     Restore a soft-deleted transaction.
 
-    Admin/Func only.
+    Admin/Func: Can restore any transaction.
+    Clients: Can restore their own transactions.
     """
-    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC, UserRole.CLIENTE]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin/func can restore transactions",
+            detail="Not authorized to restore transactions",
         )
 
     service = TransactionService(db)
@@ -496,6 +492,21 @@ async def restore_transaction(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Deleted transaction not found",
         )
+
+    if current_user.role == UserRole.CLIENTE:
+        client_repo = ClientRepository(db)
+        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
+        if not client:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Client profile not found",
+            )
+        if deleted_transaction.client_id != client.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to restore this transaction",
+            )
+
     restored = await service.restore_transaction(transaction_id)
 
     if not restored:

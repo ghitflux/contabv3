@@ -6,13 +6,14 @@ from datetime import date, datetime, time, timezone
 from typing import Annotated, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.deps import get_db, require_admin_or_func
+from app.api.v1.deps import get_current_active_user, get_db
 from app.db.models.audit import AuditLog
-from app.db.models.user import User
+from app.db.models.user import User, UserRole
+from app.db.repositories.client import ClientRepository
 from app.schemas.audit import AuditLogListResponse, AuditLogResponse
 
 router = APIRouter(prefix="/audit-logs", tags=["audit-logs"])
@@ -21,7 +22,7 @@ router = APIRouter(prefix="/audit-logs", tags=["audit-logs"])
 @router.get("", response_model=AuditLogListResponse, status_code=status.HTTP_200_OK)
 async def list_audit_logs(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: User = Depends(require_admin_or_func()),
+    current_user: User = Depends(get_current_active_user),
     client_id: Optional[UUID] = Query(None),
     user_id: Optional[UUID] = Query(None),
     action: Optional[str] = Query(None),
@@ -31,8 +32,20 @@ async def list_audit_logs(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
 ) -> AuditLogListResponse:
-    """List audit logs with optional filters (admin/func only)."""
+    """List audit logs with optional filters."""
     conditions = []
+
+    if current_user.role == UserRole.CLIENTE:
+        client_repo = ClientRepository(db)
+        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
+        if not client:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Client profile not found",
+            )
+        conditions.append(AuditLog.payload["client_id"].astext == str(client.id))
+    elif client_id:
+        conditions.append(AuditLog.payload["client_id"].astext == str(client_id))
 
     if user_id:
         conditions.append(AuditLog.user_id == user_id)
@@ -40,8 +53,6 @@ async def list_audit_logs(
         conditions.append(AuditLog.action == action)
     if entity:
         conditions.append(AuditLog.entity == entity)
-    if client_id:
-        conditions.append(AuditLog.payload["client_id"].astext == str(client_id))
     if start_date:
         start_dt = datetime.combine(start_date, time.min).replace(tzinfo=timezone.utc)
         conditions.append(AuditLog.created_at >= start_dt)

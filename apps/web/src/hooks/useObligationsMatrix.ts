@@ -28,11 +28,24 @@ interface UseObligationsMatrixOptions {
   month: number;
   year: number;
   search?: string;
+  startsWith?: string;
+  category?: "clients" | "office";
+  dueDateFrom?: string;
+  dueDateTo?: string;
   autoFetch?: boolean;
 }
 
 export function useObligationsMatrix(options: UseObligationsMatrixOptions) {
-  const { month, year, search = "", autoFetch = true } = options;
+  const {
+    month,
+    year,
+    search = "",
+    startsWith,
+    category = "clients",
+    dueDateFrom,
+    dueDateTo,
+    autoFetch = true,
+  } = options;
 
   const [data, setData] = useState<ClientMatrixRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -43,7 +56,15 @@ export function useObligationsMatrix(options: UseObligationsMatrixOptions) {
       setLoading(true);
       setError(null);
 
-      const result = await obligationsApi.getMatrix(month, year, search);
+      const result = await obligationsApi.getMatrix({
+        month,
+        year,
+        search,
+        starts_with: startsWith,
+        category,
+        due_date_from: dueDateFrom,
+        due_date_to: dueDateTo,
+      });
       setData(result);
     } catch (err) {
       const detail = (err as { data?: { detail?: string } })?.data?.detail;
@@ -58,7 +79,7 @@ export function useObligationsMatrix(options: UseObligationsMatrixOptions) {
     } finally {
       setLoading(false);
     }
-  }, [month, year, search]);
+  }, [month, year, search, startsWith, category, dueDateFrom, dueDateTo]);
 
   const completeObligation = async (obligationId: string) => {
     try {
