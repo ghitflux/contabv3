@@ -42,6 +42,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       ? [
           { name: 'Meus Dados', href: '/meus-dados', icon: UsersIcon },
           { name: 'Financeiro', href: '/financeiro', icon: CurrencyIcon },
+          { name: 'Obrigações', href: '/obrigacoes', icon: DocumentIcon },
           { name: 'Downloads', href: '/downloads', icon: DocumentIcon },
           { name: 'Relatórios', href: '/relatorios', icon: ChartIcon },
           { name: 'Atividades', href: '/atividades', icon: ClockIcon },

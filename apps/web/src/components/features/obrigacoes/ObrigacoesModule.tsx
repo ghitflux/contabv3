@@ -17,13 +17,29 @@ import {
   SelectItem,
   Tab,
   Tabs,
+  Modal,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  Textarea,
 } from '@/heroui';
 import { CheckCircleIcon, DownloadIcon, RefreshIcon, SearchIcon } from '@/lib/icons';
-import { useMemo, useState } from 'react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { ObligationCompletionModal } from './ObligationCompletionModal';
-import type { ObligationResponse } from '@/lib/api/endpoints/obligations';
+import {
+  obligationsApi,
+  type ObligationCreateRequest,
+  type ObligationResponse,
+  type ObligationTypeResponse,
+  type ObligationUpdateRequest,
+} from '@/lib/api/endpoints/obligations';
 import { useObligationsMatrix } from '@/hooks/useObligationsMatrix';
 import { RegimeTributario, TipoEmpresa, getRegimeLabel, getTipoEmpresaLabel } from '@/types/client';
+import { useAuth } from '@/hooks/auth/AuthContext';
+import { UserRole } from '@/types/user';
+import { toast } from '@/lib/toast';
 
 const RECURRENCE_LABELS: Record<string, string> = {
   mensal: 'Mensal',
@@ -77,6 +93,13 @@ const STATUS_COLORS: Record<string, 'default' | 'success' | 'warning' | 'danger'
   cancelada: 'default',
 };
 
+const PRIORITY_LABELS: Record<string, string> = {
+  baixa: 'Baixa',
+  media: 'Média',
+  alta: 'Alta',
+  urgente: 'Urgente',
+};
+
 const REGIME_ORDER = [
   RegimeTributario.MEI,
   RegimeTributario.SIMPLES_NACIONAL,
@@ -87,6 +110,13 @@ const REGIME_ORDER = [
 const statusButtonClass = 'bg-slate-900 hover:bg-slate-800 text-white';
 const QUICK_LETTERS = ['todos', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
 type MatrixCategory = 'clients' | 'office';
+type ObligationEditorForm = {
+  obligation_type_id: string;
+  due_date: string;
+  priority: "baixa" | "media" | "alta" | "urgente";
+  status: "pendente" | "em_andamento" | "concluida" | "atrasada" | "cancelada";
+  description: string;
+};
 
 const formatDueDate = (value?: string) => {
   if (!value) return '-';
@@ -104,6 +134,10 @@ const getRegimeLabelSafe = (regime?: string) => {
 };
 
 export function ObrigacoesModule() {
+  const { user } = useAuth();
+  const isCliente = user?.role === UserRole.CLIENTE;
+  const canManageObligations =
+    user?.role === UserRole.ADMIN || user?.role === UserRole.FUNC || user?.role === UserRole.CLIENTE;
   const currentDate = new Date();
   const [competency, setCompetency] = useState(
     `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`
@@ -117,6 +151,23 @@ export function ObrigacoesModule() {
   const [dueDateTo, setDueDateTo] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedObligation, setSelectedObligation] = useState<ObligationResponse | null>(null);
+  const [obligationTypes, setObligationTypes] = useState<ObligationTypeResponse[]>([]);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isEditorLoading, setIsEditorLoading] = useState(false);
+  const [isSavingObligation, setIsSavingObligation] = useState(false);
+  const [editingObligationId, setEditingObligationId] = useState<string | null>(null);
+  const [selectedRowForEditor, setSelectedRowForEditor] = useState<{
+    client_id: string;
+    client_name: string;
+    client_cnpj: string;
+  } | null>(null);
+  const [editorForm, setEditorForm] = useState<ObligationEditorForm>({
+    obligation_type_id: '',
+    due_date: '',
+    priority: 'media',
+    status: 'pendente',
+    description: '',
+  });
   const normalizedSearch = search.trim();
   const invalidPeriod = Boolean(dueDateFrom && dueDateTo && dueDateFrom > dueDateTo);
 
@@ -135,6 +186,30 @@ export function ObrigacoesModule() {
     dueDateFrom: invalidPeriod ? undefined : dueDateFrom || undefined,
     dueDateTo: invalidPeriod ? undefined : dueDateTo || undefined,
   });
+
+  useEffect(() => {
+    if (!isCliente) return;
+    if (categoryTab === 'office') {
+      setCategoryTab('clients');
+    }
+  }, [isCliente, categoryTab]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const items = await obligationsApi.getObligationTypes(true);
+        if (active) {
+          setObligationTypes(items);
+        }
+      } catch (err) {
+        console.error('Erro ao carregar tipos de obrigação', err);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const filteredRows = useMemo(() => {
     return matrixData.filter((row) => {
@@ -190,6 +265,135 @@ export function ObrigacoesModule() {
     setTipoFilter('todos');
     setDueDateFrom('');
     setDueDateTo('');
+  };
+
+  const extractApiErrorMessage = (error: unknown, fallback: string) => {
+    const detail = (error as { data?: { detail?: string } })?.data?.detail;
+    if (typeof detail === 'string' && detail.trim()) return detail;
+    if (error instanceof Error && error.message) return error.message;
+    return fallback;
+  };
+
+  const closeEditor = () => {
+    if (isSavingObligation) return;
+    setIsEditorOpen(false);
+    setEditingObligationId(null);
+    setSelectedRowForEditor(null);
+    setIsEditorLoading(false);
+    setEditorForm({
+      obligation_type_id: '',
+      due_date: '',
+      priority: 'media',
+      status: 'pendente',
+      description: '',
+    });
+  };
+
+  const openCreateEditor = (row: {
+    client_id: string;
+    client_name: string;
+    client_cnpj: string;
+  }) => {
+    const defaultDueDate = dueDateFrom || dueDateTo || `${year}-${String(month).padStart(2, '0')}-20`;
+    setSelectedRowForEditor(row);
+    setEditingObligationId(null);
+    setEditorForm({
+      obligation_type_id: '',
+      due_date: defaultDueDate,
+      priority: 'media',
+      status: 'pendente',
+      description: `Referência: ${String(month).padStart(2, '0')}/${year}`,
+    });
+    setIsEditorOpen(true);
+  };
+
+  const openEditEditor = async (
+    row: {
+      client_id: string;
+      client_name: string;
+      client_cnpj: string;
+    },
+    obligationId: string
+  ) => {
+    try {
+      setSelectedRowForEditor(row);
+      setEditingObligationId(obligationId);
+      setIsEditorOpen(true);
+      setIsEditorLoading(true);
+      const obligation = await obligationsApi.getObligationById(obligationId);
+      setEditorForm({
+        obligation_type_id: obligation.obligation_type_id,
+        due_date: obligation.due_date.split('T')[0] || obligation.due_date,
+        priority: (obligation.priority as ObligationEditorForm['priority']) || 'media',
+        status: (obligation.status as ObligationEditorForm['status']) || 'pendente',
+        description: obligation.description || '',
+      });
+    } catch (error) {
+      console.error('Erro ao carregar obrigação para edição', error);
+      toast.error(extractApiErrorMessage(error, 'Não foi possível carregar os dados da obrigação.'));
+      closeEditor();
+    } finally {
+      setIsEditorLoading(false);
+    }
+  };
+
+  const handleSaveObligation = async () => {
+    if (!selectedRowForEditor) {
+      toast.error('Selecione a empresa para salvar a obrigação.');
+      return;
+    }
+    if (!editorForm.due_date) {
+      toast.error('Informe o vencimento da obrigação.');
+      return;
+    }
+    if (!editingObligationId && !editorForm.obligation_type_id) {
+      toast.error('Selecione o tipo de obrigação.');
+      return;
+    }
+
+    try {
+      setIsSavingObligation(true);
+      if (editingObligationId) {
+        const payload: ObligationUpdateRequest = {
+          due_date: editorForm.due_date,
+          priority: editorForm.priority,
+          status: editorForm.status,
+          description: editorForm.description || null,
+        };
+        await obligationsApi.updateObligation(editingObligationId, payload);
+        toast.success('Obrigação atualizada com sucesso.');
+      } else {
+        const payload: ObligationCreateRequest = {
+          client_id: selectedRowForEditor.client_id,
+          obligation_type_id: editorForm.obligation_type_id,
+          due_date: editorForm.due_date,
+          priority: editorForm.priority,
+          description: editorForm.description || null,
+        };
+        await obligationsApi.createObligation(payload);
+        toast.success('Obrigação criada com sucesso.');
+      }
+      closeEditor();
+      await fetchMatrix();
+    } catch (error) {
+      console.error('Erro ao salvar obrigação', error);
+      toast.error(extractApiErrorMessage(error, 'Não foi possível salvar a obrigação.'));
+    } finally {
+      setIsSavingObligation(false);
+    }
+  };
+
+  const handleDeleteObligation = async (obligationId: string) => {
+    const confirmed = window.confirm('Tem certeza que deseja excluir esta obrigação?');
+    if (!confirmed) return;
+    try {
+      await obligationsApi.deleteObligation(obligationId);
+      toast.success('Obrigação excluída com sucesso.');
+      await fetchMatrix();
+    } catch (error) {
+      console.error('Erro ao excluir obrigação', error);
+      toast.error(extractApiErrorMessage(error, 'Não foi possível excluir a obrigação.'));
+    }
   };
 
   const handleOpenModal = (row: typeof matrixData[number], obligation: (typeof row.obligations)[number]) => {
@@ -448,110 +652,167 @@ export function ObrigacoesModule() {
                             </div>
                           }
                         >
-                          {sortedObligations.length === 0 ? (
-                            <div className="py-6 text-sm text-default-400">
-                              Nenhuma obrigação gerada para esta competência.
-                            </div>
-                          ) : (
-                            <div className="overflow-x-auto">
-                              <table className="w-full border-collapse">
-                                <thead>
-                                  <tr className="border-b border-default-200 text-left text-xs uppercase text-default-500">
-                                    <th className="px-3 py-2">Obrigação</th>
-                                    <th className="px-3 py-2">Tipo</th>
-                                    <th className="px-3 py-2">Periodicidade</th>
-                                    <th className="px-3 py-2">Vencimento</th>
-                                    <th className="px-3 py-2">Status</th>
-                                    <th className="px-3 py-2 text-right">Ações</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {sortedObligations.map((obligation) => {
-                                    const category = CATEGORY_MAP[obligation.obligation_type_code || ''] || '-';
-                                    const periodicity =
-                                      RECURRENCE_LABELS[obligation.recurrence || ''] ||
-                                      obligation.recurrence ||
-                                      '-';
-                                    const statusLabel = STATUS_LABELS[obligation.status] || obligation.status;
-                                    const statusColor = STATUS_COLORS[obligation.status] || 'default';
-                                    const isCompleted = obligation.status === 'concluida';
+                          <div className="space-y-3">
+                            {canManageObligations && (
+                              <div className="flex justify-end">
+                                <Button
+                                  size="sm"
+                                  variant="flat"
+                                  color="primary"
+                                  startContent={<Plus className="h-4 w-4" />}
+                                  onPress={() =>
+                                    openCreateEditor({
+                                      client_id: row.client_id,
+                                      client_name: row.client_name,
+                                      client_cnpj: row.client_cnpj,
+                                    })
+                                  }
+                                >
+                                  Nova Obrigação
+                                </Button>
+                              </div>
+                            )}
 
-                                    return (
-                                      <tr
-                                        key={obligation.id}
-                                        className="border-b border-default-100 text-sm"
-                                      >
-                                        <td className="px-3 py-3 font-medium text-default-900">
-                                          {obligation.obligation_type_name ||
-                                            obligation.obligation_type_code ||
-                                            'Obrigação'}
-                                        </td>
-                                        <td className="px-3 py-3 text-default-600">{category}</td>
-                                        <td className="px-3 py-3 text-default-600">{periodicity}</td>
-                                        <td className="px-3 py-3 text-default-600">
-                                          {formatDueDate(obligation.due_date)}
-                                        </td>
-                                        <td className="px-3 py-3">
-                                          <Chip size="sm" variant="flat" color={statusColor}>
-                                            {statusLabel}
-                                          </Chip>
-                                        </td>
-                                        <td className="px-3 py-3 text-right">
-                                          {isCompleted ? (
+                            {sortedObligations.length === 0 ? (
+                              <div className="py-6 text-sm text-default-400">
+                                Nenhuma obrigação gerada para esta competência.
+                              </div>
+                            ) : (
+                              <div className="overflow-x-auto">
+                                <table className="w-full border-collapse">
+                                  <thead>
+                                    <tr className="border-b border-default-200 text-left text-xs uppercase text-default-500">
+                                      <th className="px-3 py-2">Obrigação</th>
+                                      <th className="px-3 py-2">Tipo</th>
+                                      <th className="px-3 py-2">Periodicidade</th>
+                                      <th className="px-3 py-2">Vencimento</th>
+                                      <th className="px-3 py-2">Status</th>
+                                      <th className="px-3 py-2 text-right">Ações</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {sortedObligations.map((obligation) => {
+                                      const category = CATEGORY_MAP[obligation.obligation_type_code || ''] || '-';
+                                      const periodicity =
+                                        RECURRENCE_LABELS[obligation.recurrence || ''] ||
+                                        obligation.recurrence ||
+                                        '-';
+                                      const statusLabel = STATUS_LABELS[obligation.status] || obligation.status;
+                                      const statusColor = STATUS_COLORS[obligation.status] || 'default';
+                                      const isCompleted = obligation.status === 'concluida';
+
+                                      return (
+                                        <tr
+                                          key={obligation.id}
+                                          className="border-b border-default-100 text-sm"
+                                        >
+                                          <td className="px-3 py-3 font-medium text-default-900">
+                                            {obligation.obligation_type_name ||
+                                              obligation.obligation_type_code ||
+                                              'Obrigação'}
+                                          </td>
+                                          <td className="px-3 py-3 text-default-600">{category}</td>
+                                          <td className="px-3 py-3 text-default-600">{periodicity}</td>
+                                          <td className="px-3 py-3 text-default-600">
+                                            {formatDueDate(obligation.due_date)}
+                                          </td>
+                                          <td className="px-3 py-3">
+                                            <Chip size="sm" variant="flat" color={statusColor}>
+                                              {statusLabel}
+                                            </Chip>
+                                          </td>
+                                          <td className="px-3 py-3 text-right">
                                             <div className="flex items-center justify-end gap-1">
-                                              <Button
-                                                isIconOnly
-                                                size="sm"
-                                                variant="light"
-                                                color="success"
-                                                className="min-w-unit-6"
-                                                title="Obrigação concluída"
-                                              >
-                                                <CheckCircleIcon className="h-4 w-4" />
-                                              </Button>
-                                              <Button
-                                                isIconOnly
-                                                size="sm"
-                                                variant="light"
-                                                onPress={() => handleUndo(obligation.id)}
-                                                className="min-w-unit-6"
-                                                title="Desfazer baixa"
-                                              >
-                                                <RefreshIcon className="h-4 w-4" />
-                                              </Button>
-                                              {obligation.receipt_url && (
+                                              {isCompleted ? (
+                                                <>
+                                                  <Button
+                                                    isIconOnly
+                                                    size="sm"
+                                                    variant="light"
+                                                    color="success"
+                                                    className="min-w-unit-6"
+                                                    title="Obrigação concluída"
+                                                  >
+                                                    <CheckCircleIcon className="h-4 w-4" />
+                                                  </Button>
+                                                  <Button
+                                                    isIconOnly
+                                                    size="sm"
+                                                    variant="light"
+                                                    onPress={() => handleUndo(obligation.id)}
+                                                    className="min-w-unit-6"
+                                                    title="Desfazer baixa"
+                                                  >
+                                                    <RefreshIcon className="h-4 w-4" />
+                                                  </Button>
+                                                  {obligation.receipt_url && (
+                                                    <Button
+                                                      isIconOnly
+                                                      size="sm"
+                                                      variant="light"
+                                                      onPress={() =>
+                                                        handleDownloadReceipt(obligation.receipt_url as string)
+                                                      }
+                                                      className="min-w-unit-6"
+                                                      title="Baixar comprovante"
+                                                    >
+                                                      <DownloadIcon className="h-4 w-4" />
+                                                    </Button>
+                                                  )}
+                                                </>
+                                              ) : (
                                                 <Button
-                                                  isIconOnly
                                                   size="sm"
-                                                  variant="light"
-                                                  onPress={() =>
-                                                    handleDownloadReceipt(obligation.receipt_url as string)
-                                                  }
-                                                  className="min-w-unit-6"
-                                                  title="Baixar comprovante"
+                                                  radius="sm"
+                                                  className={statusButtonClass}
+                                                  onPress={() => handleOpenModal(row, obligation)}
                                                 >
-                                                  <DownloadIcon className="h-4 w-4" />
+                                                  Baixar
                                                 </Button>
                                               )}
+
+                                              {canManageObligations && (
+                                                <>
+                                                  <Button
+                                                    isIconOnly
+                                                    size="sm"
+                                                    variant="light"
+                                                    onPress={() =>
+                                                      openEditEditor(
+                                                        {
+                                                          client_id: row.client_id,
+                                                          client_name: row.client_name,
+                                                          client_cnpj: row.client_cnpj,
+                                                        },
+                                                        obligation.id
+                                                      )
+                                                    }
+                                                    title="Editar obrigação"
+                                                  >
+                                                    <Pencil className="h-4 w-4" />
+                                                  </Button>
+                                                  <Button
+                                                    isIconOnly
+                                                    size="sm"
+                                                    variant="light"
+                                                    color="danger"
+                                                    onPress={() => handleDeleteObligation(obligation.id)}
+                                                    title="Excluir obrigação"
+                                                  >
+                                                    <Trash2 className="h-4 w-4" />
+                                                  </Button>
+                                                </>
+                                              )}
                                             </div>
-                                          ) : (
-                                            <Button
-                                              size="sm"
-                                              radius="sm"
-                                              className={statusButtonClass}
-                                              onPress={() => handleOpenModal(row, obligation)}
-                                            >
-                                              Baixar
-                                            </Button>
-                                          )}
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
                         </AccordionItem>
                       );
                     })}
@@ -588,10 +849,113 @@ export function ObrigacoesModule() {
         <Tab key="clients" title="Empresas">
           {renderPanelContent()}
         </Tab>
-        <Tab key="office" title="Escritório">
-          {renderPanelContent()}
-        </Tab>
+        {!isCliente && (
+          <Tab key="office" title="Escritório">
+            {renderPanelContent()}
+          </Tab>
+        )}
       </Tabs>
+
+      <Modal isOpen={isEditorOpen} onOpenChange={(open) => (!open ? closeEditor() : null)}>
+        <ModalContent>
+          <>
+            <ModalHeader>
+              {editingObligationId ? 'Editar Obrigação' : 'Nova Obrigação'}
+            </ModalHeader>
+            <ModalBody className="space-y-3">
+              {selectedRowForEditor && (
+                <div className="rounded-medium border border-default-200 p-3 text-sm">
+                  <p className="font-semibold text-default-800">{selectedRowForEditor.client_name}</p>
+                  <p className="text-default-500">{selectedRowForEditor.client_cnpj}</p>
+                </div>
+              )}
+
+              {isEditorLoading ? (
+                <p className="text-sm text-default-500">Carregando dados da obrigação...</p>
+              ) : (
+                <>
+                  <Select
+                    label="Tipo de Obrigação"
+                    selectedKeys={editorForm.obligation_type_id ? [editorForm.obligation_type_id] : []}
+                    onSelectionChange={(keys) => {
+                      const value = Array.from(keys)[0] as string;
+                      setEditorForm((prev) => ({
+                        ...prev,
+                        obligation_type_id: value || '',
+                      }));
+                    }}
+                    isDisabled={Boolean(editingObligationId)}
+                  >
+                    {obligationTypes.map((type) => (
+                      <SelectItem key={type.id}>{type.name}</SelectItem>
+                    ))}
+                  </Select>
+
+                  <DatePickerField
+                    label="Vencimento"
+                    value={editorForm.due_date}
+                    onChange={(value) => setEditorForm((prev) => ({ ...prev, due_date: value }))}
+                    size="md"
+                  />
+
+                  <Select
+                    label="Prioridade"
+                    selectedKeys={[editorForm.priority]}
+                    onSelectionChange={(keys) => {
+                      const value = Array.from(keys)[0] as ObligationEditorForm['priority'];
+                      if (value) {
+                        setEditorForm((prev) => ({ ...prev, priority: value }));
+                      }
+                    }}
+                  >
+                    {Object.entries(PRIORITY_LABELS).map(([key, label]) => (
+                      <SelectItem key={key}>{label}</SelectItem>
+                    ))}
+                  </Select>
+
+                  {editingObligationId && (
+                    <Select
+                      label="Status"
+                      selectedKeys={[editorForm.status]}
+                      onSelectionChange={(keys) => {
+                        const value = Array.from(keys)[0] as ObligationEditorForm['status'];
+                        if (value) {
+                          setEditorForm((prev) => ({ ...prev, status: value }));
+                        }
+                      }}
+                    >
+                      {Object.entries(STATUS_LABELS).map(([key, label]) => (
+                        <SelectItem key={key}>{label}</SelectItem>
+                      ))}
+                    </Select>
+                  )}
+
+                  <Textarea
+                    label="Descrição"
+                    placeholder="Informações adicionais da obrigação"
+                    value={editorForm.description}
+                    onValueChange={(value) => setEditorForm((prev) => ({ ...prev, description: value }))}
+                    minRows={3}
+                  />
+                </>
+              )}
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="light" onPress={closeEditor} isDisabled={isSavingObligation}>
+                Cancelar
+              </Button>
+              <Button
+                color="primary"
+                onPress={handleSaveObligation}
+                isLoading={isSavingObligation}
+                isDisabled={isEditorLoading}
+              >
+                {editingObligationId ? 'Salvar Alterações' : 'Criar Obrigação'}
+              </Button>
+            </ModalFooter>
+          </>
+        </ModalContent>
+      </Modal>
 
       {selectedObligation && (
         <ObligationCompletionModal

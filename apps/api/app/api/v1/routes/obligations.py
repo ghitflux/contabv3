@@ -11,8 +11,10 @@ from sqlalchemy.orm import selectinload
 
 from app.api.v1.deps import get_current_active_user, get_db
 from app.core.config import settings
+from app.db.models.obligation_event import ObligationEvent, ObligationEventType
 from app.db.models.user import User, UserRole
 from app.db.models.obligation import Obligation, ObligationStatus
+from app.db.models.obligation_type import ObligationType
 from app.db.repositories.obligation import ObligationRepository
 from app.db.repositories.obligation_event import ObligationEventRepository
 from app.db.repositories.client import ClientRepository
@@ -24,6 +26,7 @@ from app.schemas.obligation import (
     ObligationGenerateRequest,
     ObligationGenerateResponse,
     ObligationReceiptRequest,
+    ObligationUpdate,
     ObligationUpdateDueDateRequest,
     ObligationCancelRequest,
 )
@@ -32,6 +35,30 @@ from app.services.obligation.generator import ObligationGenerator
 from app.websockets.manager import manager as websocket_manager
 
 router = APIRouter()
+
+
+async def _get_current_user_client(db: AsyncSession, current_user: User):
+    client_repo = ClientRepository(db)
+    client = await client_repo.get_by_user_id(current_user.id, current_user.email)
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Client profile not found",
+        )
+    return client
+
+
+async def _ensure_client_obligation_access(
+    db: AsyncSession, current_user: User, obligation: Obligation
+) -> None:
+    if current_user.role != UserRole.CLIENTE:
+        return
+    client = await _get_current_user_client(db, current_user)
+    if obligation.client_id != client.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this obligation",
+        )
 
 
 def _obligation_to_response(obligation) -> ObligationResponse:
@@ -78,14 +105,7 @@ async def list_obligations(
 
     # If user is client, override client_id filter
     if current_user.role == UserRole.CLIENTE:
-        # Get client associated with this user
-        client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
-        if not client:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Client profile not found",
-            )
+        client = await _get_current_user_client(db, current_user)
         client_id = client.id
     # Admin/Func can see all obligations if client_id is not provided
 
@@ -228,10 +248,10 @@ async def get_obligations_matrix(
     - Each client's obligations for the specified month/year
     - Progress counter
     """
-    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC, UserRole.CLIENTE]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin/func can access obligations matrix",
+            detail="Not authorized to access obligations matrix",
         )
 
     if category not in {"clients", "office"}:
@@ -253,8 +273,17 @@ async def get_obligations_matrix(
     from app.db.models.client import Client
 
     clients = []
+    if current_user.role == UserRole.CLIENTE:
+        if category == "office":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Clients cannot access office obligations",
+            )
+        client = await _get_current_user_client(db, current_user)
+        clients = [client]
+
     office_client_id = settings.OFFICE_CLIENT_ID
-    if category == "office":
+    if not clients and category == "office":
         if not office_client_id:
             return []
         office_stmt = select(Client).where(Client.id == office_client_id)
@@ -263,7 +292,7 @@ async def get_obligations_matrix(
         if not office_client:
             return []
         clients = [office_client]
-    else:
+    elif not clients:
         client_query = select(Client).where(Client.deleted_at.is_(None))
 
         if office_client_id:
@@ -373,23 +402,232 @@ async def get_obligation(
     repo = ObligationRepository(db)
     obligation = await repo.get_by_id_with_relations(obligation_id)
 
-    if not obligation:
+    if not obligation or obligation.deleted_at is not None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Obligation not found",
         )
 
     # Check access: clients can only see their own
-    if current_user.role == UserRole.CLIENTE:
-        client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
-        if not client or obligation.client_id != client.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to access this obligation",
-            )
+    await _ensure_client_obligation_access(db, current_user, obligation)
 
     return _obligation_to_response(obligation)
+
+
+@router.post("", response_model=ObligationResponse, status_code=status.HTTP_201_CREATED)
+async def create_obligation(
+    data: ObligationCreate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """
+    Create an obligation.
+
+    - Admin/Func: can create for any company (including office client)
+    - Client: can create only for own company
+    """
+    repo = ObligationRepository(db)
+    client_repo = ClientRepository(db)
+
+    if current_user.role == UserRole.CLIENTE:
+        client = await _get_current_user_client(db, current_user)
+        data = data.model_copy(update={"client_id": client.id})
+    elif current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to create obligations",
+        )
+
+    client = await client_repo.get(data.client_id)
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Client not found",
+        )
+
+    obligation_type = await db.scalar(
+        select(ObligationType).where(ObligationType.id == data.obligation_type_id)
+    )
+    if not obligation_type:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Obligation type not found",
+        )
+
+    duplicate = await db.scalar(
+        select(Obligation).where(
+            Obligation.client_id == data.client_id,
+            Obligation.obligation_type_id == data.obligation_type_id,
+            Obligation.due_date == data.due_date,
+            Obligation.deleted_at.is_(None),
+        )
+    )
+    if duplicate:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An obligation with same type and due date already exists for this client",
+        )
+
+    obligation = Obligation(
+        client_id=data.client_id,
+        obligation_type_id=data.obligation_type_id,
+        due_date=data.due_date,
+        description=data.description,
+        priority=data.priority,
+        status=ObligationStatus.PENDENTE,
+    )
+    await repo.create(obligation)
+
+    event_repo = ObligationEventRepository(db)
+    await event_repo.create(
+        ObligationEvent(
+            obligation_id=obligation.id,
+            event_type=ObligationEventType.CREATED,
+            description="Obligation created manually",
+            user_id=current_user.id,
+            extra_data={
+                "source": "manual",
+                "due_date": data.due_date.isoformat(),
+                "priority": data.priority.value if hasattr(data.priority, "value") else str(data.priority),
+            },
+        )
+    )
+
+    await db.commit()
+    created = await repo.get_by_id_with_relations(obligation.id)
+    if not created:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Obligation not found after creation",
+        )
+    return _obligation_to_response(created)
+
+
+@router.put("/{obligation_id}", response_model=ObligationResponse)
+async def update_obligation(
+    obligation_id: UUID,
+    data: ObligationUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """
+    Update an obligation.
+
+    - Admin/Func: can update any obligation
+    - Client: can update only own obligations
+    """
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC, UserRole.CLIENTE]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update obligations",
+        )
+
+    repo = ObligationRepository(db)
+    obligation = await repo.get_by_id_with_relations(obligation_id)
+    if not obligation or obligation.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Obligation not found",
+        )
+
+    await _ensure_client_obligation_access(db, current_user, obligation)
+
+    before = {
+        "status": obligation.status.value if hasattr(obligation.status, "value") else str(obligation.status),
+        "priority": obligation.priority.value if hasattr(obligation.priority, "value") else str(obligation.priority),
+        "description": obligation.description,
+        "due_date": obligation.due_date.isoformat() if obligation.due_date else None,
+    }
+
+    if data.status is not None:
+        obligation.status = data.status
+        if data.status == ObligationStatus.CONCLUIDA and obligation.completed_at is None:
+            obligation.completed_at = datetime.utcnow()
+            obligation.completed_by = current_user.id
+        if data.status != ObligationStatus.CONCLUIDA:
+            obligation.completed_at = None
+            obligation.completed_by = None
+    if data.priority is not None:
+        obligation.priority = data.priority
+    if data.description is not None:
+        obligation.description = data.description
+    if data.due_date is not None:
+        obligation.due_date = data.due_date
+
+    await repo.update(obligation)
+
+    after = {
+        "status": obligation.status.value if hasattr(obligation.status, "value") else str(obligation.status),
+        "priority": obligation.priority.value if hasattr(obligation.priority, "value") else str(obligation.priority),
+        "description": obligation.description,
+        "due_date": obligation.due_date.isoformat() if obligation.due_date else None,
+    }
+
+    event_repo = ObligationEventRepository(db)
+    await event_repo.create(
+        ObligationEvent(
+            obligation_id=obligation.id,
+            event_type=ObligationEventType.UPDATED,
+            description="Obligation updated manually",
+            user_id=current_user.id,
+            extra_data={"before": before, "after": after},
+        )
+    )
+
+    await db.commit()
+    updated = await repo.get_by_id_with_relations(obligation_id)
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Obligation not found",
+        )
+    return _obligation_to_response(updated)
+
+
+@router.delete("/{obligation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_obligation(
+    obligation_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+) -> None:
+    """
+    Soft delete an obligation.
+
+    - Admin/Func: can delete any obligation
+    - Client: can delete only own obligations
+    """
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC, UserRole.CLIENTE]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to delete obligations",
+        )
+
+    repo = ObligationRepository(db)
+    obligation = await repo.get_by_id_with_relations(obligation_id)
+    if not obligation or obligation.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Obligation not found",
+        )
+
+    await _ensure_client_obligation_access(db, current_user, obligation)
+
+    obligation.deleted_at = datetime.utcnow()
+    await repo.update(obligation)
+
+    event_repo = ObligationEventRepository(db)
+    await event_repo.create(
+        ObligationEvent(
+            obligation_id=obligation.id,
+            event_type=ObligationEventType.STATUS_CHANGED,
+            description="Obligation deleted",
+            user_id=current_user.id,
+            extra_data={"deleted_at": obligation.deleted_at.isoformat()},
+        )
+    )
+
+    await db.commit()
+    return None
 
 
 @router.post("/generate", response_model=ObligationGenerateResponse)
@@ -468,13 +706,23 @@ async def upload_receipt(
     """
     Upload receipt for an obligation and mark as completed.
 
-    Admin/Func only.
+    Admin/Func: can process any obligation
+    Client: can process only own obligations
     """
-    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC, UserRole.CLIENTE]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin/func can upload receipts",
+            detail="Not authorized to upload receipts",
         )
+
+    repo = ObligationRepository(db)
+    current_obligation = await repo.get_by_id_with_relations(obligation_id)
+    if not current_obligation or current_obligation.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Obligation not found",
+        )
+    await _ensure_client_obligation_access(db, current_user, current_obligation)
 
     # Validate file type
     allowed_types = ["application/pdf", "image/jpeg", "image/png", "image/jpg"]
@@ -525,7 +773,6 @@ async def upload_receipt(
     )
 
     # Reload with relations
-    repo = ObligationRepository(db)
     obligation = await repo.get_by_id_with_relations(obligation_id)
     return _obligation_to_response(obligation)
 
@@ -540,13 +787,23 @@ async def update_due_date(
     """
     Update obligation due date.
 
-    Admin/Func only.
+    Admin/Func: can update any obligation
+    Client: can update only own obligations
     """
-    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC, UserRole.CLIENTE]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin/func can update due dates",
+            detail="Not authorized to update due dates",
         )
+
+    repo = ObligationRepository(db)
+    existing = await repo.get_by_id_with_relations(obligation_id)
+    if not existing or existing.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Obligation not found",
+        )
+    await _ensure_client_obligation_access(db, current_user, existing)
 
     processor = ObligationProcessor(db, websocket_manager)
     obligation = await processor.update_due_date(
@@ -557,7 +814,6 @@ async def update_due_date(
     )
 
     # Reload with relations
-    repo = ObligationRepository(db)
     obligation = await repo.get_by_id_with_relations(obligation_id)
     return _obligation_to_response(obligation)
 
@@ -572,13 +828,23 @@ async def cancel_obligation(
     """
     Cancel an obligation.
 
-    Admin/Func only.
+    Admin/Func: can cancel any obligation
+    Client: can cancel only own obligations
     """
-    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC, UserRole.CLIENTE]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin/func can cancel obligations",
+            detail="Not authorized to cancel obligations",
         )
+
+    repo = ObligationRepository(db)
+    existing = await repo.get_by_id_with_relations(obligation_id)
+    if not existing or existing.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Obligation not found",
+        )
+    await _ensure_client_obligation_access(db, current_user, existing)
 
     processor = ObligationProcessor(db, websocket_manager)
     obligation = await processor.cancel_obligation(
@@ -588,7 +854,6 @@ async def cancel_obligation(
     )
 
     # Reload with relations
-    repo = ObligationRepository(db)
     obligation = await repo.get_by_id_with_relations(obligation_id)
     return _obligation_to_response(obligation)
 
@@ -603,13 +868,23 @@ async def reopen_obligation(
     """
     Reopen obligation (mark as pending again).
 
-    Admin/Func only.
+    Admin/Func: can reopen any obligation
+    Client: can reopen only own obligations
     """
-    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC, UserRole.CLIENTE]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin/func can reopen obligations",
+            detail="Not authorized to reopen obligations",
         )
+
+    repo = ObligationRepository(db)
+    existing = await repo.get_by_id_with_relations(obligation_id)
+    if not existing or existing.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Obligation not found",
+        )
+    await _ensure_client_obligation_access(db, current_user, existing)
 
     processor = ObligationProcessor(db, websocket_manager)
     obligation = await processor.mark_as_pending(
@@ -619,7 +894,6 @@ async def reopen_obligation(
     )
 
     # Reload with relations
-    repo = ObligationRepository(db)
     obligation = await repo.get_by_id_with_relations(obligation_id)
     return _obligation_to_response(obligation)
 
@@ -637,21 +911,13 @@ async def get_obligation_events(
     repo = ObligationRepository(db)
     obligation = await repo.get(obligation_id)
 
-    if not obligation:
+    if not obligation or obligation.deleted_at is not None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Obligation not found",
         )
 
-    # Check access: clients can only see their own
-    if current_user.role == UserRole.CLIENTE:
-        client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
-        if not client or obligation.client_id != client.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to access this obligation",
-            )
+    await _ensure_client_obligation_access(db, current_user, obligation)
 
     # Get events
     event_repo = ObligationEventRepository(db)
@@ -786,21 +1052,20 @@ async def complete_obligation(
     Mark obligation as completed without receipt.
     Quick action for the minimalist panel.
     """
-    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC, UserRole.CLIENTE]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin/func can complete obligations",
+            detail="Not authorized to complete obligations",
         )
-    processor = ObligationProcessor(db, websocket_manager)
-
     # Get obligation
     repo = ObligationRepository(db)
     obligation = await repo.get_by_id_with_relations(obligation_id)
-    if not obligation:
+    if not obligation or obligation.deleted_at is not None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Obligation not found",
         )
+    await _ensure_client_obligation_access(db, current_user, obligation)
 
     # Validate status
     if obligation.status == ObligationStatus.CONCLUIDA:
@@ -820,7 +1085,6 @@ async def complete_obligation(
 
     # Create event
     event_repo = ObligationEventRepository(db)
-    from app.db.models.obligation_event import ObligationEvent, ObligationEventType
     event = ObligationEvent(
         obligation_id=obligation_id,
         event_type=ObligationEventType.STATUS_CHANGED,
@@ -845,11 +1109,21 @@ async def undo_obligation(
     """
     Undo obligation completion (mark back as pending).
     """
-    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC, UserRole.CLIENTE]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin/func can undo obligations",
+            detail="Not authorized to undo obligations",
         )
+
+    repo = ObligationRepository(db)
+    obligation = await repo.get_by_id_with_relations(obligation_id)
+    if not obligation or obligation.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Obligation not found",
+        )
+    await _ensure_client_obligation_access(db, current_user, obligation)
+
     processor = ObligationProcessor(db, websocket_manager)
     obligation = await processor.mark_as_pending(
         obligation_id=obligation_id,

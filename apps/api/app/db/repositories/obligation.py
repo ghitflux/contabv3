@@ -47,6 +47,8 @@ class ObligationRepository(BaseRepository[Obligation]):
         """List obligations with filters. If client_id is None, lists all obligations."""
         conditions = []
 
+        conditions.append(Obligation.deleted_at.is_(None))
+
         if client_id:
             conditions.append(Obligation.client_id == client_id)
 
@@ -86,6 +88,7 @@ class ObligationRepository(BaseRepository[Obligation]):
                 and_(
                     Obligation.status == ObligationStatus.PENDENTE,
                     Obligation.due_date <= until_date,
+                    Obligation.deleted_at.is_(None),
                 )
             )
             .options(
@@ -108,6 +111,7 @@ class ObligationRepository(BaseRepository[Obligation]):
                 and_(
                     Obligation.status == ObligationStatus.PENDENTE,
                     Obligation.due_date < reference_date,
+                    Obligation.deleted_at.is_(None),
                 )
             )
             .options(

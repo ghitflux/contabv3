@@ -24,6 +24,21 @@ export interface ObligationResponse {
   updated_at: string;
 }
 
+export interface ObligationCreateRequest {
+  client_id: string;
+  obligation_type_id: string;
+  due_date: string;
+  priority?: "baixa" | "media" | "alta" | "urgente";
+  description?: string | null;
+}
+
+export interface ObligationUpdateRequest {
+  status?: "pendente" | "em_andamento" | "concluida" | "atrasada" | "cancelada";
+  priority?: "baixa" | "media" | "alta" | "urgente";
+  description?: string | null;
+  due_date?: string;
+}
+
 export interface ObligationTypeResponse {
   id: string;
   name: string;
@@ -95,6 +110,25 @@ export const obligationsApi = {
     }
 
     return apiClient.get<ClientMatrixRow[]>(`/obligations/matrix?${query}`);
+  },
+
+  async getObligationById(obligationId: string): Promise<ObligationResponse> {
+    return apiClient.get<ObligationResponse>(`/obligations/${obligationId}`);
+  },
+
+  async createObligation(data: ObligationCreateRequest): Promise<ObligationResponse> {
+    return apiClient.post<ObligationResponse>("/obligations", data);
+  },
+
+  async updateObligation(
+    obligationId: string,
+    data: ObligationUpdateRequest
+  ): Promise<ObligationResponse> {
+    return apiClient.put<ObligationResponse>(`/obligations/${obligationId}`, data);
+  },
+
+  async deleteObligation(obligationId: string): Promise<void> {
+    return apiClient.delete<void>(`/obligations/${obligationId}`);
   },
 
   /**
