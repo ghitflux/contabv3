@@ -22,6 +22,26 @@ export interface ObligationResponse {
   completed_by_name?: string;
   created_at: string;
   updated_at: string;
+  deleted_at?: string | null;
+}
+
+export interface ObligationListResponse {
+  items: ObligationResponse[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
+export interface ObligationListFilters {
+  client_id?: string;
+  status?: "pendente" | "em_andamento" | "concluida" | "atrasada" | "cancelada";
+  year?: number;
+  month?: number;
+  category?: "clients" | "office";
+  include_deleted?: boolean;
+  deleted_only?: boolean;
+  page?: number;
+  size?: number;
 }
 
 export interface ObligationCreateRequest {
@@ -65,6 +85,26 @@ export interface ObligationAlertsResponse {
 }
 
 export const obligationsApi = {
+  async getObligations(filters?: ObligationListFilters): Promise<ObligationListResponse> {
+    const params = new URLSearchParams();
+
+    if (filters?.client_id) params.append("client_id", filters.client_id);
+    if (filters?.status) params.append("status", filters.status);
+    if (typeof filters?.year === "number") params.append("year", String(filters.year));
+    if (typeof filters?.month === "number") params.append("month", String(filters.month));
+    if (filters?.category) params.append("category", filters.category);
+    if (filters?.include_deleted) params.append("include_deleted", "true");
+    if (filters?.deleted_only) params.append("deleted_only", "true");
+
+    const size = Math.max(1, Math.min(200, Math.trunc(filters?.size ?? 100)));
+    const page = Math.max(1, Math.trunc(filters?.page ?? 1));
+    params.append("skip", String((page - 1) * size));
+    params.append("limit", String(size));
+
+    const query = params.toString();
+    return apiClient.get<ObligationListResponse>(query ? `/obligations?${query}` : "/obligations");
+  },
+
   /**
    * Get all obligation types (for selecting which obligations to generate)
    */
@@ -129,6 +169,10 @@ export const obligationsApi = {
 
   async deleteObligation(obligationId: string): Promise<void> {
     return apiClient.delete<void>(`/obligations/${obligationId}`);
+  },
+
+  async restoreObligation(obligationId: string): Promise<ObligationResponse> {
+    return apiClient.post<ObligationResponse>(`/obligations/${obligationId}/restore`, {});
   },
 
   /**

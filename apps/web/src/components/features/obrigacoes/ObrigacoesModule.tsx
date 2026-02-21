@@ -28,6 +28,7 @@ import { CheckCircleIcon, DownloadIcon, RefreshIcon, SearchIcon } from '@/lib/ic
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { ObligationCompletionModal } from './ObligationCompletionModal';
+import { ObligationTrashModal } from './ObligationTrashModal';
 import {
   obligationsApi,
   type ObligationCreateRequest,
@@ -150,6 +151,7 @@ export function ObrigacoesModule() {
   const [dueDateFrom, setDueDateFrom] = useState('');
   const [dueDateTo, setDueDateTo] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
   const [selectedObligation, setSelectedObligation] = useState<ObligationResponse | null>(null);
   const [obligationTypes, setObligationTypes] = useState<ObligationTypeResponse[]>([]);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -506,6 +508,11 @@ export function ObrigacoesModule() {
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {canManageObligations && (
+            <Button size="sm" variant="bordered" onPress={() => setIsTrashModalOpen(true)}>
+              Lixeira
+            </Button>
+          )}
           <Button size="sm" variant="bordered" onPress={resetFilters}>
             Limpar filtros
           </Button>
@@ -956,6 +963,18 @@ export function ObrigacoesModule() {
           </>
         </ModalContent>
       </Modal>
+
+      <ObligationTrashModal
+        isOpen={isTrashModalOpen}
+        onOpenChange={setIsTrashModalOpen}
+        category={categoryTab}
+        year={year}
+        month={month}
+        title={categoryTab === 'office' ? 'Lixeira do Escritorio' : 'Lixeira por Empresa'}
+        onRestored={async () => {
+          await fetchMatrix();
+        }}
+      />
 
       {selectedObligation && (
         <ObligationCompletionModal

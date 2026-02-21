@@ -80,6 +80,7 @@ def _obligation_to_response(obligation) -> ObligationResponse:
         "completed_by_name": None,
         "created_at": obligation.created_at,
         "updated_at": obligation.updated_at,
+        "deleted_at": obligation.deleted_at,
     }
     return ObligationResponse.model_validate(ob_dict)
 
@@ -92,6 +93,9 @@ async def list_obligations(
     status: Optional[ObligationStatus] = Query(None),
     year: Optional[int] = Query(None),
     month: Optional[int] = Query(None),
+    include_deleted: bool = Query(False, description="Include soft-deleted obligations"),
+    deleted_only: bool = Query(False, description="Return only soft-deleted obligations"),
+    category: Optional[str] = Query(None, description="Category: clients or office"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
 ):
@@ -101,19 +105,38 @@ async def list_obligations(
     - Admin/Func: Can see all obligations (client_id optional)
     - Client: Can only see their own obligations
     """
+    if category and category not in {"clients", "office"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid category. Use 'clients' or 'office'.",
+        )
+
+    if deleted_only:
+        include_deleted = True
+
     repo = ObligationRepository(db)
+    office_client_id = settings.OFFICE_CLIENT_ID
 
     # If user is client, override client_id filter
     if current_user.role == UserRole.CLIENTE:
         client = await _get_current_user_client(db, current_user)
+        if category == "office":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Clients cannot access office obligations",
+            )
         client_id = client.id
     # Admin/Func can see all obligations if client_id is not provided
 
-    obligations, total = await repo.list_by_client(
+    obligations, total = await repo.list_with_filters(
         client_id=client_id,
         status=status,
         year=year,
         month=month,
+        include_deleted=include_deleted,
+        deleted_only=deleted_only,
+        category=category,
+        office_client_id=office_client_id,
         skip=skip,
         limit=limit,
     )
@@ -628,6 +651,58 @@ async def delete_obligation(
 
     await db.commit()
     return None
+
+
+@router.post("/{obligation_id}/restore", response_model=ObligationResponse)
+async def restore_obligation(
+    obligation_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """
+    Restore a soft-deleted obligation.
+
+    - Admin/Func: can restore any obligation
+    - Client: can restore only own obligations
+    """
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC, UserRole.CLIENTE]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to restore obligations",
+        )
+
+    repo = ObligationRepository(db)
+    obligation = await repo.get_by_id_with_relations(obligation_id, include_deleted=True)
+    if not obligation or obligation.deleted_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Deleted obligation not found",
+        )
+
+    await _ensure_client_obligation_access(db, current_user, obligation)
+
+    obligation.deleted_at = None
+    await repo.update(obligation)
+
+    event_repo = ObligationEventRepository(db)
+    await event_repo.create(
+        ObligationEvent(
+            obligation_id=obligation.id,
+            event_type=ObligationEventType.STATUS_CHANGED,
+            description="Obligation restored",
+            user_id=current_user.id,
+            extra_data={"restored_from_trash": True},
+        )
+    )
+
+    await db.commit()
+    restored = await repo.get_by_id_with_relations(obligation_id)
+    if not restored:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Obligation not found",
+        )
+    return _obligation_to_response(restored)
 
 
 @router.post("/generate", response_model=ObligationGenerateResponse)

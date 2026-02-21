@@ -4,12 +4,12 @@ from datetime import datetime
 from typing import Optional, Sequence
 from uuid import UUID
 
-from sqlalchemy import select, and_, or_, func
+from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.db.models.client import Client
 from app.db.models.obligation import Obligation, ObligationStatus
-from app.db.models.obligation_event import ObligationEvent
 from app.db.repositories.base import BaseRepository
 
 _UNSET = object()
@@ -21,11 +21,19 @@ class ObligationRepository(BaseRepository[Obligation]):
     def __init__(self, db: AsyncSession):
         super().__init__(Obligation, db)
 
-    async def get_by_id_with_relations(self, obligation_id: UUID) -> Optional[Obligation]:
+    async def get_by_id_with_relations(
+        self,
+        obligation_id: UUID,
+        include_deleted: bool = False,
+    ) -> Optional[Obligation]:
         """Get obligation with all relationships loaded."""
+        conditions = [Obligation.id == obligation_id]
+        if not include_deleted:
+            conditions.append(Obligation.deleted_at.is_(None))
+
         stmt = (
             select(Obligation)
-            .where(Obligation.id == obligation_id)
+            .where(and_(*conditions))
             .options(
                 selectinload(Obligation.obligation_type),
                 selectinload(Obligation.client),
@@ -35,22 +43,37 @@ class ObligationRepository(BaseRepository[Obligation]):
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def list_by_client(
+    async def list_with_filters(
         self,
         client_id: Optional[UUID] = None,
         status: Optional[ObligationStatus] = None,
         year: Optional[int] = None,
         month: Optional[int] = None,
+        include_deleted: bool = False,
+        deleted_only: bool = False,
+        category: Optional[str] = None,
+        office_client_id: Optional[UUID] = None,
         skip: int = 0,
         limit: int = 100,
     ) -> tuple[Sequence[Obligation], int]:
-        """List obligations with filters. If client_id is None, lists all obligations."""
+        """List obligations with optional filters and deletion controls."""
         conditions = []
 
-        conditions.append(Obligation.deleted_at.is_(None))
+        if deleted_only:
+            conditions.append(Obligation.deleted_at.is_not(None))
+        elif not include_deleted:
+            conditions.append(Obligation.deleted_at.is_(None))
 
         if client_id:
             conditions.append(Obligation.client_id == client_id)
+
+        if category == "office":
+            if office_client_id:
+                conditions.append(Obligation.client_id == office_client_id)
+            else:
+                return [], 0
+        elif category == "clients" and office_client_id:
+            conditions.append(Obligation.client_id != office_client_id)
 
         if status:
             conditions.append(Obligation.status == status)
@@ -63,22 +86,55 @@ class ObligationRepository(BaseRepository[Obligation]):
 
         where_clause = and_(*conditions) if conditions else True
 
-        stmt = select(Obligation).where(where_clause).options(
-            selectinload(Obligation.obligation_type),
-            selectinload(Obligation.client),
-        )
-
         # Count total
-        count_stmt = select(func.count()).select_from(Obligation).where(where_clause)
+        count_stmt = (
+            select(func.count())
+            .select_from(Obligation)
+            .join(Client, Obligation.client_id == Client.id)
+            .where(where_clause)
+        )
         total_result = await self.db.execute(count_stmt)
         total = total_result.scalar_one()
 
         # Get paginated results
-        stmt = stmt.offset(skip).limit(limit).order_by(Obligation.due_date.asc())
+        stmt = (
+            select(Obligation)
+            .join(Client, Obligation.client_id == Client.id)
+            .where(where_clause)
+            .options(
+                selectinload(Obligation.obligation_type),
+                selectinload(Obligation.client),
+            )
+            .order_by(
+                Obligation.deleted_at.desc(),
+                Obligation.due_date.asc(),
+            )
+            .offset(skip)
+            .limit(limit)
+        )
         result = await self.db.execute(stmt)
         items = result.scalars().all()
 
         return items, total
+
+    async def list_by_client(
+        self,
+        client_id: Optional[UUID] = None,
+        status: Optional[ObligationStatus] = None,
+        year: Optional[int] = None,
+        month: Optional[int] = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> tuple[Sequence[Obligation], int]:
+        """Backward-compatible alias for list filters."""
+        return await self.list_with_filters(
+            client_id=client_id,
+            status=status,
+            year=year,
+            month=month,
+            skip=skip,
+            limit=limit,
+        )
 
     async def list_pending_by_due_date(self, until_date: datetime) -> Sequence[Obligation]:
         """List all pending obligations with due date until specified date."""
@@ -181,3 +237,12 @@ class ObligationRepository(BaseRepository[Obligation]):
             await self.db.refresh(obligation)
 
         return obligations
+
+    async def restore(self, obligation_id: UUID) -> bool:
+        """Restore a soft-deleted obligation."""
+        obligation = await self.get(obligation_id)
+        if obligation and obligation.deleted_at is not None:
+            obligation.deleted_at = None
+            await self.db.flush()
+            return True
+        return False
