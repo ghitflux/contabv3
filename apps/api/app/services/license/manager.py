@@ -228,6 +228,52 @@ class LicenseService:
 
         await self.session.commit()
 
+    async def restore_license(self, license_id: UUID, user_id: Optional[UUID] = None) -> LicenseResponse:
+        """
+        Restore a license from trash.
+
+        Licenses considered in trash are statuses:
+        - CANCELADA (excluded)
+        - VENCIDA (expired)
+        """
+        license_obj = await self.repo.get_by_id_with_relations(license_id)
+        if not license_obj:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="License not found"
+            )
+
+        if license_obj.status not in [LicenseStatus.CANCELADA, LicenseStatus.VENCIDA]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="License is not in trash"
+            )
+
+        today = date.today()
+        if license_obj.expiration_date:
+            if license_obj.expiration_date < today:
+                restored_status = LicenseStatus.PENDENTE_RENOVACAO
+            elif (license_obj.expiration_date - today).days <= 30:
+                restored_status = LicenseStatus.PENDENTE_RENOVACAO
+            else:
+                restored_status = LicenseStatus.ATIVA
+        else:
+            restored_status = LicenseStatus.ATIVA
+
+        license_obj.status = restored_status
+        await self.session.flush()
+
+        await self.repo.add_event(
+            license_id=license_obj.id,
+            event_type=LicenseEventType.REACTIVATED,
+            description=f"Licença restaurada da lixeira ({restored_status.value})",
+            user_id=user_id,
+        )
+
+        await self.session.commit()
+        await self.session.refresh(license_obj)
+        return self._to_response(license_obj)
+
     async def check_expirations(self, days: int = 30) -> dict:
         """
         Check for expiring licenses.
@@ -266,9 +312,16 @@ class LicenseService:
             is_expired = days_until_expiration < 0
             is_expiring_soon = 0 <= days_until_expiration <= 30
 
+        client = license_obj.__dict__.get("client")
+
         return LicenseResponse(
             id=license_obj.id,
             client_id=license_obj.client_id,
+            client_name=(
+                (client.nome_fantasia or client.razao_social)
+                if client
+                else None
+            ),
             license_type=license_obj.license_type,
             registration_number=license_obj.registration_number,
             issuing_authority=license_obj.issuing_authority,

@@ -57,6 +57,8 @@ export const licensesApi = {
 
   delete: (id: string) => apiClient.delete(`${API_PREFIX}/${id}`),
 
+  restore: (id: string) => apiPost<License>(`${API_PREFIX}/${id}/restore`),
+
   get: (id: string) => apiGet<License>(`${API_PREFIX}/${id}`),
 
   getById: (id: string) => apiGet<License>(`${API_PREFIX}/${id}`),

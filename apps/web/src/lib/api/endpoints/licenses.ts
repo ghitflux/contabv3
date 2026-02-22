@@ -17,6 +17,8 @@ export interface LicenseListFilters {
   license_type?: string;
   status?: string;
   client_id?: string;
+  include_deleted?: boolean;
+  deleted_only?: boolean;
   page?: number;
   size?: number;
 }
@@ -32,6 +34,8 @@ export const licensesApi = {
     if (filters?.license_type) params.append("license_type", filters.license_type);
     if (filters?.status) params.append("status", filters.status);
     if (filters?.client_id) params.append("client_id", filters.client_id);
+    if (filters?.include_deleted) params.append("include_deleted", "true");
+    if (filters?.deleted_only) params.append("deleted_only", "true");
     if (filters?.page) params.append("page", filters.page.toString());
     if (filters?.size) params.append("size", filters.size.toString());
 
@@ -67,6 +71,13 @@ export const licensesApi = {
    */
   async delete(id: string): Promise<void> {
     return apiClient.delete<void>(`/licenses/${id}`);
+  },
+
+  /**
+   * Restore a license from trash
+   */
+  async restore(id: string): Promise<License> {
+    return apiClient.post<License>(`/licenses/${id}/restore`);
   },
 
   /**

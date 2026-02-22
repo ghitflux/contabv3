@@ -6,9 +6,11 @@ from datetime import date, datetime, timedelta
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import String, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.db.models.client import Client
 from app.db.models.license import License
 from app.db.models.license_event import LicenseEvent
 from app.db.repositories.base import BaseRepository
@@ -33,6 +35,8 @@ class LicenseRepository(BaseRepository[License]):
         license_type: Optional[LicenseType] = None,
         status: Optional[LicenseStatus] = None,
         client_id: Optional[UUID] = None,
+        include_deleted: bool = True,
+        deleted_only: bool = False,
         skip: int = 0,
         limit: int = 10,
     ) -> tuple[list[License], int]:
@@ -40,10 +44,12 @@ class LicenseRepository(BaseRepository[License]):
         List licenses with filters and pagination.
 
         Args:
-            query: Search term for registration_number or issuing_authority
+            query: Search term for company, CNPJ, registration_number, issuing_authority, or license type
             license_type: Filter by license type
             status: Filter by status
             client_id: Filter by client ID
+            include_deleted: Include canceled/expired licenses
+            deleted_only: Return only canceled/expired licenses
             skip: Number of records to skip
             limit: Maximum number of records to return
 
@@ -52,13 +58,27 @@ class LicenseRepository(BaseRepository[License]):
         """
         filters = []
 
+        # Always ignore soft-deleted clients in listings
+        filters.append(Client.deleted_at.is_(None))
+
+        # Trash behavior (licenses "in trash" are canceled or expired)
+        trash_statuses = (LicenseStatus.CANCELADA, LicenseStatus.VENCIDA)
+        if deleted_only:
+            filters.append(License.status.in_(trash_statuses))
+        elif not include_deleted:
+            filters.append(License.status.notin_(trash_statuses))
+
         # Apply search query
         if query:
             search_term = f"%{query}%"
             filters.append(
                 or_(
+                    Client.razao_social.ilike(search_term),
+                    Client.nome_fantasia.ilike(search_term),
+                    Client.cnpj.ilike(search_term),
                     License.registration_number.ilike(search_term),
                     License.issuing_authority.ilike(search_term),
+                    License.license_type.cast(String).ilike(search_term),
                 )
             )
 
@@ -75,14 +95,22 @@ class LicenseRepository(BaseRepository[License]):
             filters.append(License.client_id == client_id)
 
         # Count query
-        count_query = select(func.count()).select_from(License)
+        count_query = (
+            select(func.count())
+            .select_from(License)
+            .join(Client, License.client_id == Client.id)
+        )
         if filters:
             count_query = count_query.where(and_(*filters))
         total_result = await self.session.execute(count_query)
         total = total_result.scalar_one()
 
         # Data query with pagination
-        data_query = select(License)
+        data_query = (
+            select(License)
+            .join(Client, License.client_id == Client.id)
+            .options(selectinload(License.client))
+        )
         if filters:
             data_query = data_query.where(and_(*filters))
         data_query = (
@@ -112,6 +140,15 @@ class LicenseRepository(BaseRepository[License]):
             .order_by(License.expiration_date.asc().nulls_last())
         )
         return list(result.scalars().all())
+
+    async def get_by_id_with_relations(self, license_id: UUID) -> Optional[License]:
+        """Get license by ID with related client eagerly loaded."""
+        result = await self.session.execute(
+            select(License)
+            .where(License.id == license_id)
+            .options(selectinload(License.client))
+        )
+        return result.scalar_one_or_none()
 
     async def get_expiring_soon(self, days: int = 30) -> list[License]:
         """
@@ -207,4 +244,3 @@ class LicenseRepository(BaseRepository[License]):
             .order_by(LicenseEvent.created_at.desc())
         )
         return list(result.scalars().all())
-

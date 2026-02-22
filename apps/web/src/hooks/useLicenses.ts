@@ -23,6 +23,8 @@ export function useLicenses(_filters?: LicenseFilters & { autoFetch?: boolean })
         license_type: customFilters?.license_type,
         status: customFilters?.status,
         client_id: customFilters?.client_id,
+        include_deleted: customFilters?.include_deleted,
+        deleted_only: customFilters?.deleted_only,
         page: customFilters?.page || 1,
         size: customFilters?.size || 10,
       };
@@ -176,6 +178,34 @@ export function useLicenses(_filters?: LicenseFilters & { autoFetch?: boolean })
     [selectedLicense, licenses, fetchLicenses]
   );
 
+  const restoreLicense = useCallback(
+    async (id: string) => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const restored = await licensesApi.restore(id);
+        if (selectedLicense?.id === id) {
+          setSelectedLicense(restored);
+        }
+        if (licenses) {
+          await fetchLicenses({
+            page: licenses.page,
+            size: licenses.size,
+          });
+        }
+        return restored;
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : "Failed to restore license";
+        setError(errorMsg);
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [selectedLicense, licenses, fetchLicenses]
+  );
+
   return {
     licenses,
     selectedLicense,
@@ -189,6 +219,7 @@ export function useLicenses(_filters?: LicenseFilters & { autoFetch?: boolean })
     updateLicense,
     deleteLicense,
     renewLicense,
+    restoreLicense,
     setSelectedLicense,
   };
 }

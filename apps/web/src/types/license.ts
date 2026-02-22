@@ -261,6 +261,8 @@ export interface LicenseFilters {
   search?: string;
   expiring_soon?: boolean;
   expired?: boolean;
+  include_deleted?: boolean;
+  deleted_only?: boolean;
   page?: number;
   size?: number;
 }
