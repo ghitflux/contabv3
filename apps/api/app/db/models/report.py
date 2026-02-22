@@ -128,6 +128,13 @@ class ReportHistory(Base, UUIDMixin):
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=datetime.utcnow, index=True
     )
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+        index=True,
+        comment="Soft delete timestamp for trash/recovery flow",
+    )
     expires_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -152,6 +159,7 @@ class ReportHistory(Base, UUIDMixin):
     __table_args__ = (
         Index("ix_report_history_user_report_type", "user_id", "report_type"),
         Index("ix_report_history_generated_at", "generated_at"),
+        Index("ix_report_history_user_deleted_at", "user_id", "deleted_at"),
     )
 
     def __repr__(self) -> str:

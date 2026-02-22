@@ -278,6 +278,7 @@ class ReportHistoryResponse(BaseSchema):
     file_path: Optional[str]
     file_size: Optional[int]
     generated_at: datetime
+    deleted_at: Optional[datetime]
     expires_at: Optional[datetime]
     status: ReportStatus
 

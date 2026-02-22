@@ -1,17 +1,18 @@
 """Report API routes."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Annotated, Any, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_active_user, get_db
 from app.db.models.client import Client
-from app.db.models.report import ReportFormat, ReportType, ReportType as DBReportType
+from app.db.models.report import ReportFormat, ReportType
 from app.db.models.user import User, UserRole
 from app.db.repositories.client import ClientRepository
 from app.db.repositories.report import ReportRepository
@@ -19,6 +20,7 @@ from app.schemas.report import (
     ReportCustomization,
     ReportExportRequest,
     ReportFilterRequest,
+    ReportHistoryResponse,
     ReportHistoryListResponse,
     ReportPreviewRequest,
     ReportPreviewResponse,
@@ -439,16 +441,20 @@ async def download_report(
             status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
         )
 
-    # Check if expired (handle tz-aware)
-    from datetime import timezone
-
+    # Check if expired, normalizing both naive and aware datetimes to UTC
     now = datetime.now(timezone.utc)
-    if history.expires_at and history.expires_at < now:
+    if history.expires_at and _normalize_utc_datetime(history.expires_at) < now:
         raise HTTPException(
             status_code=status.HTTP_410_GONE, detail="Report file has expired"
         )
 
     if not history.file_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
+        )
+
+    report_path = Path(history.file_path)
+    if not report_path.exists() or not report_path.is_file():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
         )
@@ -460,10 +466,86 @@ async def download_report(
         media_type = "application/vnd.ms-excel"
 
     return FileResponse(
-        history.file_path,
+        str(report_path),
         media_type=media_type,
-        filename=history.file_path.split("/")[-1],
+        filename=report_path.name,
     )
+
+
+@router.delete("/history/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_history_item(
+    report_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Move a generated report to trash (soft delete)."""
+    repo = ReportRepository(db)
+    history = await repo.get_history_by_id(report_id, include_deleted=True)
+
+    if not history:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Report not found"
+        )
+
+    # Check ownership
+    if history.user_id != current_user.id and current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+        )
+
+    if history.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Report already deleted"
+        )
+
+    history.deleted_at = datetime.now(timezone.utc)
+    await db.commit()
+    return None
+
+
+@router.post("/history/{report_id}/restore", response_model=ReportHistoryResponse)
+async def restore_history_item(
+    report_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Restore a report from trash."""
+    repo = ReportRepository(db)
+    history = await repo.get_history_by_id(report_id, include_deleted=True)
+
+    if not history or history.deleted_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Deleted report not found"
+        )
+
+    # Check ownership
+    if history.user_id != current_user.id and current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+        )
+
+    now = datetime.now(timezone.utc)
+    if history.expires_at and _normalize_utc_datetime(history.expires_at) < now:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Report file has expired and cannot be restored",
+        )
+
+    if not history.file_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
+        )
+
+    report_path = Path(history.file_path)
+    if not report_path.exists() or not report_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
+        )
+
+    history.deleted_at = None
+    await db.commit()
+    await db.refresh(history)
+    return history
 
 
 @router.get("/history", response_model=ReportHistoryListResponse)
@@ -472,15 +554,22 @@ async def get_history(
     current_user: Annotated[User, Depends(get_current_active_user)],
     report_type: Optional[ReportType] = Query(None),
     format: Optional[ReportFormat] = Query(None),
+    include_deleted: bool = Query(False),
+    deleted_only: bool = Query(False),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
 ):
     """Get report generation history."""
+    if deleted_only:
+        include_deleted = True
+
     repo = ReportRepository(db)
     history_list, total = await repo.get_history(
         user_id=current_user.id,
         report_type=report_type,
         format=format,
+        include_deleted=include_deleted,
+        deleted_only=deleted_only,
         skip=(page - 1) * size,
         limit=size,
     )
@@ -757,3 +846,10 @@ def _format_payment_status(value: Any) -> str:
         return "-"
     key = str(value).lower()
     return labels.get(key, str(value))
+
+
+def _normalize_utc_datetime(value: datetime) -> datetime:
+    """Normalize naive/aware datetimes to UTC for safe comparisons."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)

@@ -49,6 +49,11 @@ const financialReports = [
     description: 'Demonstrativo de Resultados - Receita total menos Despesas operacionais',
     icon: TrendingUpIcon,
     color: 'teal',
+    features: [
+      'Resultado líquido do período',
+      'Margem de lucro consolidada',
+      'Resumo de receitas e despesas',
+    ],
   },
   {
     type: ReportType.FLUXO_CAIXA,
@@ -56,6 +61,11 @@ const financialReports = [
     description: 'Entradas e saídas de dinheiro mês a mês',
     icon: Activity,
     color: 'blue',
+    features: [
+      'Entradas x saídas por período',
+      'Saldo inicial e final',
+      'Visão de variação mensal',
+    ],
   },
   {
     type: ReportType.LIVRO_CAIXA,
@@ -76,6 +86,7 @@ const financialReports = [
     description: 'Quanto cada cliente gerou em receita no período',
     icon: DollarSignIcon,
     color: 'green',
+    features: ['Ranking de clientes', 'Participação percentual', 'Comparativo por período'],
   },
   {
     type: ReportType.DESPESAS_CATEGORIA,
@@ -83,6 +94,11 @@ const financialReports = [
     description: 'Despesas classificadas em grupos (folha, marketing, aluguel, etc.)',
     icon: PieChartIcon,
     color: 'amber',
+    features: [
+      'Categorias com maior impacto',
+      'Percentual por grupo',
+      'Total de despesas do período',
+    ],
   },
   {
     type: ReportType.PROJECAO_FLUXO,
@@ -90,6 +106,11 @@ const financialReports = [
     description: 'Previsão de entradas e saídas futuras com base no histórico',
     icon: CalendarIcon,
     color: 'purple',
+    features: [
+      'Cenários otimista, realista e pessimista',
+      'Base histórica automatizada',
+      'Suporte ao planejamento financeiro',
+    ],
   },
   {
     type: ReportType.KPIS,
@@ -97,6 +118,11 @@ const financialReports = [
     description: 'Margem de lucro, despesas fixas, índice de inadimplência',
     icon: Target,
     color: 'rose',
+    features: [
+      'Indicadores de performance',
+      'Acompanhamento de eficiência',
+      'Tomada de decisão orientada a dados',
+    ],
   },
 ];
 
@@ -143,6 +169,9 @@ export function RelatoriosModule() {
 
   const handleOpenRangeModal = (reportType: ReportType) => {
     setSelectedReport(reportType);
+    setSelectedClientId(null);
+    setClientSearch('');
+    setIsOfficeReport(Boolean(OFFICE_CLIENT_ID));
     setRangeModalOpen(true);
   };
 
@@ -156,7 +185,10 @@ export function RelatoriosModule() {
       return;
     }
 
-    // Validate client selection for admin/func
+    // Optional client scoping for admin/func:
+    // - escritório -> uses OFFICE_CLIENT_ID
+    // - cliente selecionado -> scoping by single client
+    // - nenhum selecionado -> relatório consolidado
     let clientIds: string[] | undefined = undefined;
     if (isAdminOrFunc) {
       if (isOfficeReport) {
@@ -170,10 +202,6 @@ export function RelatoriosModule() {
         clientIds = [OFFICE_CLIENT_ID];
       } else if (!isOfficeReport && selectedClientId) {
         clientIds = [selectedClientId];
-      } else if (!isOfficeReport) {
-        toast.error('Selecione um cliente ou marque como relatório do escritório.');
-        setIsGeneratingId(null);
-        return;
       }
     }
 
@@ -321,6 +349,10 @@ export function RelatoriosModule() {
                 const textClasses = getTextColorClasses(report.color);
                 const iconBgClasses = getIconBgClasses(report.color);
                 const isHighlight = Boolean(report.highlight);
+                const featureList =
+                  report.features && report.features.length > 0
+                    ? report.features
+                    : ['Resumo executivo', 'Filtro por período', 'Exportação em PDF/CSV/XLS'];
 
                 return (
                   <Card
@@ -364,9 +396,9 @@ export function RelatoriosModule() {
                         {report.description}
                       </p>
 
-                      {report.features && report.features.length > 0 && (
+                      {featureList.length > 0 && (
                         <div className="mb-4 space-y-1.5">
-                          {report.features.map((feature) => (
+                          {featureList.map((feature) => (
                             <div
                               key={feature}
                               className="flex items-start gap-2 text-xs text-default-600 dark:text-default-400"
@@ -567,13 +599,13 @@ export function RelatoriosModule() {
                 {!isOfficeReport && (
                   <div className="space-y-2">
                     <Input
-                      label="Cliente"
+                      label="Cliente (opcional)"
                       placeholder="Buscar por nome/razão social"
                       value={clientSearch}
                       onChange={(e) => setClientSearch(e.target.value)}
                     />
                     <Select
-                      label="Selecionar cliente"
+                      label="Selecionar cliente específico (opcional)"
                       selectedKeys={selectedClientId ? [selectedClientId] : []}
                       onSelectionChange={(keys) => {
                         const key = Array.from(keys)[0] as string;
@@ -587,6 +619,10 @@ export function RelatoriosModule() {
                         </SelectItem>
                       ))}
                     </Select>
+                    <p className="text-xs text-default-500">
+                      Sem cliente selecionado, o relatório será gerado com todos os dados
+                      disponíveis.
+                    </p>
                   </div>
                 )}
               </div>

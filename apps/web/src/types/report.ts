@@ -5,40 +5,40 @@
 // Enums
 export enum ReportType {
   // Financial reports
-  DRE = "dre",
-  FLUXO_CAIXA = "fluxo_caixa",
-  LIVRO_CAIXA = "livro_caixa",
-  RECEITAS_CLIENTE = "receitas_cliente",
-  DESPESAS_CATEGORIA = "despesas_categoria",
-  PROJECAO_FLUXO = "projecao_fluxo",
-  KPIS = "kpis",
+  DRE = 'dre',
+  FLUXO_CAIXA = 'fluxo_caixa',
+  LIVRO_CAIXA = 'livro_caixa',
+  RECEITAS_CLIENTE = 'receitas_cliente',
+  DESPESAS_CATEGORIA = 'despesas_categoria',
+  PROJECAO_FLUXO = 'projecao_fluxo',
+  KPIS = 'kpis',
 
   // Operational reports
-  CLIENTES = "clientes",
-  OBRIGACOES = "obrigacoes",
-  LICENCAS = "licencas",
-  AUDITORIA = "auditoria",
+  CLIENTES = 'clientes',
+  OBRIGACOES = 'obrigacoes',
+  LICENCAS = 'licencas',
+  AUDITORIA = 'auditoria',
 }
 
 export enum ReportFormat {
-  PDF = "pdf",
-  CSV = "csv",
-  XLS = "xls",
+  PDF = 'pdf',
+  CSV = 'csv',
+  XLS = 'xls',
 }
 
 export enum ReportStatus {
-  PENDING = "pending",
-  COMPLETED = "completed",
-  FAILED = "failed",
+  PENDING = 'pending',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
 }
 
 export enum ChartType {
-  LINE = "line",
-  BAR = "bar",
-  PIE = "pie",
-  DONUT = "donut",
-  AREA = "area",
-  TABLE = "table",
+  LINE = 'line',
+  BAR = 'bar',
+  PIE = 'pie',
+  DONUT = 'donut',
+  AREA = 'area',
+  TABLE = 'table',
 }
 
 // Request interfaces
@@ -53,7 +53,7 @@ export interface ReportCustomization {
   fields_to_include?: string[] | null;
   group_by?: string | null;
   sort_by?: string | null;
-  sort_direction?: "asc" | "desc";
+  sort_direction?: 'asc' | 'desc';
   chart_types?: ChartType[] | null;
   include_summary?: boolean;
   include_charts?: boolean;
@@ -143,6 +143,7 @@ export interface ReportHistory {
   file_path?: string | null;
   file_size?: number | null;
   generated_at: string; // ISO datetime string
+  deleted_at?: string | null; // ISO datetime string
   expires_at?: string | null; // ISO datetime string
   status: ReportStatus;
 }
@@ -160,7 +161,7 @@ export interface ReportTypeInfo {
   type: ReportType;
   name: string;
   description: string;
-  category: "financeiro" | "operacional";
+  category: 'financeiro' | 'operacional';
   supports_customization: boolean;
   supported_charts: ChartType[];
   required_permissions?: string[] | null;
@@ -203,7 +204,7 @@ export interface CashFlowReportData {
 
 export interface CashBookEntry {
   data: string; // ISO date string
-  tipo: "entrada" | "saida";
+  tipo: 'entrada' | 'saida';
   descricao: string;
   valor: number;
   saldo_acumulado: number;
@@ -309,22 +310,22 @@ export interface AuditReportData {
 // Helper functions
 export function getReportTypeLabel(type: ReportType): string {
   const labels: Record<ReportType, string> = {
-    [ReportType.DRE]: "Demonstrativo de Resultados (DRE)",
-    [ReportType.FLUXO_CAIXA]: "Fluxo de Caixa",
-    [ReportType.LIVRO_CAIXA]: "Livro Caixa",
-    [ReportType.RECEITAS_CLIENTE]: "Receitas por Cliente",
-    [ReportType.DESPESAS_CATEGORIA]: "Despesas por Categoria",
-    [ReportType.PROJECAO_FLUXO]: "Projeção de Fluxo de Caixa",
-    [ReportType.KPIS]: "Indicadores Financeiros (KPIs)",
-    [ReportType.CLIENTES]: "Relatório de Clientes",
-    [ReportType.OBRIGACOES]: "Relatório de Obrigações",
-    [ReportType.LICENCAS]: "Relatório de Licenças",
-    [ReportType.AUDITORIA]: "Relatório de Auditoria",
+    [ReportType.DRE]: 'Demonstrativo de Resultados (DRE)',
+    [ReportType.FLUXO_CAIXA]: 'Fluxo de Caixa',
+    [ReportType.LIVRO_CAIXA]: 'Livro Caixa',
+    [ReportType.RECEITAS_CLIENTE]: 'Receitas por Cliente',
+    [ReportType.DESPESAS_CATEGORIA]: 'Despesas por Categoria',
+    [ReportType.PROJECAO_FLUXO]: 'Projeção de Fluxo de Caixa',
+    [ReportType.KPIS]: 'Indicadores Financeiros (KPIs)',
+    [ReportType.CLIENTES]: 'Relatório de Clientes',
+    [ReportType.OBRIGACOES]: 'Relatório de Obrigações',
+    [ReportType.LICENCAS]: 'Relatório de Licenças',
+    [ReportType.AUDITORIA]: 'Relatório de Auditoria',
   };
   return labels[type];
 }
 
-export function getReportTypeCategory(type: ReportType): "financeiro" | "operacional" {
+export function getReportTypeCategory(type: ReportType): 'financeiro' | 'operacional' {
   const financialTypes = [
     ReportType.DRE,
     ReportType.FLUXO_CAIXA,
@@ -334,32 +335,34 @@ export function getReportTypeCategory(type: ReportType): "financeiro" | "operaci
     ReportType.PROJECAO_FLUXO,
     ReportType.KPIS,
   ];
-  return financialTypes.includes(type) ? "financeiro" : "operacional";
+  return financialTypes.includes(type) ? 'financeiro' : 'operacional';
 }
 
 export function getReportFormatLabel(format: ReportFormat): string {
   const labels: Record<ReportFormat, string> = {
-    [ReportFormat.PDF]: "PDF",
-    [ReportFormat.CSV]: "CSV",
-    [ReportFormat.XLS]: "XLS",
+    [ReportFormat.PDF]: 'PDF',
+    [ReportFormat.CSV]: 'CSV',
+    [ReportFormat.XLS]: 'XLS',
   };
   return labels[format];
 }
 
 export function getReportStatusLabel(status: ReportStatus): string {
   const labels: Record<ReportStatus, string> = {
-    [ReportStatus.PENDING]: "Gerando",
-    [ReportStatus.COMPLETED]: "Concluído",
-    [ReportStatus.FAILED]: "Falhou",
+    [ReportStatus.PENDING]: 'Gerando',
+    [ReportStatus.COMPLETED]: 'Concluído',
+    [ReportStatus.FAILED]: 'Falhou',
   };
   return labels[status];
 }
 
-export function getReportStatusColor(status: ReportStatus): "default" | "primary" | "success" | "warning" | "danger" {
-  const colors: Record<ReportStatus, "default" | "primary" | "success" | "warning" | "danger"> = {
-    [ReportStatus.PENDING]: "primary",
-    [ReportStatus.COMPLETED]: "success",
-    [ReportStatus.FAILED]: "danger",
+export function getReportStatusColor(
+  status: ReportStatus
+): 'default' | 'primary' | 'success' | 'warning' | 'danger' {
+  const colors: Record<ReportStatus, 'default' | 'primary' | 'success' | 'warning' | 'danger'> = {
+    [ReportStatus.PENDING]: 'primary',
+    [ReportStatus.COMPLETED]: 'success',
+    [ReportStatus.FAILED]: 'danger',
   };
   return colors[status];
 }

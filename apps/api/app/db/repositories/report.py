@@ -127,9 +127,15 @@ class ReportRepository(BaseRepository[ReportTemplate]):
 
         return history
 
-    async def get_history_by_id(self, history_id: UUID) -> Optional[ReportHistory]:
+    async def get_history_by_id(
+        self, history_id: UUID, include_deleted: bool = False
+    ) -> Optional[ReportHistory]:
         """Get a report history record by ID."""
-        stmt = select(ReportHistory).where(ReportHistory.id == history_id)
+        conditions = [ReportHistory.id == history_id]
+        if not include_deleted:
+            conditions.append(ReportHistory.deleted_at.is_(None))
+
+        stmt = select(ReportHistory).where(and_(*conditions))
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -138,6 +144,8 @@ class ReportRepository(BaseRepository[ReportTemplate]):
         user_id: UUID,
         report_type: Optional[str] = None,
         format: Optional[str] = None,
+        include_deleted: bool = False,
+        deleted_only: bool = False,
         skip: int = 0,
         limit: int = 20,
     ) -> tuple[Sequence[ReportHistory], int]:
@@ -148,6 +156,8 @@ class ReportRepository(BaseRepository[ReportTemplate]):
             user_id: User UUID
             report_type: Filter by report type
             format: Filter by format
+            include_deleted: Include soft-deleted rows
+            deleted_only: Return only soft-deleted rows
             skip: Number of records to skip
             limit: Maximum number of records
 
@@ -155,6 +165,11 @@ class ReportRepository(BaseRepository[ReportTemplate]):
             Tuple of (history list, total count)
         """
         conditions = [ReportHistory.user_id == user_id]
+
+        if deleted_only:
+            conditions.append(ReportHistory.deleted_at.is_not(None))
+        elif not include_deleted:
+            conditions.append(ReportHistory.deleted_at.is_(None))
 
         if report_type:
             conditions.append(ReportHistory.report_type == report_type)
@@ -167,10 +182,11 @@ class ReportRepository(BaseRepository[ReportTemplate]):
         total = await self.db.scalar(count_stmt) or 0
 
         # Data query
+        order_column = ReportHistory.deleted_at.desc() if deleted_only else ReportHistory.generated_at.desc()
         stmt = (
             select(ReportHistory)
             .where(and_(*conditions))
-            .order_by(ReportHistory.generated_at.desc())
+            .order_by(order_column)
             .offset(skip)
             .limit(limit)
         )

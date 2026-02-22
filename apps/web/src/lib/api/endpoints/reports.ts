@@ -84,6 +84,8 @@ export const reportsApi = {
   async getHistory(params?: {
     report_type?: string;
     format?: string;
+    include_deleted?: boolean;
+    deleted_only?: boolean;
     page?: number;
     size?: number;
   }): Promise<ReportHistoryListResponse> {
@@ -91,6 +93,8 @@ export const reportsApi = {
 
     if (params?.report_type) queryParams.append('report_type', params.report_type);
     if (params?.format) queryParams.append('format', params.format);
+    if (params?.include_deleted) queryParams.append('include_deleted', 'true');
+    if (params?.deleted_only) queryParams.append('deleted_only', 'true');
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.size) queryParams.append('size', params.size.toString());
 
@@ -98,6 +102,20 @@ export const reportsApi = {
     const endpoint = queryString ? `/reports/history?${queryString}` : '/reports/history';
 
     return apiClient.get<ReportHistoryListResponse>(endpoint);
+  },
+
+  /**
+   * Delete a generated report from history
+   */
+  async deleteReport(reportId: string): Promise<void> {
+    return apiClient.delete<void>(`/reports/history/${reportId}`);
+  },
+
+  /**
+   * Restore a generated report from trash
+   */
+  async restoreReport(reportId: string): Promise<void> {
+    return apiClient.post<void>(`/reports/history/${reportId}/restore`);
   },
 
   /**
