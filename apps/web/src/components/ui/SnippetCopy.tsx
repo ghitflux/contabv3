@@ -6,18 +6,25 @@ import { CheckIcon, CopyIcon, EyeIcon, EyeOffIcon } from '@/lib/icons';
 
 interface SnippetCopyProps {
   text: string;
+  copyText?: string;
   label?: string;
   hideByDefault?: boolean;
   textClassName?: string;
 }
 
-export function SnippetCopy({ text, label, hideByDefault = false, textClassName }: SnippetCopyProps) {
+export function SnippetCopy({
+  text,
+  copyText,
+  label,
+  hideByDefault = false,
+  textClassName,
+}: SnippetCopyProps) {
   const [copied, setCopied] = useState(false);
   const [isVisible, setIsVisible] = useState(!hideByDefault);
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(copyText ?? text);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
@@ -29,7 +36,7 @@ export function SnippetCopy({ text, label, hideByDefault = false, textClassName 
     setIsVisible(!isVisible);
   };
 
-  const displayText = isVisible ? (label || text) : '••••••••';
+  const displayText = isVisible ? label || text : '••••••••';
   const resolvedTextClassName = textClassName ?? 'max-w-[120px]';
 
   return (
@@ -46,11 +53,7 @@ export function SnippetCopy({ text, label, hideByDefault = false, textClassName 
             onPress={toggleVisibility}
             className="min-w-unit-5 h-5 w-5"
           >
-            {isVisible ? (
-              <EyeOffIcon className="h-3 w-3" />
-            ) : (
-              <EyeIcon className="h-3 w-3" />
-            )}
+            {isVisible ? <EyeOffIcon className="h-3 w-3" /> : <EyeIcon className="h-3 w-3" />}
           </Button>
         </Tooltip>
       )}
@@ -62,11 +65,7 @@ export function SnippetCopy({ text, label, hideByDefault = false, textClassName 
           onPress={handleCopy}
           className="min-w-unit-5 h-5 w-5"
         >
-          {copied ? (
-            <CheckIcon className="h-3 w-3" />
-          ) : (
-            <CopyIcon className="h-3 w-3" />
-          )}
+          {copied ? <CheckIcon className="h-3 w-3" /> : <CopyIcon className="h-3 w-3" />}
         </Button>
       </Tooltip>
     </div>

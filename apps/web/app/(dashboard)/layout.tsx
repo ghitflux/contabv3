@@ -1,16 +1,10 @@
 'use client';
 
 import { NotificationCenter } from '@/components/shared/NotificationCenter';
+import { ActivityDueSoonBanner } from '@/components/shared/ActivityDueSoonBanner';
 import { ThemeSwitcher } from '@/components/shared/ThemeSwitcher';
 import { ToastContainer } from '@/components/ui/Toast';
-import {
-  Avatar,
-  Button,
-  Dropdown,
-  DropdownItem,
-  DropdownMenu,
-  DropdownTrigger,
-} from '@/heroui';
+import { Avatar, Button, Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from '@/heroui';
 import { useAuth } from '@/hooks/auth/AuthContext';
 import {
   BarChartIcon as ChartIcon,
@@ -189,7 +183,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto bg-background p-6">{children}</main>
+        <main className="flex-1 overflow-auto bg-background p-6">
+          <ActivityDueSoonBanner />
+          {children}
+        </main>
       </div>
       <ToastContainer />
     </div>

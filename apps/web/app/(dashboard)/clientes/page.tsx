@@ -7,7 +7,7 @@ import { useClients } from '@/hooks/useClients';
 import { clientsApi } from '@/lib/api/endpoints/clients';
 import { obligationsApi, type ObligationResponse } from '@/lib/api/endpoints/obligations';
 import type { ClientListItem, ClientCreate, ClientUserCredentials, ClientStats, RegimeTributario } from '@/types/client';
-import { ClientStatus, getRegimeLabel, getStatusLabel } from '@/types/client';
+import { ClientStatus, getDigitsOnly, getRegimeLabel, getStatusLabel } from '@/types/client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { SearchInput } from '@/components/ui/SearchInput';
@@ -611,18 +611,30 @@ export default function ClientesPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <SnippetCopy text={client.cnpj} textClassName="max-w-[120px] sm:max-w-[140px]" />
+                          <SnippetCopy
+                            text={client.cnpj}
+                            copyText={getDigitsOnly(client.cnpj)}
+                            textClassName="max-w-[120px] sm:max-w-[140px]"
+                          />
                         </TableCell>
                         <TableCell>
                           {client.cpf_empresa ? (
-                            <SnippetCopy text={client.cpf_empresa} textClassName="max-w-[110px]" />
+                            <SnippetCopy
+                              text={client.cpf_empresa}
+                              copyText={getDigitsOnly(client.cpf_empresa)}
+                              textClassName="max-w-[110px]"
+                            />
                           ) : (
                             <span className="text-default-400 text-xs">-</span>
                           )}
                         </TableCell>
                         <TableCell>
                           {client.codigo_simples ? (
-                            <SnippetCopy text={client.codigo_simples} textClassName="max-w-[110px]" />
+                            <SnippetCopy
+                              text={client.codigo_simples}
+                              copyText={getDigitsOnly(client.codigo_simples)}
+                              textClassName="max-w-[110px]"
+                            />
                           ) : (
                             <span className="text-default-400 text-xs">-</span>
                           )}

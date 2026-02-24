@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import React from "react";
+import React from 'react';
 import {
   Modal,
   ModalContent,
@@ -11,11 +11,12 @@ import {
   Snippet,
   Chip,
   Divider,
-} from "@heroui/react";
-import { EditIcon } from "@/lib/icons";
-import { SnippetCopy } from "@/components/ui/SnippetCopy";
-import type { Client } from "@/types/client";
+} from '@heroui/react';
+import { EditIcon } from '@/lib/icons';
+import { SnippetCopy } from '@/components/ui/SnippetCopy';
+import type { Client } from '@/types/client';
 import {
+  getDigitsOnly,
   formatCNPJ,
   formatPhone,
   getStatusLabel,
@@ -23,9 +24,9 @@ import {
   getTipoEmpresaLabel,
   getServicoContratadoLabel,
   getLicencaNecessariaLabel,
-} from "@/types/client";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+} from '@/types/client';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 interface ClientDetailsModalProps {
   client: Client | null;
@@ -38,28 +39,23 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
   if (!client) return null;
 
   const formatDate = (dateString: string | null) => {
-    if (!dateString) return "-";
+    if (!dateString) return '-';
     try {
-      return format(new Date(dateString), "dd/MM/yyyy", { locale: ptBR });
+      return format(new Date(dateString), 'dd/MM/yyyy', { locale: ptBR });
     } catch {
       return dateString;
     }
   };
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
     }).format(value);
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      size="5xl"
-      scrollBehavior="inside"
-    >
+    <Modal isOpen={isOpen} onClose={onClose} size="5xl" scrollBehavior="inside">
       <ModalContent>
         {(onCloseModal) => (
           <>
@@ -68,11 +64,11 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
               <div className="flex items-center gap-2">
                 <Chip
                   color={
-                    client.status === "ativo"
-                      ? "success"
-                      : client.status === "pendente"
-                        ? "warning"
-                        : "danger"
+                    client.status === 'ativo'
+                      ? 'success'
+                      : client.status === 'pendente'
+                        ? 'warning'
+                        : 'danger'
                   }
                   variant="flat"
                   size="sm"
@@ -92,22 +88,30 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <p className="text-xs text-gray-600 mb-1">Razão Social</p>
-                      <Snippet symbol="" size="sm">{client.razao_social}</Snippet>
+                      <Snippet symbol="" size="sm">
+                        {client.razao_social}
+                      </Snippet>
                     </div>
                     {client.nome_fantasia && (
                       <div>
                         <p className="text-xs text-gray-600 mb-1">Nome Fantasia</p>
-                        <Snippet symbol="" size="sm">{client.nome_fantasia}</Snippet>
+                        <Snippet symbol="" size="sm">
+                          {client.nome_fantasia}
+                        </Snippet>
                       </div>
                     )}
                     <div>
                       <p className="text-xs text-gray-600 mb-1">CNPJ</p>
-                      <Snippet symbol="" size="sm">{formatCNPJ(client.cnpj)}</Snippet>
+                      <Snippet symbol="" size="sm" codeString={getDigitsOnly(client.cnpj)}>
+                        {formatCNPJ(client.cnpj)}
+                      </Snippet>
                     </div>
                     {client.cpf_empresa && (
                       <div>
                         <p className="text-xs text-gray-600 mb-1">CPF</p>
-                        <Snippet symbol="" size="sm">{client.cpf_empresa}</Snippet>
+                        <Snippet symbol="" size="sm" codeString={getDigitsOnly(client.cpf_empresa)}>
+                          {client.cpf_empresa}
+                        </Snippet>
                       </div>
                     )}
                     {client.senha_gov && (
@@ -125,19 +129,39 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
                     {client.inscricao_estadual && (
                       <div>
                         <p className="text-xs text-gray-600 mb-1">Inscrição Estadual</p>
-                        <Snippet symbol="" size="sm">{client.inscricao_estadual}</Snippet>
+                        <Snippet
+                          symbol=""
+                          size="sm"
+                          codeString={getDigitsOnly(client.inscricao_estadual)}
+                        >
+                          {client.inscricao_estadual}
+                        </Snippet>
                       </div>
                     )}
                     {client.inscricao_municipal && (
                       <div>
                         <p className="text-xs text-gray-600 mb-1">Inscrição Municipal</p>
-                        <Snippet symbol="" size="sm">{client.inscricao_municipal}</Snippet>
+                        <Snippet
+                          symbol=""
+                          size="sm"
+                          codeString={getDigitsOnly(client.inscricao_municipal)}
+                        >
+                          {client.inscricao_municipal}
+                        </Snippet>
                       </div>
                     )}
                     {client.codigo_simples && (
                       <div>
-                        <p className="text-xs text-gray-600 mb-1">Código de Acesso ao Simples Nacional</p>
-                        <Snippet symbol="" size="sm">{client.codigo_simples}</Snippet>
+                        <p className="text-xs text-gray-600 mb-1">
+                          Código de Acesso ao Simples Nacional
+                        </p>
+                        <Snippet
+                          symbol=""
+                          size="sm"
+                          codeString={getDigitsOnly(client.codigo_simples)}
+                        >
+                          {client.codigo_simples}
+                        </Snippet>
                       </div>
                     )}
                   </div>
@@ -151,12 +175,16 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                     <div>
                       <p className="text-xs text-gray-600 mb-1">Email</p>
-                      <Snippet symbol="" size="sm">{client.email}</Snippet>
+                      <Snippet symbol="" size="sm">
+                        {client.email}
+                      </Snippet>
                     </div>
                     {client.celular && (
                       <div>
                         <p className="text-xs text-gray-600 mb-1">Celular</p>
-                        <Snippet symbol="" size="sm">{formatPhone(client.celular) || client.celular}</Snippet>
+                        <Snippet symbol="" size="sm">
+                          {formatPhone(client.celular) || client.celular}
+                        </Snippet>
                       </div>
                     )}
                   </div>
@@ -173,37 +201,50 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
                         {client.cep && (
                           <div>
                             <p className="text-xs text-gray-600 mb-1">CEP</p>
-                            <Snippet symbol="" size="sm">{client.cep}</Snippet>
+                            <Snippet symbol="" size="sm">
+                              {client.cep}
+                            </Snippet>
                           </div>
                         )}
                         {client.logradouro && (
                           <div>
                             <p className="text-xs text-gray-600 mb-1">Logradouro</p>
-                            <Snippet symbol="" size="sm">{client.logradouro}</Snippet>
+                            <Snippet symbol="" size="sm">
+                              {client.logradouro}
+                            </Snippet>
                           </div>
                         )}
                         {client.numero && (
                           <div>
                             <p className="text-xs text-gray-600 mb-1">Número</p>
-                            <Snippet symbol="" size="sm">{client.numero}</Snippet>
+                            <Snippet symbol="" size="sm">
+                              {client.numero}
+                            </Snippet>
                           </div>
                         )}
                         {client.complemento && (
                           <div>
                             <p className="text-xs text-gray-600 mb-1">Complemento</p>
-                            <Snippet symbol="" size="sm">{client.complemento}</Snippet>
+                            <Snippet symbol="" size="sm">
+                              {client.complemento}
+                            </Snippet>
                           </div>
                         )}
                         {client.bairro && (
                           <div>
                             <p className="text-xs text-gray-600 mb-1">Bairro</p>
-                            <Snippet symbol="" size="sm">{client.bairro}</Snippet>
+                            <Snippet symbol="" size="sm">
+                              {client.bairro}
+                            </Snippet>
                           </div>
                         )}
                         {client.cidade && (
                           <div>
                             <p className="text-xs text-gray-600 mb-1">Cidade</p>
-                            <Snippet symbol="" size="sm">{`${client.cidade} - ${client.uf}`}</Snippet>
+                            <Snippet
+                              symbol=""
+                              size="sm"
+                            >{`${client.cidade} - ${client.uf}`}</Snippet>
                           </div>
                         )}
                       </div>
@@ -218,11 +259,15 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <p className="text-xs text-gray-600 mb-1">Honorários Mensais</p>
-                      <Snippet symbol="" size="sm" color="success">{formatCurrency(client.honorarios_mensais)}</Snippet>
+                      <Snippet symbol="" size="sm" color="success">
+                        {formatCurrency(client.honorarios_mensais)}
+                      </Snippet>
                     </div>
                     <div>
                       <p className="text-xs text-gray-600 mb-1">Vencimento</p>
-                      <Snippet symbol="" size="sm">Dia {client.dia_vencimento}</Snippet>
+                      <Snippet symbol="" size="sm">
+                        Dia {client.dia_vencimento}
+                      </Snippet>
                     </div>
                   </div>
                 </section>
@@ -235,18 +280,24 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <p className="text-xs text-gray-600 mb-1">Regime Tributário</p>
-                      <Snippet symbol="" size="sm">{getRegimeLabel(client.regime_tributario)}</Snippet>
+                      <Snippet symbol="" size="sm">
+                        {getRegimeLabel(client.regime_tributario)}
+                      </Snippet>
                     </div>
                     {client.data_abertura && (
                       <div>
                         <p className="text-xs text-gray-600 mb-1">Data de Abertura</p>
-                        <Snippet symbol="" size="sm">{formatDate(client.data_abertura)}</Snippet>
+                        <Snippet symbol="" size="sm">
+                          {formatDate(client.data_abertura)}
+                        </Snippet>
                       </div>
                     )}
                     {client.inicio_escritorio && (
                       <div>
                         <p className="text-xs text-gray-600 mb-1">Início no Escritório</p>
-                        <Snippet symbol="" size="sm">{formatDate(client.inicio_escritorio)}</Snippet>
+                        <Snippet symbol="" size="sm">
+                          {formatDate(client.inicio_escritorio)}
+                        </Snippet>
                       </div>
                     )}
                   </div>
@@ -312,24 +363,37 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
                           <p className="text-xs text-gray-600 mb-1">Nome</p>
-                          <Snippet symbol="" size="sm">{client.responsavel_nome}</Snippet>
+                          <Snippet symbol="" size="sm">
+                            {client.responsavel_nome}
+                          </Snippet>
                         </div>
                         {client.responsavel_cpf && (
                           <div>
                             <p className="text-xs text-gray-600 mb-1">CPF</p>
-                            <Snippet symbol="" size="sm">{client.responsavel_cpf}</Snippet>
+                            <Snippet
+                              symbol=""
+                              size="sm"
+                              codeString={getDigitsOnly(client.responsavel_cpf)}
+                            >
+                              {client.responsavel_cpf}
+                            </Snippet>
                           </div>
                         )}
                         {client.responsavel_email && (
                           <div>
                             <p className="text-xs text-gray-600 mb-1">Email</p>
-                            <Snippet symbol="" size="sm">{client.responsavel_email}</Snippet>
+                            <Snippet symbol="" size="sm">
+                              {client.responsavel_email}
+                            </Snippet>
                           </div>
                         )}
                         {client.responsavel_telefone && (
                           <div>
                             <p className="text-xs text-gray-600 mb-1">Telefone</p>
-                            <Snippet symbol="" size="sm">{formatPhone(client.responsavel_telefone) || client.responsavel_telefone}</Snippet>
+                            <Snippet symbol="" size="sm">
+                              {formatPhone(client.responsavel_telefone) ||
+                                client.responsavel_telefone}
+                            </Snippet>
                           </div>
                         )}
                       </div>
@@ -355,61 +419,84 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
                       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                         {client.cpf_empresa && (
                           <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800/60 p-3 rounded-lg">
-                            <p className="text-xs text-primary-600 dark:text-primary-400 mb-1 font-medium">CPF da Empresa</p>
-                            <SnippetCopy text={client.cpf_empresa} />
+                            <p className="text-xs text-primary-600 dark:text-primary-400 mb-1 font-medium">
+                              CPF da Empresa
+                            </p>
+                            <SnippetCopy
+                              text={client.cpf_empresa}
+                              copyText={getDigitsOnly(client.cpf_empresa)}
+                            />
                           </div>
                         )}
                         {client.senha_sistema && (
                           <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800/60 p-3 rounded-lg">
-                            <p className="text-xs text-primary-600 dark:text-primary-400 mb-1 font-medium">Senha de Acesso</p>
+                            <p className="text-xs text-primary-600 dark:text-primary-400 mb-1 font-medium">
+                              Senha de Acesso
+                            </p>
                             <SnippetCopy text={client.senha_sistema} hideByDefault />
                           </div>
                         )}
                         {client.senha_gov && (
                           <div className="bg-secondary-50 dark:bg-secondary-900/20 border border-secondary-200 dark:border-secondary-800/60 p-3 rounded-lg">
-                            <p className="text-xs text-secondary-600 dark:text-secondary-400 mb-1 font-medium">Senha GOV.BR</p>
+                            <p className="text-xs text-secondary-600 dark:text-secondary-400 mb-1 font-medium">
+                              Senha GOV.BR
+                            </p>
                             <SnippetCopy text={client.senha_gov} hideByDefault />
                           </div>
                         )}
                         {client.senha_prefeitura && (
                           <div className="bg-secondary-50 dark:bg-secondary-900/20 border border-secondary-200 dark:border-secondary-800/60 p-3 rounded-lg">
-                            <p className="text-xs text-secondary-600 dark:text-secondary-400 mb-1 font-medium">Senha da Prefeitura</p>
+                            <p className="text-xs text-secondary-600 dark:text-secondary-400 mb-1 font-medium">
+                              Senha da Prefeitura
+                            </p>
                             <SnippetCopy text={client.senha_prefeitura} hideByDefault />
                           </div>
                         )}
                         {client.login_seg_desemp && (
                           <div className="bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800/60 p-3 rounded-lg">
-                            <p className="text-xs text-success-600 dark:text-success-400 mb-1 font-medium">Login Seguro Desemprego</p>
+                            <p className="text-xs text-success-600 dark:text-success-400 mb-1 font-medium">
+                              Login Seguro Desemprego
+                            </p>
                             <SnippetCopy text={client.login_seg_desemp} />
                           </div>
                         )}
                         {client.senha_seg_desemp && (
                           <div className="bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800/60 p-3 rounded-lg">
-                            <p className="text-xs text-success-600 dark:text-success-400 mb-1 font-medium">Senha Seguro Desemprego</p>
+                            <p className="text-xs text-success-600 dark:text-success-400 mb-1 font-medium">
+                              Senha Seguro Desemprego
+                            </p>
                             <SnippetCopy text={client.senha_seg_desemp} hideByDefault />
                           </div>
                         )}
                         {client.email_seg_desemp && (
                           <div className="bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800/60 p-3 rounded-lg">
-                            <p className="text-xs text-success-600 dark:text-success-400 mb-1 font-medium">E-mail Seguro Desemprego</p>
+                            <p className="text-xs text-success-600 dark:text-success-400 mb-1 font-medium">
+                              E-mail Seguro Desemprego
+                            </p>
                             <SnippetCopy text={client.email_seg_desemp} />
                           </div>
                         )}
                         {client.senha_nfse && (
                           <div className="bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-800/60 p-3 rounded-lg">
-                            <p className="text-xs text-warning-600 dark:text-warning-400 mb-1 font-medium">Senha NFS-e Nacional</p>
+                            <p className="text-xs text-warning-600 dark:text-warning-400 mb-1 font-medium">
+                              Senha NFS-e Nacional
+                            </p>
                             <SnippetCopy text={client.senha_nfse} hideByDefault />
                           </div>
                         )}
                         {client.senha_certificado_digital && (
                           <div className="bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800/60 p-3 rounded-lg">
-                            <p className="text-xs text-danger-600 dark:text-danger-400 mb-1 font-medium">Senha Certificado Digital</p>
+                            <p className="text-xs text-danger-600 dark:text-danger-400 mb-1 font-medium">
+                              Senha Certificado Digital
+                            </p>
                             <SnippetCopy text={client.senha_certificado_digital} hideByDefault />
                           </div>
                         )}
                         {client.senha_gcw_resp && (
                           <div className="bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800/60 p-3 rounded-lg">
-                            <p className="text-xs text-danger-600 dark:text-danger-400 mb-1 font-medium">Senha GCW Responsável</p>
+                            <p className="text-xs text-danger-600 dark:text-danger-400 mb-1 font-medium">
+                              Senha GCW Responsável
+                            </p>
                             <SnippetCopy text={client.senha_gcw_resp} hideByDefault />
                           </div>
                         )}

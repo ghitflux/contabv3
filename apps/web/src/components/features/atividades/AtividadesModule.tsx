@@ -1,160 +1,216 @@
-"use client"
+'use client';
 
-import { useEffect, useMemo, useState } from "react"
-import { motion } from "framer-motion"
-import { Button, Card, CardBody, Input, Select, SelectItem, Tab, Tabs } from "@/heroui"
+import { useEffect, useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
+import { Button, Card, CardBody, Input, Select, SelectItem, Tab, Tabs } from '@/heroui';
+import { AlertTriangle, CalendarDays, LayoutGrid, ListChecks, Plus, Search } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { AtividadesKanban } from './AtividadesKanban';
+import { AtividadesCalendar } from './AtividadesCalendar';
+import { AtividadesLista } from './AtividadesLista';
+import { AtividadesFormModal } from './AtividadesFormModal';
+import { pageTransition, fadeIn } from '@/lib/animations';
+import { useActivities } from '@/hooks/useActivities';
+import { useClients } from '@/hooks/useClients';
+import type { Activity, ActivityCreate, ActivityUpdate } from '@/types/activity';
 import {
-  AlertTriangle,
-  CalendarDays,
-  LayoutGrid,
-  ListChecks,
-  Plus,
-  Search,
-} from "lucide-react"
-import { AtividadesKanban } from "./AtividadesKanban"
-import { AtividadesCalendar } from "./AtividadesCalendar"
-import { AtividadesLista } from "./AtividadesLista"
-import { AtividadesFormModal } from "./AtividadesFormModal"
-import { pageTransition, fadeIn } from "@/lib/animations"
-import { useActivities } from "@/hooks/useActivities"
-import type { Activity, ActivityCreate, ActivityUpdate } from "@/types/activity"
-import { ActivityPriority, ActivityStatus } from "@/types/activity"
-import { useAuth } from "@/hooks/auth/AuthContext"
-import { toast } from "@/lib/toast"
+  ActivityPriority,
+  ActivityStatus,
+  getDaysUntilDate,
+  getTodayDateKey,
+} from '@/types/activity';
+import { useAuth } from '@/hooks/auth/AuthContext';
+import { toast } from '@/lib/toast';
+import { UserRole } from '@/types/user';
 
-const DEFAULT_PAGE_SIZE = 200
+const DEFAULT_PAGE_SIZE = 200;
+const DEFAULT_CLIENT_PAGE_SIZE = 100;
+
+function isPendingActivity(activity: Activity, todayDate: string): boolean {
+  return (
+    activity.status !== ActivityStatus.DONE &&
+    Boolean(activity.due_date && activity.due_date < todayDate)
+  );
+}
 
 export function AtividadesModule() {
-  const [activeTab, setActiveTab] = useState("kanban")
-  const [isFormOpen, setIsFormOpen] = useState(false)
-  const [formMode, setFormMode] = useState<"create" | "edit">("create")
-  const [editingActivity, setEditingActivity] = useState<Activity | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [filterStatus, setFilterStatus] = useState("all")
-  const [filterPriority, setFilterPriority] = useState("all")
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState('kanban');
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
+  const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterPriority, setFilterPriority] = useState('all');
   const { activities, isLoading, createActivity, updateActivity, fetchActivities } =
-    useActivities()
-  const { user } = useAuth()
+    useActivities();
+  const { clients, fetchClients } = useClients();
+  const { user } = useAuth();
 
   useEffect(() => {
-    fetchActivities({ page: 1, size: DEFAULT_PAGE_SIZE })
-  }, [fetchActivities])
+    fetchActivities({ page: 1, size: DEFAULT_PAGE_SIZE });
+  }, [fetchActivities]);
 
-  const activityItems = activities?.items ?? []
+  useEffect(() => {
+    if (user?.role === UserRole.CLIENTE) return;
+    fetchClients({ page: 1, size: DEFAULT_CLIENT_PAGE_SIZE }).catch(() => {
+      // Tela de atividades pode carregar sem o select de empresas quando API de clientes falha.
+    });
+  }, [fetchClients, user?.role]);
+
+  const activityItems = activities?.items ?? [];
+
+  const clientNameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const client of clients?.items ?? []) {
+      map[client.id] = client.nome_fantasia || client.razao_social;
+    }
+    return map;
+  }, [clients?.items]);
+
+  const companyOptions = useMemo(
+    () =>
+      (clients?.items ?? []).map((client) => ({
+        id: client.id,
+        label: `${client.nome_fantasia || client.razao_social} - ${client.cnpj}`,
+      })),
+    [clients?.items]
+  );
 
   const filteredActivities = useMemo(() => {
+    const todayDate = getTodayDateKey();
     return activityItems.filter((activity) => {
+      const companySearchText = (activity.linked_client_ids ?? [])
+        .map((id) => clientNameById[id] || '')
+        .join(' ')
+        .toLowerCase();
+
+      const normalizedSearch = searchTerm.toLowerCase();
       const matchSearch =
-        searchTerm === "" ||
-        activity.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (activity.description || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (activity.assigned_to_name || activity.assigned_to_id || "")
+        searchTerm === '' ||
+        activity.title.toLowerCase().includes(normalizedSearch) ||
+        (activity.description || '').toLowerCase().includes(normalizedSearch) ||
+        (activity.assigned_to_name || activity.assigned_to_id || '')
           .toLowerCase()
-          .includes(searchTerm.toLowerCase())
+          .includes(normalizedSearch) ||
+        companySearchText.includes(normalizedSearch);
 
-      const matchStatus = filterStatus === "all" || activity.status === filterStatus
-      const matchPriority = filterPriority === "all" || activity.priority === filterPriority
+      const pending = isPendingActivity(activity, todayDate);
+      const matchStatus =
+        filterStatus === 'all' ||
+        (filterStatus === 'pending' ? pending : activity.status === filterStatus);
+      const matchPriority = filterPriority === 'all' || activity.priority === filterPriority;
 
-      return matchSearch && matchStatus && matchPriority
-    })
-  }, [activityItems, searchTerm, filterStatus, filterPriority])
+      return matchSearch && matchStatus && matchPriority;
+    });
+  }, [activityItems, searchTerm, filterStatus, filterPriority, clientNameById]);
 
   const stats = useMemo(() => {
-    const todayStr = new Date().toISOString().split("T")[0]
-    if (!todayStr) return { total: 0, open: 0, dueToday: 0, overdue: 0 }
-
-    let open = 0
-    let dueToday = 0
-    let overdue = 0
+    const todayDate = getTodayDateKey();
+    let open = 0;
+    let dueToday = 0;
+    let overdue = 0;
+    let recurringDueSoon = 0;
 
     activityItems.forEach((activity) => {
-      const isDone = activity.status === ActivityStatus.DONE
-      if (!isDone) open += 1
+      const isDone = activity.status === ActivityStatus.DONE;
+      if (!isDone) open += 1;
       if (activity.due_date) {
-        if (activity.due_date === todayStr) dueToday += 1
-        if (!isDone && activity.due_date < todayStr) overdue += 1
+        if (activity.due_date === todayDate) dueToday += 1;
+        if (!isDone && activity.due_date < todayDate) overdue += 1;
       }
-    })
+      if (activity.recurrence && !isDone) {
+        const daysUntilDue = getDaysUntilDate(activity.due_date);
+        if (daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= 5) {
+          recurringDueSoon += 1;
+        }
+      }
+    });
 
     return {
       total: activityItems.length,
       open,
       dueToday,
       overdue,
-    }
-  }, [activityItems])
+      recurringDueSoon,
+    };
+  }, [activityItems]);
 
   const hasFilters =
-    searchTerm.trim().length > 0 || filterStatus !== "all" || filterPriority !== "all"
+    searchTerm.trim().length > 0 || filterStatus !== 'all' || filterPriority !== 'all';
 
   const openCreateModal = () => {
-    setFormMode("create")
-    setEditingActivity(null)
-    setIsFormOpen(true)
-  }
+    setFormMode('create');
+    setEditingActivity(null);
+    setIsFormOpen(true);
+  };
 
   const openEditModal = (activity: Activity) => {
-    setFormMode("edit")
-    setEditingActivity(activity)
-    setIsFormOpen(true)
-  }
+    setFormMode('edit');
+    setEditingActivity(activity);
+    setIsFormOpen(true);
+  };
 
   const closeFormModal = () => {
-    if (isSubmitting) return
-    setIsFormOpen(false)
-  }
+    if (isSubmitting) return;
+    setIsFormOpen(false);
+  };
+
+  const openLinkedObligation = (obligationId: string) => {
+    router.push(`/obrigacoes?id=${obligationId}`);
+  };
 
   const handleCreateActivity = async (payload: ActivityCreate | ActivityUpdate) => {
     try {
-      setIsSubmitting(true)
+      setIsSubmitting(true);
       await createActivity({
         ...payload,
         status: payload.status ?? ActivityStatus.TODO,
         priority: payload.priority ?? ActivityPriority.MEDIUM,
-        assigned_to_id: payload.assigned_to_id || user?.id || "",
-      } as ActivityCreate)
-      toast.success("Atividade criada com sucesso.")
-      setIsFormOpen(false)
+        assigned_to_id: payload.assigned_to_id || user?.id || '',
+      } as ActivityCreate);
+      toast.success('Atividade criada com sucesso.');
+      setIsFormOpen(false);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Não foi possível criar a atividade."
-      toast.error(message)
-      throw error
+        error instanceof Error ? error.message : 'Não foi possível criar a atividade.';
+      toast.error(message);
+      throw error;
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
   const handleUpdateActivity = async (payload: ActivityCreate | ActivityUpdate) => {
-    if (!editingActivity) return
+    if (!editingActivity) return;
     try {
-      setIsSubmitting(true)
-      await updateActivity(editingActivity.id, payload as ActivityUpdate)
-      toast.success("Atividade atualizada com sucesso.")
-      setIsFormOpen(false)
-      setEditingActivity(null)
+      setIsSubmitting(true);
+      await updateActivity(editingActivity.id, payload as ActivityUpdate);
+      toast.success('Atividade atualizada com sucesso.');
+      setIsFormOpen(false);
+      setEditingActivity(null);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Não foi possível atualizar a atividade."
-      toast.error(message)
-      throw error
+        error instanceof Error ? error.message : 'Não foi possível atualizar a atividade.';
+      toast.error(message);
+      throw error;
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
   const handleMoveActivity = async (activityId: string, status: ActivityStatus) => {
     try {
-      await updateActivity(activityId, { status })
-      toast.success("Status atualizado.")
+      await updateActivity(activityId, { status });
+      toast.success('Status atualizado.');
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Não foi possível mover a atividade."
-      toast.error(message)
-      throw error
+        error instanceof Error ? error.message : 'Não foi possível mover a atividade.';
+      toast.error(message);
+      throw error;
     }
-  }
+  };
 
   return (
     <motion.div
@@ -177,8 +233,26 @@ export function AtividadesModule() {
           >
             Nova Atividade
           </Button>
+          <Button variant="bordered" onPress={() => router.push('/obrigacoes')}>
+            Ir para Obrigações
+          </Button>
         </div>
       </div>
+
+      {stats.recurringDueSoon > 0 && (
+        <Card className="border-l-4 border-warning bg-warning-50/70 dark:bg-warning-900/15">
+          <CardBody className="py-3 px-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <p className="text-sm text-warning-700 dark:text-warning-300">
+              {stats.recurringDueSoon} atividade{stats.recurringDueSoon > 1 ? 's' : ''} recorrente
+              {stats.recurringDueSoon > 1 ? 's' : ''} vence{stats.recurringDueSoon > 1 ? 'm' : ''}{' '}
+              em até 5 dias.
+            </p>
+            <Button size="sm" variant="flat" color="warning" onPress={() => setActiveTab('lista')}>
+              Ver pendências
+            </Button>
+          </CardBody>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Card className="bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent border-l-4 border-blue-500">
@@ -199,7 +273,9 @@ export function AtividadesModule() {
               <div className="p-2.5 rounded-full bg-purple-500/10">
                 <LayoutGrid className="h-5 w-5 text-purple-600 dark:text-purple-400" />
               </div>
-              <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">{stats.open}</p>
+              <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">
+                {stats.open}
+              </p>
             </div>
           </CardBody>
         </Card>
@@ -210,13 +286,15 @@ export function AtividadesModule() {
               <div className="p-2.5 rounded-full bg-amber-500/10">
                 <CalendarDays className="h-5 w-5 text-amber-600 dark:text-amber-400" />
               </div>
-              <p className="text-3xl font-bold text-amber-600 dark:text-amber-400">{stats.dueToday}</p>
+              <p className="text-3xl font-bold text-amber-600 dark:text-amber-400">
+                {stats.dueToday}
+              </p>
             </div>
           </CardBody>
         </Card>
         <Card className="bg-gradient-to-br from-red-500/10 via-red-500/5 to-transparent border-l-4 border-red-500">
           <CardBody className="p-4 space-y-2">
-            <p className="text-xs uppercase text-default-600 font-medium">Atrasadas</p>
+            <p className="text-xs uppercase text-default-600 font-medium">Pendentes</p>
             <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-full bg-red-500/10">
                 <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
@@ -240,26 +318,27 @@ export function AtividadesModule() {
             />
             <Select
               label="Status"
-              selectedKeys={filterStatus === "all" ? [] : [filterStatus]}
+              selectedKeys={filterStatus === 'all' ? [] : [filterStatus]}
               onSelectionChange={(keys) => {
-                const value = Array.from(keys)[0] as string | undefined
-                setFilterStatus(value || "all")
+                const value = Array.from(keys)[0] as string | undefined;
+                setFilterStatus(value || 'all');
               }}
               size="sm"
-              className="w-full lg:w-[200px]"
+              className="w-full lg:w-[220px]"
             >
               <SelectItem key="all">Todos os status</SelectItem>
               <SelectItem key="todo">A Fazer</SelectItem>
               <SelectItem key="in-progress">Em Andamento</SelectItem>
               <SelectItem key="review">Revisão</SelectItem>
               <SelectItem key="done">Concluído</SelectItem>
+              <SelectItem key="pending">Pendente (vencida)</SelectItem>
             </Select>
             <Select
               label="Prioridade"
-              selectedKeys={filterPriority === "all" ? [] : [filterPriority]}
+              selectedKeys={filterPriority === 'all' ? [] : [filterPriority]}
               onSelectionChange={(keys) => {
-                const value = Array.from(keys)[0] as string | undefined
-                setFilterPriority(value || "all")
+                const value = Array.from(keys)[0] as string | undefined;
+                setFilterPriority(value || 'all');
               }}
               size="sm"
               className="w-full lg:w-[200px]"
@@ -273,9 +352,9 @@ export function AtividadesModule() {
               variant="bordered"
               size="sm"
               onPress={() => {
-                setSearchTerm("")
-                setFilterStatus("all")
-                setFilterPriority("all")
+                setSearchTerm('');
+                setFilterStatus('all');
+                setFilterPriority('all');
               }}
               isDisabled={!hasFilters}
             >
@@ -323,7 +402,7 @@ export function AtividadesModule() {
               }
             />
           </Tabs>
-          {activeTab === "kanban" && (
+          {activeTab === 'kanban' && (
             <p className="text-sm text-default-500">
               Arraste e solte os cards para mover entre etapas.
             </p>
@@ -331,7 +410,7 @@ export function AtividadesModule() {
         </div>
 
         <div className="mt-6">
-          {activeTab === "kanban" && (
+          {activeTab === 'kanban' && (
             <motion.div
               key="kanban"
               initial="hidden"
@@ -342,12 +421,14 @@ export function AtividadesModule() {
               <AtividadesKanban
                 activities={filteredActivities}
                 isLoading={isLoading}
+                clientNameById={clientNameById}
                 onMove={handleMoveActivity}
                 onSelectActivity={openEditModal}
+                onOpenLinkedObligation={openLinkedObligation}
               />
             </motion.div>
           )}
-          {activeTab === "calendar" && (
+          {activeTab === 'calendar' && (
             <motion.div
               key="calendar"
               initial="hidden"
@@ -362,7 +443,7 @@ export function AtividadesModule() {
               />
             </motion.div>
           )}
-          {activeTab === "lista" && (
+          {activeTab === 'lista' && (
             <motion.div
               key="lista"
               initial="hidden"
@@ -373,7 +454,9 @@ export function AtividadesModule() {
               <AtividadesLista
                 activities={filteredActivities}
                 isLoading={isLoading}
+                clientNameById={clientNameById}
                 onSelectActivity={openEditModal}
+                onOpenLinkedObligation={openLinkedObligation}
               />
             </motion.div>
           )}
@@ -386,10 +469,12 @@ export function AtividadesModule() {
         activity={editingActivity}
         defaultAssigneeId={user?.id ?? undefined}
         defaultAssigneeName={user?.name ?? null}
+        companyOptions={companyOptions}
+        onOpenLinkedObligation={openLinkedObligation}
         isSubmitting={isSubmitting}
         onClose={closeFormModal}
-        onSubmit={formMode === "create" ? handleCreateActivity : handleUpdateActivity}
+        onSubmit={formMode === 'create' ? handleCreateActivity : handleUpdateActivity}
       />
     </motion.div>
-  )
+  );
 }

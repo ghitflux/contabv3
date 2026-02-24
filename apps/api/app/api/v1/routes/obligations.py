@@ -888,6 +888,18 @@ async def upload_receipt(
 
     # Reload with relations
     obligation = await repo.get_by_id_with_relations(obligation_id)
+    if obligation:
+        await upsert_obligation_activity(
+            db,
+            obligation,
+            preferred_user_id=current_user.id,
+        )
+        await db.commit()
+    if not obligation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Obligation not found",
+        )
     return _obligation_to_response(obligation)
 
 
@@ -929,6 +941,23 @@ async def update_due_date(
 
     # Reload with relations
     obligation = await repo.get_by_id_with_relations(obligation_id)
+    if obligation:
+        await upsert_obligation_activity(
+            db,
+            obligation,
+            preferred_user_id=current_user.id,
+        )
+        await send_due_soon_notifications_for_obligation(
+            db,
+            obligation,
+            reminder_days=5,
+        )
+        await db.commit()
+    if not obligation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Obligation not found",
+        )
     return _obligation_to_response(obligation)
 
 
@@ -969,6 +998,18 @@ async def cancel_obligation(
 
     # Reload with relations
     obligation = await repo.get_by_id_with_relations(obligation_id)
+    if obligation:
+        await upsert_obligation_activity(
+            db,
+            obligation,
+            preferred_user_id=current_user.id,
+        )
+        await db.commit()
+    if not obligation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Obligation not found",
+        )
     return _obligation_to_response(obligation)
 
 
@@ -1009,6 +1050,23 @@ async def reopen_obligation(
 
     # Reload with relations
     obligation = await repo.get_by_id_with_relations(obligation_id)
+    if obligation:
+        await upsert_obligation_activity(
+            db,
+            obligation,
+            preferred_user_id=current_user.id,
+        )
+        await send_due_soon_notifications_for_obligation(
+            db,
+            obligation,
+            reminder_days=5,
+        )
+        await db.commit()
+    if not obligation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Obligation not found",
+        )
     return _obligation_to_response(obligation)
 
 
@@ -1208,8 +1266,20 @@ async def complete_obligation(
     )
     await event_repo.create(event)
 
+    obligation = await repo.get_by_id_with_relations(obligation_id)
+    if obligation:
+        await upsert_obligation_activity(
+            db,
+            obligation,
+            preferred_user_id=current_user.id,
+        )
+
     await db.commit()
-    await db.refresh(obligation)
+    if not obligation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Obligation not found",
+        )
 
     return _obligation_to_response(obligation)
 
@@ -1244,6 +1314,24 @@ async def undo_obligation(
         performed_by_id=current_user.id,
         notes="Undone from minimalist panel"
     )
+    obligation = await repo.get_by_id_with_relations(obligation_id)
+    if obligation:
+        await upsert_obligation_activity(
+            db,
+            obligation,
+            preferred_user_id=current_user.id,
+        )
+        await send_due_soon_notifications_for_obligation(
+            db,
+            obligation,
+            reminder_days=5,
+        )
+        await db.commit()
+    if not obligation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Obligation not found",
+        )
     return _obligation_to_response(obligation)
 
 

@@ -2,7 +2,12 @@
 
 import { useMemo } from 'react';
 import { Chip } from '@/heroui';
-import { getRegimeLabel, type ClientListItem, type ClientStatus } from '@/types/client';
+import {
+  getDigitsOnly,
+  getRegimeLabel,
+  type ClientListItem,
+  type ClientStatus,
+} from '@/types/client';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { SnippetCopy } from '@/components/ui/SnippetCopy';
 
@@ -34,25 +39,42 @@ export function ClientsTable({ clients, isLoading = false }: ClientsTableProps) 
       {
         key: 'cnpj',
         label: 'CNPJ',
-        render: (client) => <SnippetCopy text={client.cnpj} />,
+        render: (client) => (
+          <SnippetCopy text={client.cnpj} copyText={getDigitsOnly(client.cnpj)} />
+        ),
       },
       {
         key: 'cpf_empresa',
         label: 'CPF',
         render: (client) =>
-          client.cpf_empresa ? <SnippetCopy text={client.cpf_empresa} /> : <span className="text-default-400">-</span>,
+          client.cpf_empresa ? (
+            <SnippetCopy text={client.cpf_empresa} copyText={getDigitsOnly(client.cpf_empresa)} />
+          ) : (
+            <span className="text-default-400">-</span>
+          ),
       },
       {
         key: 'codigo_simples',
         label: 'Código do Simples',
         render: (client) =>
-          client.codigo_simples ? <SnippetCopy text={client.codigo_simples} /> : <span className="text-default-400">-</span>,
+          client.codigo_simples ? (
+            <SnippetCopy
+              text={client.codigo_simples}
+              copyText={getDigitsOnly(client.codigo_simples)}
+            />
+          ) : (
+            <span className="text-default-400">-</span>
+          ),
       },
       {
         key: 'senha_gov',
         label: 'Senha GOV',
         render: (client) =>
-          client.senha_gov ? <SnippetCopy text={client.senha_gov} hideByDefault /> : <span className="text-default-400">-</span>,
+          client.senha_gov ? (
+            <SnippetCopy text={client.senha_gov} hideByDefault />
+          ) : (
+            <span className="text-default-400">-</span>
+          ),
       },
       {
         key: 'senha_prefeitura',

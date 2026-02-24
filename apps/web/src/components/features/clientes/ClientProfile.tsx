@@ -3,6 +3,7 @@
 import { SnippetCopy } from '@/components/ui/SnippetCopy';
 import type { Client } from '@/types/client';
 import {
+  getDigitsOnly,
   formatCNPJ,
   formatPhone,
   getLicencaNecessariaLabel,
@@ -80,14 +81,14 @@ export function ClientProfile({ client }: ClientProfileProps) {
           )}
           <div>
             <p className="text-xs text-gray-600 mb-1">CNPJ</p>
-            <Snippet symbol="" size="sm">
+            <Snippet symbol="" size="sm" codeString={getDigitsOnly(client.cnpj)}>
               {formatCNPJ(client.cnpj)}
             </Snippet>
           </div>
           {client.inscricao_estadual && (
             <div>
               <p className="text-xs text-gray-600 mb-1">Inscrição Estadual</p>
-              <Snippet symbol="" size="sm">
+              <Snippet symbol="" size="sm" codeString={getDigitsOnly(client.inscricao_estadual)}>
                 {client.inscricao_estadual}
               </Snippet>
             </div>
@@ -95,7 +96,7 @@ export function ClientProfile({ client }: ClientProfileProps) {
           {client.inscricao_municipal && (
             <div>
               <p className="text-xs text-gray-600 mb-1">Inscrição Municipal</p>
-              <Snippet symbol="" size="sm">
+              <Snippet symbol="" size="sm" codeString={getDigitsOnly(client.inscricao_municipal)}>
                 {client.inscricao_municipal}
               </Snippet>
             </div>
@@ -103,7 +104,7 @@ export function ClientProfile({ client }: ClientProfileProps) {
           {client.codigo_simples && (
             <div>
               <p className="text-xs text-gray-600 mb-1">Código de Acesso ao Simples Nacional</p>
-              <Snippet symbol="" size="sm">
+              <Snippet symbol="" size="sm" codeString={getDigitsOnly(client.codigo_simples)}>
                 {client.codigo_simples}
               </Snippet>
             </div>
@@ -311,7 +312,7 @@ export function ClientProfile({ client }: ClientProfileProps) {
               {client.responsavel_cpf && (
                 <div>
                   <p className="text-xs text-gray-600 mb-1">CPF</p>
-                  <Snippet symbol="" size="sm">
+                  <Snippet symbol="" size="sm" codeString={getDigitsOnly(client.responsavel_cpf)}>
                     {client.responsavel_cpf}
                   </Snippet>
                 </div>
@@ -356,7 +357,10 @@ export function ClientProfile({ client }: ClientProfileProps) {
                   <p className="text-xs text-primary-600 dark:text-primary-400 mb-1 font-medium">
                     CPF da Empresa
                   </p>
-                  <SnippetCopy text={client.cpf_empresa} />
+                  <SnippetCopy
+                    text={client.cpf_empresa}
+                    copyText={getDigitsOnly(client.cpf_empresa)}
+                  />
                 </div>
               )}
               {client.senha_sistema && (

@@ -1,9 +1,9 @@
 'use client';
 
-import { motion } from "framer-motion";
+import { motion } from 'framer-motion';
 import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
 import { DatePickerField } from '@/components/ui/DatePickerField';
-import { pageTransition } from "@/lib/animations";
+import { pageTransition } from '@/lib/animations';
 import {
   Accordion,
   AccordionItem,
@@ -27,6 +27,7 @@ import {
 import { CheckCircleIcon, DownloadIcon, RefreshIcon, SearchIcon } from '@/lib/icons';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ObligationCompletionModal } from './ObligationCompletionModal';
 import { ObligationTrashModal } from './ObligationTrashModal';
 import {
@@ -114,8 +115,8 @@ type MatrixCategory = 'clients' | 'office';
 type ObligationEditorForm = {
   obligation_type_id: string;
   due_date: string;
-  priority: "baixa" | "media" | "alta" | "urgente";
-  status: "pendente" | "em_andamento" | "concluida" | "atrasada" | "cancelada";
+  priority: 'baixa' | 'media' | 'alta' | 'urgente';
+  status: 'pendente' | 'em_andamento' | 'concluida' | 'atrasada' | 'cancelada';
   description: string;
 };
 
@@ -135,10 +136,13 @@ const getRegimeLabelSafe = (regime?: string) => {
 };
 
 export function ObrigacoesModule() {
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const isCliente = user?.role === UserRole.CLIENTE;
   const canManageObligations =
-    user?.role === UserRole.ADMIN || user?.role === UserRole.FUNC || user?.role === UserRole.CLIENTE;
+    user?.role === UserRole.ADMIN ||
+    user?.role === UserRole.FUNC ||
+    user?.role === UserRole.CLIENTE;
   const currentDate = new Date();
   const [competency, setCompetency] = useState(
     `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`
@@ -172,6 +176,7 @@ export function ObrigacoesModule() {
   });
   const normalizedSearch = search.trim();
   const invalidPeriod = Boolean(dueDateFrom && dueDateTo && dueDateFrom > dueDateTo);
+  const obligationIdFromQuery = searchParams.get('id');
 
   // Parse competency to get month and year
   const [yearStr, monthStr] = competency.split('-');
@@ -179,7 +184,13 @@ export function ObrigacoesModule() {
   const month = Number(monthStr) || new Date().getMonth() + 1;
 
   // Use real API
-  const { data: matrixData, loading, error, fetchMatrix, undoObligation } = useObligationsMatrix({
+  const {
+    data: matrixData,
+    loading,
+    error,
+    fetchMatrix,
+    undoObligation,
+  } = useObligationsMatrix({
     month,
     year,
     search: normalizedSearch || undefined,
@@ -212,6 +223,27 @@ export function ObrigacoesModule() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!obligationIdFromQuery) return;
+
+    let active = true;
+    (async () => {
+      try {
+        const obligation = await obligationsApi.getObligationById(obligationIdFromQuery);
+        if (!active) return;
+        setSelectedObligation(obligation);
+        setIsModalOpen(true);
+      } catch (error) {
+        if (!active) return;
+        console.error('Erro ao abrir obrigação por parâmetro de rota', error);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [obligationIdFromQuery]);
 
   const filteredRows = useMemo(() => {
     return matrixData.filter((row) => {
@@ -296,7 +328,8 @@ export function ObrigacoesModule() {
     client_name: string;
     client_cnpj: string;
   }) => {
-    const defaultDueDate = dueDateFrom || dueDateTo || `${year}-${String(month).padStart(2, '0')}-20`;
+    const defaultDueDate =
+      dueDateFrom || dueDateTo || `${year}-${String(month).padStart(2, '0')}-20`;
     setSelectedRowForEditor(row);
     setEditingObligationId(null);
     setEditorForm({
@@ -332,7 +365,9 @@ export function ObrigacoesModule() {
       });
     } catch (error) {
       console.error('Erro ao carregar obrigação para edição', error);
-      toast.error(extractApiErrorMessage(error, 'Não foi possível carregar os dados da obrigação.'));
+      toast.error(
+        extractApiErrorMessage(error, 'Não foi possível carregar os dados da obrigação.')
+      );
       closeEditor();
     } finally {
       setIsEditorLoading(false);
@@ -398,7 +433,10 @@ export function ObrigacoesModule() {
     }
   };
 
-  const handleOpenModal = (row: typeof matrixData[number], obligation: (typeof row.obligations)[number]) => {
+  const handleOpenModal = (
+    row: (typeof matrixData)[number],
+    obligation: (typeof row.obligations)[number]
+  ) => {
     if (!obligation?.id) {
       console.error('Obligation not found');
       return;
@@ -410,7 +448,8 @@ export function ObrigacoesModule() {
       client_name: row.client_name,
       client_cnpj: row.client_cnpj,
       obligation_type_id: obligation.obligation_type_code || obligation.id,
-      obligation_type_name: obligation.obligation_type_name || obligation.obligation_type_code || 'Obrigação',
+      obligation_type_name:
+        obligation.obligation_type_name || obligation.obligation_type_code || 'Obrigação',
       obligation_type_code: obligation.obligation_type_code || '',
       due_date: obligation.due_date || new Date().toISOString(),
       status: obligation.status,
@@ -534,7 +573,7 @@ export function ObrigacoesModule() {
                   <SelectItem key="todos">Todos os regimes</SelectItem>,
                   ...Object.values(RegimeTributario).map((regime) => (
                     <SelectItem key={regime}>{getRegimeLabel(regime)}</SelectItem>
-                  ))
+                  )),
                 ]}
               </Select>
               <Select
@@ -550,7 +589,7 @@ export function ObrigacoesModule() {
                   <SelectItem key="todos">Todos os tipos</SelectItem>,
                   ...Object.values(TipoEmpresa).map((tipo) => (
                     <SelectItem key={tipo}>{getTipoEmpresaLabel(tipo)}</SelectItem>
-                  ))
+                  )),
                 ]}
               </Select>
             </div>
@@ -592,9 +631,7 @@ export function ObrigacoesModule() {
         )}
 
         {!loading && !error && filteredRows.length === 0 && (
-          <div className="text-center py-12 text-default-400 text-sm">
-            {emptyStateLabel}
-          </div>
+          <div className="text-center py-12 text-default-400 text-sm">{emptyStateLabel}</div>
         )}
 
         {!loading && !error && filteredRows.length > 0 && (
@@ -613,11 +650,7 @@ export function ObrigacoesModule() {
                       {rows.length} {rows.length === 1 ? 'empresa' : 'empresas'}
                     </span>
                   </div>
-                  <Accordion
-                    variant="splitted"
-                    className="gap-3"
-                    selectionMode="multiple"
-                  >
+                  <Accordion variant="splitted" className="gap-3" selectionMode="multiple">
                     {rows.map((row) => {
                       const progressValue = row.total > 0 ? (row.completed / row.total) * 100 : 0;
                       const sortedObligations = [...row.obligations].sort((a, b) => {
@@ -699,13 +732,16 @@ export function ObrigacoesModule() {
                                   </thead>
                                   <tbody>
                                     {sortedObligations.map((obligation) => {
-                                      const category = CATEGORY_MAP[obligation.obligation_type_code || ''] || '-';
+                                      const category =
+                                        CATEGORY_MAP[obligation.obligation_type_code || ''] || '-';
                                       const periodicity =
                                         RECURRENCE_LABELS[obligation.recurrence || ''] ||
                                         obligation.recurrence ||
                                         '-';
-                                      const statusLabel = STATUS_LABELS[obligation.status] || obligation.status;
-                                      const statusColor = STATUS_COLORS[obligation.status] || 'default';
+                                      const statusLabel =
+                                        STATUS_LABELS[obligation.status] || obligation.status;
+                                      const statusColor =
+                                        STATUS_COLORS[obligation.status] || 'default';
                                       const isCompleted = obligation.status === 'concluida';
 
                                       return (
@@ -719,7 +755,9 @@ export function ObrigacoesModule() {
                                               'Obrigação'}
                                           </td>
                                           <td className="px-3 py-3 text-default-600">{category}</td>
-                                          <td className="px-3 py-3 text-default-600">{periodicity}</td>
+                                          <td className="px-3 py-3 text-default-600">
+                                            {periodicity}
+                                          </td>
                                           <td className="px-3 py-3 text-default-600">
                                             {formatDueDate(obligation.due_date)}
                                           </td>
@@ -758,7 +796,9 @@ export function ObrigacoesModule() {
                                                       size="sm"
                                                       variant="light"
                                                       onPress={() =>
-                                                        handleDownloadReceipt(obligation.receipt_url as string)
+                                                        handleDownloadReceipt(
+                                                          obligation.receipt_url as string
+                                                        )
                                                       }
                                                       className="min-w-unit-6"
                                                       title="Baixar comprovante"
@@ -803,7 +843,9 @@ export function ObrigacoesModule() {
                                                     size="sm"
                                                     variant="light"
                                                     color="danger"
-                                                    onPress={() => handleDeleteObligation(obligation.id)}
+                                                    onPress={() =>
+                                                      handleDeleteObligation(obligation.id)
+                                                    }
                                                     title="Excluir obrigação"
                                                   >
                                                     <Trash2 className="h-4 w-4" />
@@ -866,13 +908,13 @@ export function ObrigacoesModule() {
       <Modal isOpen={isEditorOpen} onOpenChange={(open) => (!open ? closeEditor() : null)}>
         <ModalContent>
           <>
-            <ModalHeader>
-              {editingObligationId ? 'Editar Obrigação' : 'Nova Obrigação'}
-            </ModalHeader>
+            <ModalHeader>{editingObligationId ? 'Editar Obrigação' : 'Nova Obrigação'}</ModalHeader>
             <ModalBody className="space-y-3">
               {selectedRowForEditor && (
                 <div className="rounded-medium border border-default-200 p-3 text-sm">
-                  <p className="font-semibold text-default-800">{selectedRowForEditor.client_name}</p>
+                  <p className="font-semibold text-default-800">
+                    {selectedRowForEditor.client_name}
+                  </p>
                   <p className="text-default-500">{selectedRowForEditor.client_cnpj}</p>
                 </div>
               )}
@@ -883,7 +925,9 @@ export function ObrigacoesModule() {
                 <>
                   <Select
                     label="Tipo de Obrigação"
-                    selectedKeys={editorForm.obligation_type_id ? [editorForm.obligation_type_id] : []}
+                    selectedKeys={
+                      editorForm.obligation_type_id ? [editorForm.obligation_type_id] : []
+                    }
                     onSelectionChange={(keys) => {
                       const value = Array.from(keys)[0] as string;
                       setEditorForm((prev) => ({
@@ -941,7 +985,9 @@ export function ObrigacoesModule() {
                     label="Descrição"
                     placeholder="Informações adicionais da obrigação"
                     value={editorForm.description}
-                    onValueChange={(value) => setEditorForm((prev) => ({ ...prev, description: value }))}
+                    onValueChange={(value) =>
+                      setEditorForm((prev) => ({ ...prev, description: value }))
+                    }
                     minRows={3}
                   />
                 </>

@@ -2,29 +2,33 @@
  * Activities API endpoints.
  */
 
-import { apiClient } from "../client";
+import { apiClient } from '../client';
 import type {
   Activity,
   ActivityCreate,
   ActivityFilters,
   ActivityListResponse,
   ActivityUpdate,
-} from "@/types/activity";
+} from '@/types/activity';
 
 export const activitiesApi = {
   async list(filters?: ActivityFilters): Promise<ActivityListResponse> {
     const params = new URLSearchParams();
 
-    if (filters?.query) params.append("query", filters.query);
-    if (filters?.status) params.append("status", filters.status.toString());
-    if (filters?.priority) params.append("priority", filters.priority.toString());
-    if (filters?.assigned_to_id) params.append("assigned_to_id", filters.assigned_to_id);
-    if (filters?.due_date) params.append("due_date", filters.due_date);
-    if (filters?.page) params.append("page", filters.page.toString());
-    if (filters?.size) params.append("size", filters.size.toString());
+    if (filters?.query) params.append('query', filters.query);
+    if (filters?.status) params.append('status', filters.status.toString());
+    if (filters?.priority) params.append('priority', filters.priority.toString());
+    if (filters?.assigned_to_id) params.append('assigned_to_id', filters.assigned_to_id);
+    if (filters?.due_date) params.append('due_date', filters.due_date);
+
+    const size = Math.max(1, Math.min(100, Math.trunc(filters?.size ?? 100)));
+    const page = Math.max(1, Math.trunc(filters?.page ?? 1));
+
+    params.append('skip', String((page - 1) * size));
+    params.append('limit', String(size));
 
     const queryString = params.toString();
-    const endpoint = queryString ? `/activities?${queryString}` : "/activities";
+    const endpoint = queryString ? `/activities?${queryString}` : '/activities';
 
     return apiClient.get<ActivityListResponse>(endpoint);
   },
@@ -34,7 +38,7 @@ export const activitiesApi = {
   },
 
   async create(data: ActivityCreate): Promise<Activity> {
-    return apiClient.post<Activity>("/activities", data);
+    return apiClient.post<Activity>('/activities', data);
   },
 
   async update(id: string, data: ActivityUpdate): Promise<Activity> {

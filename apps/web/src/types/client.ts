@@ -180,10 +180,17 @@ export interface ClientListResponse {
 }
 
 /**
+ * Helper function to keep only numeric characters.
+ */
+export function getDigitsOnly(value: string): string {
+  return value.replace(/\D/g, '');
+}
+
+/**
  * Helper function to format CNPJ for display.
  */
 export function formatCNPJ(cnpj: string): string {
-  const digits = cnpj.replace(/\D/g, '');
+  const digits = getDigitsOnly(cnpj);
   if (digits.length !== 14) return cnpj;
   return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
 }
@@ -193,7 +200,7 @@ export function formatCNPJ(cnpj: string): string {
  */
 export function formatPhone(phone: string | null): string | null {
   if (!phone) return null;
-  const digits = phone.replace(/\D/g, '');
+  const digits = getDigitsOnly(phone);
   if (digits.length === 10) {
     return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
   }
