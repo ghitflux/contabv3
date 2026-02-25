@@ -256,6 +256,15 @@ export interface CashFlowProjectionReportData {
 }
 
 export interface KPIReportData {
+  receita_total?: number;
+  despesa_total?: number;
+  resultado_liquido?: number;
+  total_pendente?: number;
+  total_atrasado?: number;
+  total_receber?: number;
+  total_clientes?: number;
+  total_transacoes?: number;
+  total_transacoes_atrasadas?: number;
   margem_lucro: number;
   percentual_despesas_fixas: number;
   taxa_inadimplencia: number;

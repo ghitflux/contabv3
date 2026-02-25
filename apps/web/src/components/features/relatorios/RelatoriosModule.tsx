@@ -141,6 +141,7 @@ export function RelatoriosModule() {
   const [rangeEnd, setRangeEnd] = useState('');
   const [selectedFormat, setSelectedFormat] = useState<ReportFormat>(ReportFormat.PDF);
   const [clientSearch, setClientSearch] = useState('');
+  const [debouncedClientSearch, setDebouncedClientSearch] = useState('');
   const [clientOptions, setClientOptions] = useState<ClientListItem[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [isOfficeReport, setIsOfficeReport] = useState(false);
@@ -152,11 +153,20 @@ export function RelatoriosModule() {
   }, []);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedClientSearch(clientSearch.trim());
+    }, 300);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [clientSearch]);
+
+  useEffect(() => {
     if (!isAdminOrFunc || !rangeModalOpen) return;
     let active = true;
     (async () => {
       try {
-        const res = await clientsApi.list({ query: clientSearch || undefined, size: 20 });
+        const res = await clientsApi.list({ query: debouncedClientSearch || undefined, size: 20 });
         if (active) setClientOptions(res.items);
       } catch (error) {
         console.error('Erro ao buscar clientes para relatório', error);
@@ -165,7 +175,7 @@ export function RelatoriosModule() {
     return () => {
       active = false;
     };
-  }, [clientSearch, isAdminOrFunc, rangeModalOpen]);
+  }, [debouncedClientSearch, isAdminOrFunc, rangeModalOpen]);
 
   const handleOpenRangeModal = (reportType: ReportType) => {
     setSelectedReport(reportType);
@@ -357,8 +367,6 @@ export function RelatoriosModule() {
                 return (
                   <Card
                     key={report.type}
-                    isPressable
-                    onPress={() => handleOpenRangeModal(report.type)}
                     className={`${bgClasses} border relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:scale-[1.02]`}
                   >
                     {/* Gradiente decorativo */}

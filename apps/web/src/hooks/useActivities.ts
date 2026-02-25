@@ -29,8 +29,28 @@ function normalizePriority(value: unknown): string {
   return 'medium';
 }
 
+function deduplicateActivities(items: Activity[]): Activity[] {
+  const uniqueById = new Map<string, Activity>();
+
+  items.forEach((item) => {
+    const existing = uniqueById.get(item.id);
+    if (!existing) {
+      uniqueById.set(item.id, item);
+      return;
+    }
+
+    const existingUpdatedAt = existing.updated_at ? new Date(existing.updated_at).getTime() : 0;
+    const currentUpdatedAt = item.updated_at ? new Date(item.updated_at).getTime() : 0;
+    if (currentUpdatedAt >= existingUpdatedAt) {
+      uniqueById.set(item.id, item);
+    }
+  });
+
+  return Array.from(uniqueById.values());
+}
+
 function sortActivities(items: Activity[]): Activity[] {
-  return [...items].sort((a, b) => {
+  return deduplicateActivities(items).sort((a, b) => {
     const dueA = a.due_date ?? '9999-12-31';
     const dueB = b.due_date ?? '9999-12-31';
     if (dueA !== dueB) return dueA < dueB ? -1 : 1;
@@ -123,26 +143,39 @@ export function useActivities() {
       const requestedSize = Math.max(1, Math.trunc(filters?.size ?? 100));
       const page = Math.max(1, Math.trunc(filters?.page ?? 1));
       const pageSize = Math.min(requestedSize, 100);
+      const firstResponse = await activitiesApi.list({
+        ...filters,
+        page,
+        size: pageSize,
+      });
+      const total = firstResponse.total;
+      const maxItemsToCollect = Math.min(total, requestedSize);
+      const collectedItems: any[] = [...firstResponse.items];
 
-      let total = 0;
-      let currentPage = page;
-      let hasMore = true;
-      const collectedItems: any[] = [];
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const alreadyCollected = firstResponse.items.length;
+      const remainingToCollect = Math.max(0, maxItemsToCollect - alreadyCollected);
+      const additionalPagesToFetch = Math.ceil(remainingToCollect / pageSize);
 
-      while (hasMore && collectedItems.length < requestedSize) {
-        const response = await activitiesApi.list({
-          ...filters,
-          page: currentPage,
-          size: pageSize,
+      if (additionalPagesToFetch > 0 && page < totalPages) {
+        const pageNumbers = Array.from(
+          { length: additionalPagesToFetch },
+          (_, index) => page + index + 1
+        ).filter((pageNumber) => pageNumber <= totalPages);
+
+        const additionalResponses = await Promise.all(
+          pageNumbers.map((pageNumber) =>
+            activitiesApi.list({
+              ...filters,
+              page: pageNumber,
+              size: pageSize,
+            })
+          )
+        );
+
+        additionalResponses.forEach((response) => {
+          collectedItems.push(...response.items);
         });
-
-        total = response.total;
-        collectedItems.push(...response.items);
-        currentPage += 1;
-
-        if (response.items.length < pageSize || collectedItems.length >= total) {
-          hasMore = false;
-        }
       }
 
       const items = collectedItems.slice(0, requestedSize).map(normalizeActivity);

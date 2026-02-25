@@ -633,6 +633,18 @@ def _extract_summary_from_report_data(report_data: dict) -> dict[str, Any]:
         "despesa_total",
         "resultado_liquido",
         "margem_lucro",
+        "percentual_despesas_fixas",
+        "taxa_inadimplencia",
+        "ticket_medio",
+        "crescimento_mom",
+        "crescimento_yoy",
+        "roi",
+        "total_clientes",
+        "total_transacoes",
+        "total_transacoes_atrasadas",
+        "total_receber",
+        "total_pendente",
+        "total_atrasado",
         "total_receita",
         "total_despesas",
         "total_saldo",
@@ -652,6 +664,43 @@ def _extract_summary_from_report_data(report_data: dict) -> dict[str, Any]:
 
 def _prepare_table_data(report_type: ReportType, report_data: dict) -> list[list[str]]:
     """Convert report data to table format for PDF/CSV."""
+    if report_type == ReportType.KPIS:
+        table_data = [["Indicador", "Valor"]]
+        metrics: list[tuple[str, str, str]] = [
+            ("receita_total", "Receita Total", "currency"),
+            ("despesa_total", "Despesa Total", "currency"),
+            ("resultado_liquido", "Resultado Líquido", "currency"),
+            ("margem_lucro", "Margem de Lucro", "percent"),
+            ("percentual_despesas_fixas", "Percentual de Despesas Fixas", "percent"),
+            ("taxa_inadimplencia", "Taxa de Inadimplência", "percent"),
+            ("ticket_medio", "Ticket Médio", "currency"),
+            ("total_receber", "Total a Receber", "currency"),
+            ("total_pendente", "Total Pendente", "currency"),
+            ("total_atrasado", "Total Atrasado", "currency"),
+            ("crescimento_mom", "Crescimento Mês a Mês (MoM)", "percent"),
+            ("crescimento_yoy", "Crescimento Ano a Ano (YoY)", "percent"),
+            ("roi", "ROI", "percent"),
+            ("total_clientes", "Total de Clientes", "count"),
+            ("total_transacoes", "Total de Transações", "count"),
+            ("total_transacoes_atrasadas", "Transações Atrasadas", "count"),
+        ]
+
+        for key, label, metric_type in metrics:
+            if key not in report_data:
+                continue
+            raw_value = report_data.get(key)
+            if metric_type == "currency":
+                value = _format_currency(raw_value)
+            elif metric_type == "percent":
+                value = _format_percent(raw_value)
+            elif metric_type == "count":
+                value = str(int(raw_value or 0))
+            else:
+                value = str(raw_value if raw_value is not None else "-")
+            table_data.append([label, value])
+
+        return table_data
+
     if report_type == ReportType.LIVRO_CAIXA and "entries" in report_data:
         table_data = [[
             "Data",

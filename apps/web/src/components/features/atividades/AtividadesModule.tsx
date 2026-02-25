@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Button, Card, CardBody, Input, Select, SelectItem, Tab, Tabs } from '@/heroui';
 import { AlertTriangle, CalendarDays, LayoutGrid, ListChecks, Plus, Search } from 'lucide-react';
@@ -47,19 +47,33 @@ export function AtividadesModule() {
     useActivities();
   const { clients, fetchClients } = useClients();
   const { user } = useAuth();
+  const didLoadActivitiesRef = useRef(false);
+  const didLoadClientsRef = useRef(false);
 
   useEffect(() => {
-    fetchActivities({ page: 1, size: DEFAULT_PAGE_SIZE });
+    if (didLoadActivitiesRef.current) return;
+    didLoadActivitiesRef.current = true;
+    fetchActivities({ page: 1, size: DEFAULT_PAGE_SIZE }).catch(() => {
+      didLoadActivitiesRef.current = false;
+    });
   }, [fetchActivities]);
 
+  const activityItems = activities?.items ?? [];
+  const needsClientList = useMemo(
+    () =>
+      user?.role !== UserRole.CLIENTE &&
+      (isFormOpen || activityItems.some((activity) => (activity.linked_client_ids ?? []).length > 0)),
+    [activityItems, isFormOpen, user?.role]
+  );
+
   useEffect(() => {
-    if (user?.role === UserRole.CLIENTE) return;
+    if (!needsClientList || didLoadClientsRef.current) return;
+    didLoadClientsRef.current = true;
     fetchClients({ page: 1, size: DEFAULT_CLIENT_PAGE_SIZE }).catch(() => {
       // Tela de atividades pode carregar sem o select de empresas quando API de clientes falha.
+      didLoadClientsRef.current = false;
     });
-  }, [fetchClients, user?.role]);
-
-  const activityItems = activities?.items ?? [];
+  }, [fetchClients, needsClientList]);
 
   const clientNameById = useMemo(() => {
     const map: Record<string, string> = {};

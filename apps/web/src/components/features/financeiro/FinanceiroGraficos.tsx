@@ -47,15 +47,31 @@ const defaultReceitaDespesa: ReceitaDespesaEntry[] = [
 const defaultCategoriasDespesas: CategoriaEntry[] = [
   { name: "Despesas Fixas", value: 35000, color: "#ef4444" },
   { name: "Despesas Operacionais", value: 28000, color: "#f59e0b" },
-  { name: "Impostos", value: 18450, color: "#8b5cf6" },
+  { name: "Simples Nacional (DAS)", value: 8450, color: "#8b5cf6" },
+  { name: "ISS / ICMS / IPI", value: 6200, color: "#7c3aed" },
+  { name: "PIS / COFINS / CSLL / IRPJ", value: 3800, color: "#6d28d9" },
   { name: "Folha de Pagamento", value: 8000, color: "#E9B63B" },
+  { name: "Despesa Personalizada", value: 2000, color: "#334155" },
 ];
 
 const defaultCategoriasReceitas: CategoriaEntry[] = [
   { name: "Serviços Contábeis", value: 180000, color: "#10b981" },
   { name: "Consultoria Fiscal", value: 45890, color: "#0d9488" },
   { name: "Serviços Especializados", value: 20000, color: "#06b6d4" },
+  { name: "Receita Personalizada", value: 6500, color: "#1d4ed8" },
 ];
+
+const TAX_CATEGORY_REGEX =
+  /(imposto|tribut|taxa|simples|das|darf|gare|dae|gps|inss|fgts|irpj|csll|pis|cofins|icms|iss|ipi|iof|irrf|iptu|ipva)/i;
+
+function isTaxCategory(name: string): boolean {
+  return TAX_CATEGORY_REGEX.test(name);
+}
+
+function isCustomCategory(name: string): boolean {
+  const normalized = name.trim().toLowerCase();
+  return normalized.includes("personaliz") || normalized.startsWith("custom:");
+}
 
 export function FinanceiroGraficos({
   receitaDespesa = defaultReceitaDespesa,
@@ -67,6 +83,11 @@ export function FinanceiroGraficos({
       style: "currency",
       currency: "BRL",
     }).format(value);
+
+  const categoriasImpostos = categoriasDespesas.filter((entry) => isTaxCategory(entry.name));
+  const categoriasPersonalizadas = [...categoriasDespesas, ...categoriasReceitas].filter((entry) =>
+    isCustomCategory(entry.name)
+  );
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -100,7 +121,14 @@ export function FinanceiroGraficos({
 
       <Card className="border border-default-200/50 dark:border-default-100/20">
         <CardHeader>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Despesas por Categoria</h3>
+          <div className="space-y-1">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Despesas por Categoria
+            </h3>
+            <p className="text-xs text-default-500">
+              {categoriasImpostos.length} categoria(s) de impostos/tributos no período
+            </p>
+          </div>
         </CardHeader>
         <CardBody className="pb-6">
           <ResponsiveContainer width="100%" height={300}>
@@ -127,7 +155,15 @@ export function FinanceiroGraficos({
 
       <Card className="border border-default-200/50 dark:border-default-100/20">
         <CardHeader>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Receitas por Categoria</h3>
+          <div className="space-y-1">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Receitas por Categoria
+            </h3>
+            <p className="text-xs text-default-500">
+              {categoriasPersonalizadas.length} categoria(s) personalizada(s) entre receitas e
+              despesas
+            </p>
+          </div>
         </CardHeader>
         <CardBody className="pb-6">
           <ResponsiveContainer width="100%" height={300}>
@@ -152,7 +188,38 @@ export function FinanceiroGraficos({
           </ResponsiveContainer>
         </CardBody>
       </Card>
+
+      <Card className="lg:col-span-2 border border-default-200/50 dark:border-default-100/20">
+        <CardHeader>
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+            Impostos e Tributos (Detalhado)
+          </h3>
+        </CardHeader>
+        <CardBody className="pb-6">
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={categoriasImpostos.length > 0 ? categoriasImpostos : categoriasDespesas}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="name" stroke="#64748b" />
+              <YAxis stroke="#64748b" />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "#ffffff",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "8px",
+                }}
+                formatter={(value: number) => currencyFormatter(value)}
+              />
+              <Bar dataKey="value" name="Impostos/Tributos">
+                {(categoriasImpostos.length > 0 ? categoriasImpostos : categoriasDespesas).map(
+                  (entry) => (
+                    <Cell key={`tax-${entry.name}`} fill={entry.color} />
+                  )
+                )}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </CardBody>
+      </Card>
     </div>
   );
 }
-

@@ -3,7 +3,7 @@
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -42,7 +42,7 @@ class ActivityRepository:
         created_by_id: Optional[UUID] = None,
     ) -> tuple[list[Activity], int]:
         """List activities with filters."""
-        conditions = []
+        conditions = [Activity.deleted_at.is_(None)]
 
         if status:
             conditions.append(Activity.status == status)
@@ -51,13 +51,8 @@ class ActivityRepository:
         if created_by_id:
             conditions.append(Activity.created_by_id == created_by_id)
 
-        # Count total
-        if conditions:
-            count_stmt = select(Activity).where(and_(*conditions))
-        else:
-            count_stmt = select(Activity)
-        count_result = await self.db.execute(count_stmt)
-        total = len(count_result.scalars().all())
+        count_stmt = select(func.count()).select_from(Activity).where(and_(*conditions))
+        total = int(await self.db.scalar(count_stmt) or 0)
 
         # Get paginated results
         stmt = (
@@ -65,8 +60,7 @@ class ActivityRepository:
             .options(selectinload(Activity.assigned_to))
             .order_by(Activity.due_date.asc().nullslast(), Activity.created_at.desc())
         )
-        if conditions:
-            stmt = stmt.where(and_(*conditions))
+        stmt = stmt.where(and_(*conditions))
         stmt = stmt.offset(skip).limit(limit)
         result = await self.db.execute(stmt)
         activities = result.scalars().all()

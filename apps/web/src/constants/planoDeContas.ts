@@ -63,6 +63,12 @@ export const PLANO_DE_CONTAS: ContaCategoria[] = [
     tipo: "RECEITA",
     descricao: "Outras receitas não classificadas",
   },
+  {
+    codigo: "1.2.05",
+    nome: "Recuperação de Tributos",
+    tipo: "RECEITA",
+    descricao: "Restituições, compensações e créditos tributários",
+  },
 
   // 🔹 2. DESPESAS
   // 2.1 Despesas Administrativas
@@ -211,6 +217,116 @@ export const PLANO_DE_CONTAS: ContaCategoria[] = [
     descricao: "Imposto sobre Operações Financeiras",
   },
 
+  // 2.5 Tributos e Impostos
+  {
+    codigo: "2.5.01",
+    nome: "Simples Nacional (DAS)",
+    tipo: "DESPESA",
+    descricao: "Documento de Arrecadação do Simples Nacional",
+  },
+  {
+    codigo: "2.5.02",
+    nome: "IRPJ",
+    tipo: "DESPESA",
+    descricao: "Imposto de Renda Pessoa Jurídica",
+  },
+  {
+    codigo: "2.5.03",
+    nome: "CSLL",
+    tipo: "DESPESA",
+    descricao: "Contribuição Social sobre Lucro Líquido",
+  },
+  {
+    codigo: "2.5.04",
+    nome: "PIS",
+    tipo: "DESPESA",
+    descricao: "Programa de Integração Social",
+  },
+  {
+    codigo: "2.5.05",
+    nome: "COFINS",
+    tipo: "DESPESA",
+    descricao: "Contribuição para Financiamento da Seguridade Social",
+  },
+  {
+    codigo: "2.5.06",
+    nome: "ISS",
+    tipo: "DESPESA",
+    descricao: "Imposto Sobre Serviços",
+  },
+  {
+    codigo: "2.5.07",
+    nome: "ICMS",
+    tipo: "DESPESA",
+    descricao: "Imposto sobre Circulação de Mercadorias e Serviços",
+  },
+  {
+    codigo: "2.5.08",
+    nome: "ICMS ST",
+    tipo: "DESPESA",
+    descricao: "ICMS Substituição Tributária",
+  },
+  {
+    codigo: "2.5.09",
+    nome: "IPI",
+    tipo: "DESPESA",
+    descricao: "Imposto sobre Produtos Industrializados",
+  },
+  {
+    codigo: "2.5.10",
+    nome: "IRRF",
+    tipo: "DESPESA",
+    descricao: "Imposto de Renda Retido na Fonte",
+  },
+  {
+    codigo: "2.5.11",
+    nome: "INSS Patronal",
+    tipo: "DESPESA",
+    descricao: "Contribuição previdenciária patronal",
+  },
+  {
+    codigo: "2.5.12",
+    nome: "Contribuição Previdenciária (CPP)",
+    tipo: "DESPESA",
+    descricao: "Contribuição Previdenciária Patronal do Simples",
+  },
+  {
+    codigo: "2.5.13",
+    nome: "DARF / GPS / DAE",
+    tipo: "DESPESA",
+    descricao: "Guias federais e previdenciárias",
+  },
+  {
+    codigo: "2.5.14",
+    nome: "Taxas Municipais e Alvarás",
+    tipo: "DESPESA",
+    descricao: "Taxas de fiscalização, funcionamento e alvarás",
+  },
+  {
+    codigo: "2.5.15",
+    nome: "Taxas Estaduais",
+    tipo: "DESPESA",
+    descricao: "Taxas e guias estaduais (ex: GARE)",
+  },
+  {
+    codigo: "2.5.16",
+    nome: "Taxas Federais",
+    tipo: "DESPESA",
+    descricao: "Taxas e guias federais complementares",
+  },
+  {
+    codigo: "2.5.17",
+    nome: "IPTU / IPVA",
+    tipo: "DESPESA",
+    descricao: "Impostos patrimoniais e veiculares",
+  },
+  {
+    codigo: "2.5.99",
+    nome: "Outros Impostos e Tributos",
+    tipo: "DESPESA",
+    descricao: "Demais impostos, contribuições e taxas",
+  },
+
   // 🔹 3. CUSTOS
   {
     codigo: "3.1.01",
@@ -334,6 +450,56 @@ export function searchContas(query: string): ContaCategoria[] {
  */
 export function getContaByCodigo(codigo: string): ContaCategoria | undefined {
   return PLANO_DE_CONTAS.find((conta) => conta.codigo === codigo);
+}
+
+export function isPlanoContaCodigo(value: string): boolean {
+  return /^\d+\.\d+\.\d+$/.test(value.trim());
+}
+
+const TAX_CATEGORY_REGEX =
+  /(imposto|tribut|taxa|das|darf|gare|dae|gps|inss|fgts|irpj|csll|pis|cofins|icms|iss|ipi|iof|irrf|iptu|ipva)/i;
+
+export function isTaxCategoryName(value: string): boolean {
+  return TAX_CATEGORY_REGEX.test(value);
+}
+
+export type ResolvedCategoriaLancamento = {
+  value: string;
+  label: string;
+  isCustom: boolean;
+  isTax: boolean;
+  conta?: ContaCategoria;
+};
+
+export function resolveCategoriaLancamento(
+  rawValue: string | null | undefined
+): ResolvedCategoriaLancamento | null {
+  if (!rawValue) return null;
+  const value = rawValue.trim();
+  if (!value) return null;
+
+  const conta = getContaByCodigo(value);
+  if (conta) {
+    const taxText = `${conta.nome} ${conta.descricao ?? ""}`;
+    return {
+      value,
+      label: formatConta(conta),
+      isCustom: false,
+      isTax: isTaxCategoryName(taxText),
+      conta,
+    };
+  }
+
+  const customLabel = value.toLowerCase().startsWith("custom:")
+    ? value.slice("custom:".length).trim()
+    : value;
+
+  return {
+    value,
+    label: customLabel || value,
+    isCustom: true,
+    isTax: isTaxCategoryName(customLabel || value),
+  };
 }
 
 /**

@@ -111,7 +111,11 @@
       "Bash(git restore:*)",
       "Bash(git reset:*)",
       "Bash(ssh:*)",
-      "Bash(pnpm --filter web build:*)"
+      "Bash(pnpm --filter web build:*)",
+      "Bash(sshpass -V:*)",
+      "Bash(plink:*)",
+      "Bash(pip install:*)",
+      "Bash(# Verificar se o frontend Next.js está rodando curl -s -o /dev/null -w \"\"Frontend status: %{http_code}\\\\n\"\" http://localhost:3000 # Verificar processo do Next.js netstat -ano)"
     ],
     "deny": [],
     "ask": []

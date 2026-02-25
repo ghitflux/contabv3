@@ -37,13 +37,12 @@ import * as XLSX from 'xlsx';
 import { clientsApi } from '@/lib/api/endpoints/clients';
 import { financeApi } from '@/lib/api/endpoints/finance';
 import { licensesApi } from '@/lib/api/endpoints/licenses';
-import { apiClient } from '@/lib/api/client';
+import { activitiesApi } from '@/lib/api/endpoints/activities';
+import { obligationsApi, type ObligationListResponse } from '@/lib/api/endpoints/obligations';
 import { toast } from '@/lib/toast';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/masks';
 import { useAuth } from '@/hooks/auth/AuthContext';
 import type { ClientListItem } from '@/types/client';
-import type { ObligationListResponse } from '@/types/obligation';
-import type { ActivityListResponse } from '@/types/activity';
 import { DatePickerField } from '@/components/ui/DatePickerField';
 
 interface ReportBuilderProps {
@@ -216,14 +215,13 @@ const operatorLabels: Record<string, string> = {
 };
 
 const currencyFields = new Set(['amount', 'fee', 'honorarios_mensais']);
-const dateFields = new Set([
-  'reference_month',
-  'due_date',
-  'issue_date',
-  'expiration_date',
-]);
+const dateFields = new Set(['reference_month', 'due_date', 'issue_date', 'expiration_date']);
 const dateTimeFields = new Set(['paid_date', 'created_at', 'updated_at', 'completed_at']);
 const booleanFields = new Set(['fee_paid', 'is_expired', 'is_expiring_soon']);
+const CLIENT_SEARCH_DEBOUNCE_MS = 300;
+const PREVIEW_DEBOUNCE_MS = 250;
+const PAGE_SIZE = 100;
+const MAX_FETCH_ROWS = 5000;
 
 const sanitizeFileName = (value: string) =>
   value
@@ -304,8 +302,10 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [showPreview, setShowPreview] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [reportRows, setReportRows] = useState<Record<string, any>[]>([]);
+  const [sourceRows, setSourceRows] = useState<Record<string, any>[]>([]);
+  const [sourceRowsKey, setSourceRowsKey] = useState('');
   const [clientSearch, setClientSearch] = useState('');
+  const [debouncedClientSearch, setDebouncedClientSearch] = useState('');
   const [clientOptions, setClientOptions] = useState<ClientListItem[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [isOfficeReport, setIsOfficeReport] = useState(false);
@@ -331,7 +331,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
     if (!dateFilterField || !dateFilterFields.includes(dateFilterField)) {
       const preferred = DEFAULT_DATE_FIELD_BY_SOURCE[dataSource];
       const nextField =
-        preferred && dateFilterFields.includes(preferred) ? preferred : (dateFilterFields[0] || '');
+        preferred && dateFilterFields.includes(preferred) ? preferred : dateFilterFields[0] || '';
       if (nextField) {
         setDateFilterField(nextField);
       }
@@ -346,11 +346,20 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
   }, [supportsClientFilter]);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedClientSearch(clientSearch.trim());
+    }, CLIENT_SEARCH_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [clientSearch]);
+
+  useEffect(() => {
     if (!isAdminOrFunc || !supportsClientFilter) return;
     let active = true;
     (async () => {
       try {
-        const res = await clientsApi.list({ query: clientSearch || undefined, size: 20 });
+        const res = await clientsApi.list({ query: debouncedClientSearch || undefined, size: 20 });
         if (active) setClientOptions(res.items);
       } catch (error) {
         console.error('Erro ao buscar clientes para relatório', error);
@@ -359,7 +368,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
     return () => {
       active = false;
     };
-  }, [clientSearch, isAdminOrFunc, supportsClientFilter]);
+  }, [debouncedClientSearch, isAdminOrFunc, supportsClientFilter]);
 
   const toggleField = (field: string) => {
     setSelectedFields((prev) =>
@@ -377,15 +386,25 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
 
   const updateFilter = (index: number, key: string, value: string) => {
     const newFilters = [...filters];
-    newFilters[index] = { ...newFilters[index], [key]: value } as { field: string; operator: string; value: string };
+    newFilters[index] = { ...newFilters[index], [key]: value } as {
+      field: string;
+      operator: string;
+      value: string;
+    };
     setFilters(newFilters);
   };
 
-  const resolveClientFilter = () => {
+  const resolvedClientFilter = useMemo(() => {
     if (!isAdminOrFunc || !supportsClientFilter) return null;
     if (isOfficeReport && OFFICE_CLIENT_ID) return OFFICE_CLIENT_ID;
     return selectedClientId;
-  };
+  }, [isAdminOrFunc, supportsClientFilter, isOfficeReport, OFFICE_CLIENT_ID, selectedClientId]);
+
+  const sourceFetchKey = useMemo(() => {
+    const role = isAdminOrFunc ? 'staff' : 'client';
+    const scope = resolvedClientFilter || 'all';
+    return `${dataSource}|${scope}|${role}`;
+  }, [dataSource, resolvedClientFilter, isAdminOrFunc]);
 
   const handleDataSourceChange = (selected: DataSource) => {
     setDataSource(selected);
@@ -400,14 +419,15 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
     const nextField =
       preferred && dateFieldsForSource.includes(preferred)
         ? preferred
-        : dateFieldsForSource[0] ?? '';
+        : (dateFieldsForSource[0] ?? '');
     setDateFilterField(nextField);
     setDateFilterStart('');
     setDateFilterEnd('');
+    setSourceRows([]);
+    setSourceRowsKey('');
   };
 
-  const fetchRowsForSource = async () => {
-    const clientId = resolveClientFilter();
+  const fetchRowsForSource = async (clientId: string | null) => {
     switch (dataSource) {
       case 'clients': {
         if (!isAdminOrFunc) {
@@ -427,119 +447,194 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
           ];
         }
 
-        const response = await clientsApi.list({ page: 1, size: 100 });
-        return response.items
-          .filter((client) => (!clientId ? true : client.id === clientId))
-          .map((client) => ({
-            razao_social: client.razao_social,
-            nome_fantasia: client.nome_fantasia,
-            cnpj: client.cnpj,
-            email: client.email,
-            status: client.status,
-            honorarios_mensais: client.honorarios_mensais,
-            regime_tributario: client.regime_tributario,
-            tipo_empresa: client.tipo_empresa,
-            created_at: client.created_at,
-          }));
+        if (clientId) {
+          const client = await clientsApi.getById(clientId);
+          return [
+            {
+              razao_social: client.razao_social,
+              nome_fantasia: client.nome_fantasia,
+              cnpj: client.cnpj,
+              email: client.email,
+              status: client.status,
+              honorarios_mensais: client.honorarios_mensais,
+              regime_tributario: client.regime_tributario,
+              tipo_empresa: client.tipo_empresa,
+              created_at: client.created_at,
+            },
+          ];
+        }
+
+        const rows: Record<string, any>[] = [];
+        let page = 1;
+        let pages = 1;
+
+        while (page <= pages && rows.length < MAX_FETCH_ROWS) {
+          const response = await clientsApi.list({ page, size: PAGE_SIZE });
+          pages = Math.max(response.pages || 1, 1);
+          rows.push(
+            ...response.items.map((client) => ({
+              razao_social: client.razao_social,
+              nome_fantasia: client.nome_fantasia,
+              cnpj: client.cnpj,
+              email: client.email,
+              status: client.status,
+              honorarios_mensais: client.honorarios_mensais,
+              regime_tributario: client.regime_tributario,
+              tipo_empresa: client.tipo_empresa,
+              created_at: client.created_at,
+            }))
+          );
+          if (response.items.length < PAGE_SIZE) break;
+          page += 1;
+        }
+
+        return rows.slice(0, MAX_FETCH_ROWS);
       }
       case 'transactions': {
-        const response = await financeApi.getTransactions({
-          client_id: clientId || undefined,
-          page: 1,
-          size: 100,
-        });
-        return response.items.map((tx) => ({
-          id: tx.id,
-          client_id: tx.client_id,
-          client_name: tx.client_name,
-          client_cnpj: tx.client_cnpj,
-          obligation_id: tx.obligation_id,
-          transaction_type: tx.transaction_type,
-          payment_status: tx.payment_status,
-          payment_method: tx.payment_method,
-          amount: tx.amount,
-          reference_month: tx.reference_month,
-          due_date: tx.due_date,
-          paid_date: tx.paid_date,
-          description: tx.description,
-          notes: tx.notes,
-          invoice_number: tx.invoice_number,
-          receipt_url: tx.receipt_url,
-          created_by_id: tx.created_by_id,
-          created_at: tx.created_at,
-          updated_at: tx.updated_at,
-        }));
+        const rows: Record<string, any>[] = [];
+        let page = 1;
+        let total = Number.POSITIVE_INFINITY;
+
+        while (rows.length < Math.min(total, MAX_FETCH_ROWS)) {
+          const response = await financeApi.getTransactions({
+            client_id: clientId || undefined,
+            page,
+            size: PAGE_SIZE,
+          });
+          total = response.total;
+          rows.push(
+            ...response.items.map((tx) => ({
+              id: tx.id,
+              client_id: tx.client_id,
+              client_name: tx.client_name,
+              client_cnpj: tx.client_cnpj,
+              obligation_id: tx.obligation_id,
+              transaction_type: tx.transaction_type,
+              payment_status: tx.payment_status,
+              payment_method: tx.payment_method,
+              amount: tx.amount,
+              reference_month: tx.reference_month,
+              due_date: tx.due_date,
+              paid_date: tx.paid_date,
+              description: tx.description,
+              notes: tx.notes,
+              invoice_number: tx.invoice_number,
+              receipt_url: tx.receipt_url,
+              created_by_id: tx.created_by_id,
+              created_at: tx.created_at,
+              updated_at: tx.updated_at,
+            }))
+          );
+          if (response.items.length < PAGE_SIZE) break;
+          page += 1;
+        }
+
+        return rows.slice(0, MAX_FETCH_ROWS);
       }
       case 'obligations': {
-        const params = new URLSearchParams();
-        if (clientId) params.append('client_id', clientId);
-        params.append('skip', '0');
-        params.append('limit', '100');
-        const queryString = params.toString();
-        const endpoint = queryString ? `/obligations?${queryString}` : '/obligations';
-        const response = await apiClient.get<ObligationListResponse>(endpoint);
-        return response.items.map((obligation) => ({
-          id: obligation.id,
-          client_id: obligation.client_id,
-          client_name: obligation.client_name,
-          client_cnpj: obligation.client_cnpj,
-          obligation_type_id: obligation.obligation_type_id,
-          obligation_type_name: obligation.obligation_type_name,
-          obligation_type_code: obligation.obligation_type_code,
-          status: obligation.status,
-          priority: obligation.priority,
-          due_date: obligation.due_date,
-          description: obligation.description,
-          receipt_url: obligation.receipt_url,
-          completed_at: obligation.completed_at,
-          completed_by_name: obligation.completed_by_name,
-          created_at: obligation.created_at,
-          updated_at: obligation.updated_at,
-        }));
+        const rows: Record<string, any>[] = [];
+        let page = 1;
+        let total = Number.POSITIVE_INFINITY;
+
+        while (rows.length < Math.min(total, MAX_FETCH_ROWS)) {
+          const response: ObligationListResponse = await obligationsApi.getObligations({
+            client_id: clientId || undefined,
+            page,
+            size: PAGE_SIZE,
+          });
+          total = response.total;
+          rows.push(
+            ...response.items.map((obligation) => ({
+              id: obligation.id,
+              client_id: obligation.client_id,
+              client_name: obligation.client_name,
+              client_cnpj: obligation.client_cnpj,
+              obligation_type_id: obligation.obligation_type_id,
+              obligation_type_name: obligation.obligation_type_name,
+              obligation_type_code: obligation.obligation_type_code,
+              status: obligation.status,
+              priority: obligation.priority,
+              due_date: obligation.due_date,
+              description: obligation.description,
+              receipt_url: obligation.receipt_url,
+              completed_at: obligation.completed_at,
+              completed_by_name: obligation.completed_by_name,
+              created_at: obligation.created_at,
+              updated_at: obligation.updated_at,
+            }))
+          );
+          if (response.items.length < PAGE_SIZE) break;
+          page += 1;
+        }
+
+        return rows.slice(0, MAX_FETCH_ROWS);
       }
       case 'licenses': {
-        const response = await licensesApi.list({
-          client_id: clientId || undefined,
-          page: 1,
-          size: 100,
-        });
-        return response.items.map((license) => ({
-          id: license.id,
-          client_id: license.client_id,
-          client_name: license.client_name,
-          license_type: license.license_type,
-          status: license.status,
-          registration_number: license.registration_number,
-          issuing_authority: license.issuing_authority,
-          issue_date: license.issue_date,
-          expiration_date: license.expiration_date,
-          fee: license.fee,
-          fee_paid: license.fee_paid,
-          notes: license.notes,
-          document_id: license.document_id,
-          document_url: license.document_url,
-          days_until_expiration: license.days_until_expiration,
-          is_expired: license.is_expired,
-          is_expiring_soon: license.is_expiring_soon,
-          created_at: license.created_at,
-          updated_at: license.updated_at,
-        }));
+        const rows: Record<string, any>[] = [];
+        let page = 1;
+        let pages = 1;
+
+        while (page <= pages && rows.length < MAX_FETCH_ROWS) {
+          const response = await licensesApi.list({
+            client_id: clientId || undefined,
+            page,
+            size: PAGE_SIZE,
+          });
+          pages = Math.max(response.pages || 1, 1);
+          rows.push(
+            ...response.items.map((license) => ({
+              id: license.id,
+              client_id: license.client_id,
+              client_name: license.client_name,
+              license_type: license.license_type,
+              status: license.status,
+              registration_number: license.registration_number,
+              issuing_authority: license.issuing_authority,
+              issue_date: license.issue_date,
+              expiration_date: license.expiration_date,
+              fee: license.fee,
+              fee_paid: license.fee_paid,
+              notes: license.notes,
+              document_id: license.document_id,
+              document_url: license.document_url,
+              days_until_expiration: license.days_until_expiration,
+              is_expired: license.is_expired,
+              is_expiring_soon: license.is_expiring_soon,
+              created_at: license.created_at,
+              updated_at: license.updated_at,
+            }))
+          );
+          if (response.items.length < PAGE_SIZE) break;
+          page += 1;
+        }
+
+        return rows.slice(0, MAX_FETCH_ROWS);
       }
       case 'activities': {
-        const params = new URLSearchParams();
-        params.append('skip', '0');
-        params.append('limit', '100');
-        const response = await apiClient.get<ActivityListResponse>(`/activities?${params}`);
-        return response.items.map((activity) => ({
-          title: activity.title,
-          status: activity.status,
-          priority: activity.priority,
-          assigned_to_id: activity.assigned_to_id,
-          due_date: activity.due_date,
-          labels: activity.labels,
-          recurrence: activity.recurrence,
-          created_at: activity.created_at,
-        }));
+        const rows: Record<string, any>[] = [];
+        let page = 1;
+        let total = Number.POSITIVE_INFINITY;
+
+        while (rows.length < Math.min(total, MAX_FETCH_ROWS)) {
+          const response = await activitiesApi.list({ page, size: PAGE_SIZE });
+          total = response.total;
+          rows.push(
+            ...response.items.map((activity) => ({
+              title: activity.title,
+              status: activity.status,
+              priority: activity.priority,
+              assigned_to_id: activity.assigned_to_id,
+              due_date: activity.due_date,
+              labels: activity.labels,
+              recurrence: activity.recurrence,
+              created_at: activity.created_at,
+            }))
+          );
+          if (response.items.length < PAGE_SIZE) break;
+          page += 1;
+        }
+
+        return rows.slice(0, MAX_FETCH_ROWS);
       }
       default:
         return [];
@@ -645,26 +740,43 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
     return sortOrder === 'desc' ? sorted.reverse() : sorted;
   };
 
-  const loadReportRows = async () => {
+  const getProcessedRows = (rows: Record<string, any>[]) => {
+    const dateFiltered = applyDateRange(rows);
+    const filtered = applyFilters(dateFiltered);
+    return applySort(filtered);
+  };
+
+  const ensureSourceRows = async (forceRefresh: boolean = false) => {
     const requiresClient = isAdminOrFunc && supportsClientFilter;
     if (requiresClient && isOfficeReport && !OFFICE_CLIENT_ID) {
       toast.error('Nenhum cliente de escritório configurado.');
       return [];
     }
 
+    if (!forceRefresh && sourceRowsKey === sourceFetchKey) {
+      return sourceRows;
+    }
+
     setIsLoading(true);
     try {
-      const rows = await fetchRowsForSource();
-      const dateFiltered = applyDateRange(rows);
-      const filtered = applyFilters(dateFiltered);
-      return applySort(filtered);
+      const rows = await fetchRowsForSource(resolvedClientFilter);
+      setSourceRows(rows);
+      setSourceRowsKey(sourceFetchKey);
+      return rows;
     } catch (error) {
       console.error('Erro ao gerar relatório', error);
       toast.error('Não foi possível gerar o relatório. Tente novamente.');
+      setSourceRows([]);
+      setSourceRowsKey(sourceFetchKey);
       return [];
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const loadReportRows = async (forceRefresh: boolean = false) => {
+    const rows = await ensureSourceRows(forceRefresh);
+    return getProcessedRows(rows);
   };
 
   const getFieldLabel = (field: string) => fieldLabels[field] || field;
@@ -708,13 +820,13 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
     if (filters.length > 0) {
       summaries.push(
         filters
-      .map((filter) => {
-        const label = getFieldLabel(filter.field);
-        const operator = operatorLabels[filter.operator] || filter.operator;
-        const value = filter.value?.trim() ? filter.value.trim() : '(vazio)';
-        return `${label} ${operator} ${value}`;
-      })
-      .join(' | ')
+          .map((filter) => {
+            const label = getFieldLabel(filter.field);
+            const operator = operatorLabels[filter.operator] || filter.operator;
+            const value = filter.value?.trim() ? filter.value.trim() : '(vazio)';
+            return `${label} ${operator} ${value}`;
+          })
+          .join(' | ')
       );
     }
 
@@ -723,8 +835,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
   };
 
   const buildFileName = (extension: string) => {
-    const baseName =
-      reportName.trim() || `relatorio-${dataSourceLabels[dataSource] || dataSource}`;
+    const baseName = reportName.trim() || `relatorio-${dataSourceLabels[dataSource] || dataSource}`;
     const sanitized = sanitizeFileName(baseName);
     const safeName = sanitized || 'relatorio';
     return `${safeName}.${extension}`;
@@ -770,7 +881,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
   };
 
   const exportToCSV = async () => {
-    const data = await loadReportRows();
+    const data = await loadReportRows(true);
     const fields = selectedFields.length > 0 ? selectedFields : availableFields;
     if (data.length === 0) {
       toast.error('Não há dados para exportar.');
@@ -805,7 +916,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
   };
 
   const exportToXLSX = async () => {
-    const data = await loadReportRows();
+    const data = await loadReportRows(true);
     const fields = selectedFields.length > 0 ? selectedFields : availableFields;
     if (data.length === 0) {
       toast.error('Não há dados para exportar.');
@@ -870,7 +981,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
   };
 
   const exportToPDF = async () => {
-    const data = await loadReportRows();
+    const data = await loadReportRows(true);
     const fields = selectedFields.length > 0 ? selectedFields : availableFields;
     if (data.length === 0) {
       toast.error('Não há dados para exportar.');
@@ -983,17 +1094,33 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
 
   useEffect(() => {
     if (!showPreview) return;
+    if (sourceRowsKey === sourceFetchKey && sourceRows.length > 0) return;
+    if (sourceRowsKey !== sourceFetchKey) {
+      setSourceRows([]);
+    }
     let active = true;
-    (async () => {
-      const rows = await loadReportRows();
-      if (active) setReportRows(rows);
-    })();
+    const timeoutId = window.setTimeout(() => {
+      void (async () => {
+        const rows = await ensureSourceRows(false);
+        if (!active) return;
+        if (rows.length >= MAX_FETCH_ROWS) {
+          toast.warning(`Prévia limitada a ${MAX_FETCH_ROWS} registros para manter performance.`);
+        }
+      })();
+    }, PREVIEW_DEBOUNCE_MS);
+
     return () => {
       active = false;
+      window.clearTimeout(timeoutId);
     };
+  }, [showPreview, sourceFetchKey, sourceRowsKey, sourceRows.length]);
+
+  const reportData = useMemo(() => {
+    if (!showPreview) return [];
+    return getProcessedRows(sourceRows);
   }, [
     showPreview,
-    dataSource,
+    sourceRows,
     filters,
     dateFilterField,
     dateFilterStart,
@@ -1002,13 +1129,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
     groupBy,
     sortBy,
     sortOrder,
-    selectedClientId,
-    isOfficeReport,
-    isAdminOrFunc,
-    supportsClientFilter,
   ]);
-
-  const reportData = showPreview ? reportRows : [];
   const displayFields = selectedFields.length > 0 ? selectedFields : availableFields;
 
   return (
@@ -1136,9 +1257,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
                 placeholder="Selecione"
               >
                 {dateFilterFields.map((field) => (
-                  <SelectItem key={field}>
-                    {fieldLabels[field] || field}
-                  </SelectItem>
+                  <SelectItem key={field}>{fieldLabels[field] || field}</SelectItem>
                 ))}
               </Select>
               <DatePickerField
@@ -1206,9 +1325,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
                   className="w-[180px]"
                 >
                   {availableFields.map((field) => (
-                    <SelectItem key={field}>
-                      {fieldLabels[field] || field}
-                    </SelectItem>
+                    <SelectItem key={field}>{fieldLabels[field] || field}</SelectItem>
                   ))}
                 </Select>
                 <Select
@@ -1294,7 +1411,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
                 <SelectItem key="none">Nenhum</SelectItem>,
                 ...availableFields.map((field) => (
                   <SelectItem key={field}>{fieldLabels[field] || field}</SelectItem>
-                ))
+                )),
               ]}
             </Select>
           </div>
@@ -1315,7 +1432,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
                   <SelectItem key="none">Nenhum</SelectItem>,
                   ...availableFields.map((field) => (
                     <SelectItem key={field}>{fieldLabels[field] || field}</SelectItem>
-                  ))
+                  )),
                 ]}
               </Select>
               <Select
@@ -1344,12 +1461,14 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
                     <TableColumn key={field}>{fieldLabels[field] || field}</TableColumn>
                   ))}
                 </TableHeader>
-                <TableBody>
+                <TableBody emptyContent="Nenhum registro para os filtros aplicados.">
                   {reportData.slice(0, 10).map((item, index) => (
                     <TableRow key={index}>
                       {displayFields.map((field) => (
                         <TableCell key={field}>
-                          {isLoading ? '...' : String((item as any)[field] ?? '-')}
+                          {isLoading
+                            ? '...'
+                            : formatExportValue(field, (item as any)[field]) || '-'}
                         </TableCell>
                       ))}
                     </TableRow>
@@ -1397,7 +1516,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
             <Button
               color="primary"
               onPress={() => {
-                alert('Relatório salvo com sucesso!');
+                toast.info('Salvamento de modelo personalizado será disponibilizado em breve.');
               }}
             >
               Salvar Relatório

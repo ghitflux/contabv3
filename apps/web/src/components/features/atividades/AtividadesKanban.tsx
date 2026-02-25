@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Button, Card, CardBody } from '@/heroui';
 import { Calendar, ExternalLink, GripVertical, LayoutGrid, Pencil, User } from 'lucide-react';
@@ -31,6 +31,25 @@ export function AtividadesKanban({
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [movingActivityId, setMovingActivityId] = useState<string | null>(null);
   const [dragHandleActivityId, setDragHandleActivityId] = useState<string | null>(null);
+  const uniqueActivities = useMemo(() => {
+    const uniqueById = new Map<string, Activity>();
+
+    activities.forEach((activity) => {
+      const existing = uniqueById.get(activity.id);
+      if (!existing) {
+        uniqueById.set(activity.id, activity);
+        return;
+      }
+
+      const existingUpdatedAt = existing.updated_at ? new Date(existing.updated_at).getTime() : 0;
+      const nextUpdatedAt = activity.updated_at ? new Date(activity.updated_at).getTime() : 0;
+      if (nextUpdatedAt >= existingUpdatedAt) {
+        uniqueById.set(activity.id, activity);
+      }
+    });
+
+    return Array.from(uniqueById.values());
+  }, [activities]);
 
   const columns = [
     {
@@ -120,7 +139,7 @@ export function AtividadesKanban({
     const activityId = event.dataTransfer.getData('text/plain') || draggedActivityId || '';
     if (!activityId) return;
 
-    const activity = activities.find((item) => item.id === activityId);
+    const activity = uniqueActivities.find((item) => item.id === activityId);
     if (!activity || activity.status === columnId) {
       handleDragEnd();
       return;
@@ -132,6 +151,17 @@ export function AtividadesKanban({
     } finally {
       setMovingActivityId(null);
       handleDragEnd();
+    }
+  };
+
+  const handleOpenActivity = (activity: Activity) => {
+    onSelectActivity?.(activity);
+  };
+
+  const handleCardKeyDown = (event: React.KeyboardEvent, activity: Activity) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      handleOpenActivity(activity);
     }
   };
 
@@ -153,7 +183,7 @@ export function AtividadesKanban({
         animate="visible"
       >
         {columns.map((column) => {
-          const columnActivities = activities.filter((a) => a.status === column.id);
+          const columnActivities = uniqueActivities.filter((activity) => activity.status === column.id);
           const isDroppable = dragOverColumn === column.id;
 
           return (
@@ -195,15 +225,19 @@ export function AtividadesKanban({
                         initial="rest"
                         whileHover="hover"
                         whileTap="tap"
+                        role="button"
+                        tabIndex={0}
+                        className="rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                        onClick={() => handleOpenActivity(activity)}
+                        onKeyDown={(event) => handleCardKeyDown(event, activity)}
                       >
                         <Card
-                          className={`bg-background cursor-grab hover:shadow-lg transition-all duration-200 ${getPriorityBorder(activity.priority)} ${
+                          className={`bg-background cursor-pointer hover:shadow-lg transition-all duration-200 ${getPriorityBorder(activity.priority)} ${
                             movingActivityId === activity.id ? 'opacity-60' : ''
                           } ${draggedActivityId === activity.id ? 'opacity-50 scale-95' : ''}`}
                           draggable={dragHandleActivityId === activity.id}
                           onDragStart={(event) => handleDragStart(event, activity.id)}
                           onDragEnd={handleDragEnd}
-                          onClick={() => onSelectActivity?.(activity)}
                         >
                           <CardBody className="p-4 space-y-3">
                             <div className="flex items-start justify-between gap-2">
@@ -232,8 +266,8 @@ export function AtividadesKanban({
                                   variant="light"
                                   onClick={(event) => {
                                     event.stopPropagation();
-                                    onSelectActivity?.(activity);
                                   }}
+                                  onPress={() => handleOpenActivity(activity)}
                                   title="Abrir atividade"
                                   className="min-w-unit-6"
                                 >
@@ -292,8 +326,10 @@ export function AtividadesKanban({
                                 startContent={<ExternalLink className="h-3.5 w-3.5" />}
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  onOpenLinkedObligation(activity.linked_obligation_id as string);
                                 }}
+                                onPress={() =>
+                                  onOpenLinkedObligation(activity.linked_obligation_id as string)
+                                }
                               >
                                 Abrir obrigação
                               </Button>

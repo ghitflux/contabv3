@@ -1,7 +1,6 @@
 """Cash Flow Projection Report Service."""
 
 from datetime import date, timedelta
-from decimal import Decimal
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +26,7 @@ class CashFlowProjectionReportService(BaseReportService):
         """
         period_start = filters["period_start"].replace(day=1)
         period_end = filters["period_end"].replace(day=1)
+        client_ids = filters.get("client_ids")
 
         # Get historical data from last 6 months
         historical_start = period_start - timedelta(days=180)
@@ -38,10 +38,15 @@ class CashFlowProjectionReportService(BaseReportService):
             FinancialTransaction.reference_month < period_start.replace(day=1),
             FinancialTransaction.payment_status == PaymentStatus.PAGO,
         ]
+        if client_ids:
+            conditions.append(FinancialTransaction.client_id.in_(client_ids))
 
-        # Calculate average monthly revenue
+        # Calculate monthly totals and derive average monthly revenue
         revenue_stmt = (
-            select(func.avg(func.sum(FinancialTransaction.amount)))
+            select(
+                FinancialTransaction.reference_month,
+                func.sum(FinancialTransaction.amount).label("total"),
+            )
             .where(
                 and_(
                     *conditions,
@@ -51,16 +56,19 @@ class CashFlowProjectionReportService(BaseReportService):
             .group_by(FinancialTransaction.reference_month)
         )
         revenue_result = await self.db.execute(revenue_stmt)
-        avg_revenue_rows = revenue_result.scalars().all()
+        avg_revenue_rows = revenue_result.all()
+        revenue_values = [float(row.total or 0) for row in avg_revenue_rows]
         avg_revenue = (
-            float(sum(avg_revenue_rows) / len(avg_revenue_rows))
-            if avg_revenue_rows
-            else 0.0
+            sum(revenue_values) / len(revenue_values)
+            if revenue_values else 0.0
         )
 
-        # Calculate average monthly expenses
+        # Calculate monthly totals and derive average monthly expenses
         expense_stmt = (
-            select(func.avg(func.sum(FinancialTransaction.amount)))
+            select(
+                FinancialTransaction.reference_month,
+                func.sum(FinancialTransaction.amount).label("total"),
+            )
             .where(
                 and_(
                     *conditions,
@@ -70,11 +78,11 @@ class CashFlowProjectionReportService(BaseReportService):
             .group_by(FinancialTransaction.reference_month)
         )
         expense_result = await self.db.execute(expense_stmt)
-        avg_expense_rows = expense_result.scalars().all()
+        avg_expense_rows = expense_result.all()
+        expense_values = [float(row.total or 0) for row in avg_expense_rows]
         avg_expense = (
-            float(sum(avg_expense_rows) / len(avg_expense_rows))
-            if avg_expense_rows
-            else 0.0
+            sum(expense_values) / len(expense_values)
+            if expense_values else 0.0
         )
 
         # Generate projections for next 3 months
@@ -139,4 +147,3 @@ class CashFlowProjectionReportService(BaseReportService):
     def _count_records(self, data: dict) -> int:
         """Count total records in Projection report."""
         return len(data.get("periods", []))
-

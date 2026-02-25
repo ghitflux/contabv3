@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { DatePickerField } from "@/components/ui/DatePickerField";
 import { PlanoDeContasAutocomplete } from "@/components/ui/PlanoDeContasAutocomplete";
 import { TransactionType, PaymentStatus, PaymentMethod } from "@/types/finance";
+import { isPlanoContaCodigo } from "@/constants/planoDeContas";
 import { formatISO } from "date-fns";
 import { toast } from "@/lib/toast";
 
@@ -52,6 +53,10 @@ const buildDefaultDates = (baseDate: Date) => {
   };
 };
 
+type CategoryMode = "plano" | "custom";
+
+const MAX_CUSTOM_CATEGORY_LENGTH = 20;
+
 export function NovoLancamentoModal({
   isOpen,
   onOpenChange,
@@ -62,6 +67,8 @@ export function NovoLancamentoModal({
   isClientLocked = false,
 }: NovoLancamentoModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [categoryMode, setCategoryMode] = useState<CategoryMode>("plano");
+  const [customCategory, setCustomCategory] = useState("");
   const [formData, setFormData] = useState<Partial<NovoLancamentoData>>({
     transaction_type: TransactionType.RECEITA,
     payment_status: PaymentStatus.PENDENTE,
@@ -73,6 +80,8 @@ export function NovoLancamentoModal({
     if (!isOpen) return;
     const now = new Date();
     const defaults = buildDefaultDates(now);
+    setCategoryMode("plano");
+    setCustomCategory("");
     setFormData((prev) => ({
       ...prev,
       ...defaults,
@@ -105,15 +114,40 @@ export function NovoLancamentoModal({
         return;
       }
 
-      await onSave(formData as NovoLancamentoData);
+      let normalizedCategory: string | null = null;
+      if (categoryMode === "custom") {
+        const customValue = customCategory.trim();
+        if (!customValue) {
+          toast.error("Informe o nome da categoria personalizada.");
+          return;
+        }
+        if (customValue.length > MAX_CUSTOM_CATEGORY_LENGTH) {
+          toast.error(
+            `A categoria personalizada deve ter até ${MAX_CUSTOM_CATEGORY_LENGTH} caracteres.`
+          );
+          return;
+        }
+        normalizedCategory = customValue;
+      } else {
+        const selectedCategory = formData.category?.trim();
+        normalizedCategory = selectedCategory || null;
+      }
+
+      await onSave({
+        ...(formData as NovoLancamentoData),
+        category: normalizedCategory,
+      });
       onOpenChange(false);
 
       // Reset form
+      setCategoryMode("plano");
+      setCustomCategory("");
       setFormData({
         transaction_type: TransactionType.RECEITA,
         payment_status: PaymentStatus.PENDENTE,
         due_date: "",
         reference_month: "",
+        category: null,
       });
     } catch (error) {
       console.error("Erro ao salvar lançamento:", error);
@@ -169,12 +203,51 @@ export function NovoLancamentoModal({
                   {(client) => <SelectItem key={client.id}>{client.name}</SelectItem>}
                 </Select>
 
-                {/* Categoria (Plano de Contas) */}
-                <PlanoDeContasAutocomplete
-                  value={formData.category ?? null}
-                  onChange={(value) => setFormData((prev) => ({ ...prev, category: value }))}
+                <Select
+                  label="Tipo de Categoria"
+                  selectedKeys={[categoryMode]}
+                  onSelectionChange={(keys) => {
+                    const nextMode = (Array.from(keys)[0] as CategoryMode | undefined) ?? "plano";
+                    if (nextMode === "custom") {
+                      const currentCategory = formData.category?.trim();
+                      if (
+                        currentCategory &&
+                        !isPlanoContaCodigo(currentCategory) &&
+                        customCategory.length === 0
+                      ) {
+                        setCustomCategory(currentCategory);
+                      }
+                    } else {
+                      setCustomCategory("");
+                    }
+                    setCategoryMode(nextMode);
+                  }}
                   variant="bordered"
-                />
+                >
+                  <SelectItem key="plano">Plano de contas (inclui impostos)</SelectItem>
+                  <SelectItem key="custom">Categoria personalizada</SelectItem>
+                </Select>
+
+                {categoryMode === "plano" ? (
+                  <PlanoDeContasAutocomplete
+                    value={formData.category ?? null}
+                    onChange={(value) => setFormData((prev) => ({ ...prev, category: value }))}
+                    label="Categoria (Plano de Contas)"
+                    placeholder="Inclui impostos federais, estaduais e municipais"
+                    variant="bordered"
+                  />
+                ) : (
+                  <Input
+                    label="Categoria personalizada"
+                    placeholder="Ex: Imposto complementar"
+                    value={customCategory}
+                    onValueChange={setCustomCategory}
+                    maxLength={MAX_CUSTOM_CATEGORY_LENGTH}
+                    variant="bordered"
+                    description={`Até ${MAX_CUSTOM_CATEGORY_LENGTH} caracteres.`}
+                    isRequired
+                  />
+                )}
 
                 {/* Descrição */}
                 <Input

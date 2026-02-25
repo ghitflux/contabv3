@@ -41,13 +41,14 @@ import type { ClientListItem } from '@/types/client';
 import { DatePickerField } from '@/components/ui/DatePickerField';
 import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
 import { endOfMonth, formatISO, startOfMonth, subMonths } from 'date-fns';
-import { getContaByCodigo, formatConta } from '@/constants/planoDeContas';
+import { resolveCategoriaLancamento } from '@/constants/planoDeContas';
 import { NovoLancamentoModal, type NovoLancamentoData } from './NovoLancamentoModal';
 import { clientsApi } from '@/lib/api/endpoints/clients';
 import { toast } from '@/lib/toast';
 import { TransactionTrashModal } from './TransactionTrashModal';
 import { ConfirmBaixaLancamentoDialog } from './ConfirmBaixaLancamentoDialog';
 import { ConfirmDeleteLancamentoDialog } from './ConfirmDeleteLancamentoDialog';
+import { PlanoDeContasAutocomplete } from '@/components/ui/PlanoDeContasAutocomplete';
 
 type LancamentoTipo = TransactionType;
 type LancamentoStatus = PaymentStatus;
@@ -68,6 +69,7 @@ interface Lancamento {
 
 const normalizeDecimalInput = (value: string): number => Number.parseFloat(value.replace(',', '.'));
 const LANCAMENTOS_PER_PAGE = 20;
+const MAX_CUSTOM_CATEGORY_LENGTH = 20;
 
 export function FinanceiroLancamentos() {
   const { isOpen, onOpen, onOpenChange } = useDisclosure();
@@ -97,6 +99,8 @@ export function FinanceiroLancamentos() {
     payment_method: '' as PaymentMethod | '',
     paid_date: '',
     category: '',
+    category_mode: 'plano' as 'plano' | 'custom',
+    custom_category: '',
     notes: '',
     invoice_number: '',
   });
@@ -317,11 +321,15 @@ export function FinanceiroLancamentos() {
         (activePendingPanel === 'pagar' &&
           lancamento.tipo === TransactionType.DESPESA &&
           isDuePaymentStatus(lancamento.status));
+      const categoriaInfo = resolveCategoriaLancamento(lancamento.categoria);
+      const categoriaSearchText = `${lancamento.categoria ?? ''} ${categoriaInfo?.label ?? ''} ${
+        categoriaInfo?.conta?.descricao ?? ''
+      }`.toLowerCase();
       const matchBusca =
         query === '' ||
         lancamento.descricao.toLowerCase().includes(query) ||
         lancamento.competencia.toLowerCase().includes(query) ||
-        (lancamento.categoria ?? '').toLowerCase().includes(query) ||
+        categoriaSearchText.includes(query) ||
         (lancamento.cliente ?? '').toLowerCase().includes(query);
 
       return matchTipo && matchStatus && matchBusca && matchPanel;
@@ -385,6 +393,10 @@ export function FinanceiroLancamentos() {
   };
 
   const openEditTransaction = (transaction: Transaction) => {
+    const resolvedCategory = resolveCategoriaLancamento(transaction.category);
+    const isCustomCategory = Boolean(resolvedCategory?.isCustom);
+    const categoryValue = transaction.category ?? '';
+
     setEditingTransaction(transaction);
     setEditForm({
       description: transaction.description ?? '',
@@ -393,7 +405,9 @@ export function FinanceiroLancamentos() {
       payment_status: transaction.payment_status ?? PaymentStatus.PENDENTE,
       payment_method: transaction.payment_method ?? '',
       paid_date: normalizeDateInput(transaction.paid_date),
-      category: transaction.category ?? '',
+      category: isCustomCategory ? '' : categoryValue,
+      category_mode: isCustomCategory ? 'custom' : 'plano',
+      custom_category: isCustomCategory ? categoryValue : '',
       notes: transaction.notes ?? '',
       invoice_number: transaction.invoice_number ?? '',
     });
@@ -416,6 +430,24 @@ export function FinanceiroLancamentos() {
       return;
     }
 
+    let normalizedCategory: string | null = null;
+    if (editForm.category_mode === 'custom') {
+      const customCategory = editForm.custom_category.trim();
+      if (!customCategory) {
+        toast.error('Informe a categoria personalizada.');
+        return;
+      }
+      if (customCategory.length > MAX_CUSTOM_CATEGORY_LENGTH) {
+        toast.error(
+          `A categoria personalizada deve ter até ${MAX_CUSTOM_CATEGORY_LENGTH} caracteres.`
+        );
+        return;
+      }
+      normalizedCategory = customCategory;
+    } else {
+      normalizedCategory = editForm.category.trim() || null;
+    }
+
     const payload: TransactionUpdate = {
       amount: amountValue,
       description: editForm.description.trim(),
@@ -426,7 +458,7 @@ export function FinanceiroLancamentos() {
         editForm.payment_status === PaymentStatus.PAGO
           ? editForm.paid_date || new Date().toISOString()
           : null,
-      category: editForm.category.trim() || null,
+      category: normalizedCategory,
       notes: editForm.notes.trim() || null,
       invoice_number: editForm.invoice_number.trim() || null,
     };
@@ -675,16 +707,31 @@ export function FinanceiroLancamentos() {
             </TableHeader>
             <TableBody emptyContent="Nenhum lançamento encontrado">
               {lancamentosPaginados.map((lancamento) => {
-                const conta = lancamento.categoria ? getContaByCodigo(lancamento.categoria) : null;
+                const categoriaInfo = resolveCategoriaLancamento(lancamento.categoria);
                 return (
                   <TableRow key={lancamento.id}>
                     <TableCell className="font-medium">{formatDate(lancamento.data)}</TableCell>
                     <TableCell>{lancamento.descricao}</TableCell>
                     <TableCell className="text-sm">
-                      {conta ? (
-                        <span className="text-default-700" title={conta.descricao}>
-                          {formatConta(conta)}
-                        </span>
+                      {categoriaInfo ? (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span
+                            className="text-default-700"
+                            title={categoriaInfo.conta?.descricao ?? categoriaInfo.label}
+                          >
+                            {categoriaInfo.label}
+                          </span>
+                          {categoriaInfo.isTax && (
+                            <Chip size="sm" variant="flat" color="warning">
+                              Imposto
+                            </Chip>
+                          )}
+                          {categoriaInfo.isCustom && (
+                            <Chip size="sm" variant="flat" color="secondary">
+                              Personalizada
+                            </Chip>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-default-400">-</span>
                       )}
@@ -881,12 +928,45 @@ export function FinanceiroLancamentos() {
                       />
                     </div>
                   )}
-                  <Input
-                    label="Categoria"
-                    placeholder="Ex: 1.1.01"
-                    value={editForm.category}
-                    onValueChange={(value) => setEditForm((prev) => ({ ...prev, category: value }))}
-                  />
+                  <Select
+                    label="Tipo de Categoria"
+                    selectedKeys={[editForm.category_mode]}
+                    onSelectionChange={(keys) => {
+                      const mode = (Array.from(keys)[0] as 'plano' | 'custom' | undefined) ?? 'plano';
+                      setEditForm((prev) => ({
+                        ...prev,
+                        category_mode: mode,
+                        custom_category:
+                          mode === 'custom' && prev.custom_category.length === 0
+                            ? prev.category
+                            : prev.custom_category,
+                      }));
+                    }}
+                  >
+                    <SelectItem key="plano">Plano de contas (inclui impostos)</SelectItem>
+                    <SelectItem key="custom">Categoria personalizada</SelectItem>
+                  </Select>
+                  {editForm.category_mode === 'plano' ? (
+                    <PlanoDeContasAutocomplete
+                      value={editForm.category || null}
+                      onChange={(value) =>
+                        setEditForm((prev) => ({ ...prev, category: value ?? '' }))
+                      }
+                      label="Categoria (Plano de Contas)"
+                      placeholder="Inclui impostos federais, estaduais e municipais"
+                    />
+                  ) : (
+                    <Input
+                      label="Categoria personalizada"
+                      placeholder="Ex: Imposto complementar"
+                      value={editForm.custom_category}
+                      onValueChange={(value) =>
+                        setEditForm((prev) => ({ ...prev, custom_category: value }))
+                      }
+                      maxLength={MAX_CUSTOM_CATEGORY_LENGTH}
+                      description={`Até ${MAX_CUSTOM_CATEGORY_LENGTH} caracteres.`}
+                    />
+                  )}
                   <Input
                     label="Número da Nota"
                     placeholder="Ex: NF-001/2024"

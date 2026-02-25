@@ -125,6 +125,21 @@ export function AtividadesFormModal({
 
   const isAssigneeLocked = Boolean(defaultAssigneeId) && mode === 'create';
   const isLinkedToObligation = Boolean(formState.linked_obligation_id);
+  const availableCompanyIds = useMemo(
+    () => new Set(companyOptions.map((company) => company.id)),
+    [companyOptions]
+  );
+  const selectedCompanyIds = useMemo(
+    () => formState.linked_client_ids.filter((id) => availableCompanyIds.has(id)),
+    [availableCompanyIds, formState.linked_client_ids]
+  );
+  const selectedStatus =
+    statusOptions.find((option) => option.key === formState.status)?.key ?? ActivityStatus.TODO;
+  const selectedPriority =
+    priorityOptions.find((option) => option.key === formState.priority)?.key ??
+    ActivityPriority.MEDIUM;
+  const selectedRecurrence =
+    recurrenceOptions.find((option) => option.key === formState.recurrence)?.key ?? 'none';
 
   const assigneeDescription = useMemo(() => {
     if (isAssigneeLocked) return 'Responsável padrão: você.';
@@ -185,14 +200,23 @@ export function AtividadesFormModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="2xl">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="2xl"
+      scrollBehavior="inside"
+      classNames={{
+        base: 'max-h-[calc(100vh-2rem)]',
+        body: 'overflow-y-auto',
+      }}
+    >
       <ModalContent>
         {() => (
           <>
             <ModalHeader>
               {mode === 'create' ? 'Criar Nova Atividade' : 'Editar Atividade'}
             </ModalHeader>
-            <ModalBody className="space-y-4">
+            <ModalBody className="space-y-4 max-h-[72vh] overflow-y-auto pr-1">
               <Input
                 label="Título *"
                 placeholder="Nome da atividade"
@@ -210,7 +234,7 @@ export function AtividadesFormModal({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Select
                   label="Status"
-                  selectedKeys={formState.status ? [formState.status] : []}
+                  selectedKeys={[selectedStatus]}
                   onSelectionChange={(keys) => {
                     const value = Array.from(keys)[0] as ActivityStatus | undefined;
                     if (value) {
@@ -225,7 +249,7 @@ export function AtividadesFormModal({
 
                 <Select
                   label="Prioridade"
-                  selectedKeys={formState.priority ? [formState.priority] : []}
+                  selectedKeys={[selectedPriority]}
                   onSelectionChange={(keys) => {
                     const value = Array.from(keys)[0] as ActivityPriority | undefined;
                     if (value) {
@@ -253,7 +277,7 @@ export function AtividadesFormModal({
 
                 <Select
                   label="Recorrência"
-                  selectedKeys={[formState.recurrence || 'none']}
+                  selectedKeys={[selectedRecurrence]}
                   onSelectionChange={(keys) => {
                     const value = (Array.from(keys)[0] as string | undefined) ?? 'none';
                     setFormState((prev) => ({ ...prev, recurrence: value }));
@@ -293,7 +317,7 @@ export function AtividadesFormModal({
               <Select
                 label="Empresas vinculadas"
                 selectionMode="multiple"
-                selectedKeys={new Set(formState.linked_client_ids)}
+                selectedKeys={new Set(selectedCompanyIds)}
                 onSelectionChange={(keys) => {
                   if (keys === 'all') {
                     setFormState((prev) => ({
