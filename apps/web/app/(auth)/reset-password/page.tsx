@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Card, CardBody, CardHeader, Input, Link } from '@/heroui';
 import { authApi } from '@/lib/api/endpoints/auth';
@@ -17,6 +17,14 @@ function validatePassword(password: string): string | null {
 }
 
 export default function ResetPasswordPage() {
+  return (
+    <Suspense>
+      <ResetPasswordContent />
+    </Suspense>
+  );
+}
+
+function ResetPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialToken = searchParams.get('token') ?? '';
@@ -200,3 +208,4 @@ export default function ResetPasswordPage() {
     </div>
   );
 }
+
