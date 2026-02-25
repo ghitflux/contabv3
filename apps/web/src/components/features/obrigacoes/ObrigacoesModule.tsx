@@ -26,7 +26,7 @@ import {
 } from '@/heroui';
 import { CheckCircleIcon, DownloadIcon, RefreshIcon, SearchIcon } from '@/lib/icons';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ObligationCompletionModal } from './ObligationCompletionModal';
 import { ObligationTrashModal } from './ObligationTrashModal';
@@ -136,6 +136,14 @@ const getRegimeLabelSafe = (regime?: string) => {
 };
 
 export function ObrigacoesModule() {
+  return (
+    <Suspense>
+      <ObrigacoesModuleContent />
+    </Suspense>
+  );
+}
+
+function ObrigacoesModuleContent() {
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const isCliente = user?.role === UserRole.CLIENTE;
