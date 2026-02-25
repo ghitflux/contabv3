@@ -86,89 +86,93 @@ function TrashTable({
       </CardHeader>
       <CardBody className="pt-0">
         {showCompany ? (
-          <Table aria-label={title} removeWrapper>
-            <TableHeader>
-              <TableColumn>Empresa</TableColumn>
-              <TableColumn>Tipo</TableColumn>
-              <TableColumn>Registro</TableColumn>
-              <TableColumn>Vencimento</TableColumn>
-              <TableColumn>Status</TableColumn>
-              <TableColumn>Na lixeira por</TableColumn>
-              <TableColumn className="text-right">Ação</TableColumn>
-            </TableHeader>
-            <TableBody emptyContent="Nenhuma licença na lixeira">
-              {items.map((license) => {
-                const status = normalizeLicenseStatus(license.status);
-                return (
-                  <TableRow key={license.id}>
-                    <TableCell>
-                      <div className="space-y-0.5">
-                        <p className="text-sm font-medium">{license.client_name || "-"}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {LICENSE_TYPE_LABELS[normalizeLicenseType(license.license_type)]}
-                    </TableCell>
-                    <TableCell>{license.registration_number || "-"}</TableCell>
-                    <TableCell>{formatDatePtBR(license.expiration_date)}</TableCell>
-                    <TableCell>{LICENSE_STATUS_LABELS[status]}</TableCell>
-                    <TableCell>{getTrashReason(status)}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        color="primary"
-                        variant="flat"
-                        startContent={<RotateCcw className="h-4 w-4" />}
-                        onPress={() => onRestore(license)}
-                        isLoading={restoringId === license.id}
-                      >
-                        Restaurar
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <div className="w-full overflow-x-auto">
+            <Table aria-label={title} removeWrapper className="min-w-[980px]">
+              <TableHeader>
+                <TableColumn>Empresa</TableColumn>
+                <TableColumn>Tipo</TableColumn>
+                <TableColumn>Registro</TableColumn>
+                <TableColumn>Vencimento</TableColumn>
+                <TableColumn>Status</TableColumn>
+                <TableColumn>Na lixeira por</TableColumn>
+                <TableColumn className="text-right">Ação</TableColumn>
+              </TableHeader>
+              <TableBody emptyContent="Nenhuma licença na lixeira">
+                {items.map((license) => {
+                  const status = normalizeLicenseStatus(license.status);
+                  return (
+                    <TableRow key={license.id}>
+                      <TableCell>
+                        <div className="space-y-0.5">
+                          <p className="text-sm font-medium">{license.client_name || "-"}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {LICENSE_TYPE_LABELS[normalizeLicenseType(license.license_type)]}
+                      </TableCell>
+                      <TableCell>{license.registration_number || "-"}</TableCell>
+                      <TableCell>{formatDatePtBR(license.expiration_date)}</TableCell>
+                      <TableCell>{LICENSE_STATUS_LABELS[status]}</TableCell>
+                      <TableCell>{getTrashReason(status)}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          color="primary"
+                          variant="flat"
+                          startContent={<RotateCcw className="h-4 w-4" />}
+                          onPress={() => onRestore(license)}
+                          isLoading={restoringId === license.id}
+                        >
+                          Restaurar
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         ) : (
-          <Table aria-label={title} removeWrapper>
-            <TableHeader>
-              <TableColumn>Tipo</TableColumn>
-              <TableColumn>Registro</TableColumn>
-              <TableColumn>Vencimento</TableColumn>
-              <TableColumn>Status</TableColumn>
-              <TableColumn>Na lixeira por</TableColumn>
-              <TableColumn className="text-right">Ação</TableColumn>
-            </TableHeader>
-            <TableBody emptyContent="Nenhuma licença na lixeira">
-              {items.map((license) => {
-                const status = normalizeLicenseStatus(license.status);
-                return (
-                  <TableRow key={license.id}>
-                    <TableCell>
-                      {LICENSE_TYPE_LABELS[normalizeLicenseType(license.license_type)]}
-                    </TableCell>
-                    <TableCell>{license.registration_number || "-"}</TableCell>
-                    <TableCell>{formatDatePtBR(license.expiration_date)}</TableCell>
-                    <TableCell>{LICENSE_STATUS_LABELS[status]}</TableCell>
-                    <TableCell>{getTrashReason(status)}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        color="primary"
-                        variant="flat"
-                        startContent={<RotateCcw className="h-4 w-4" />}
-                        onPress={() => onRestore(license)}
-                        isLoading={restoringId === license.id}
-                      >
-                        Restaurar
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <div className="w-full overflow-x-auto">
+            <Table aria-label={title} removeWrapper className="min-w-[860px]">
+              <TableHeader>
+                <TableColumn>Tipo</TableColumn>
+                <TableColumn>Registro</TableColumn>
+                <TableColumn>Vencimento</TableColumn>
+                <TableColumn>Status</TableColumn>
+                <TableColumn>Na lixeira por</TableColumn>
+                <TableColumn className="text-right">Ação</TableColumn>
+              </TableHeader>
+              <TableBody emptyContent="Nenhuma licença na lixeira">
+                {items.map((license) => {
+                  const status = normalizeLicenseStatus(license.status);
+                  return (
+                    <TableRow key={license.id}>
+                      <TableCell>
+                        {LICENSE_TYPE_LABELS[normalizeLicenseType(license.license_type)]}
+                      </TableCell>
+                      <TableCell>{license.registration_number || "-"}</TableCell>
+                      <TableCell>{formatDatePtBR(license.expiration_date)}</TableCell>
+                      <TableCell>{LICENSE_STATUS_LABELS[status]}</TableCell>
+                      <TableCell>{getTrashReason(status)}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          color="primary"
+                          variant="flat"
+                          startContent={<RotateCcw className="h-4 w-4" />}
+                          onPress={() => onRestore(license)}
+                          isLoading={restoringId === license.id}
+                        >
+                          Restaurar
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </CardBody>
     </Card>

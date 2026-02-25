@@ -76,9 +76,9 @@ export default function ClientesPage() {
       animate="visible"
       className="w-full space-y-6"
     >
-      <Card className="p-6 space-y-6">
+      <Card className="space-y-6 p-4 sm:p-6">
         <div>
-          <h2 className="text-2xl font-bold mb-4">Padrões para Novos Clientes</h2>
+          <h2 className="mb-4 text-xl font-bold sm:text-2xl">Padrões para Novos Clientes</h2>
           <p className="text-default-500 mb-4">
             Valores padrão que serão preenchidos ao criar novos clientes
           </p>
@@ -87,7 +87,7 @@ export default function ClientesPage() {
         <Divider />
 
         <div>
-          <h3 className="text-xl font-semibold mb-4">Configurações Financeiras</h3>
+          <h3 className="mb-4 text-lg font-semibold sm:text-xl">Configurações Financeiras</h3>
           <Divider className="mb-6" />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
@@ -116,7 +116,7 @@ export default function ClientesPage() {
         <Divider />
 
         <div>
-          <h3 className="text-xl font-semibold mb-4">Configurações Padrão</h3>
+          <h3 className="mb-4 text-lg font-semibold sm:text-xl">Configurações Padrão</h3>
           <Divider className="mb-6" />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Select
@@ -149,7 +149,7 @@ export default function ClientesPage() {
         <Divider />
 
         <div>
-          <h3 className="text-xl font-semibold mb-4">Modelos e Atividades</h3>
+          <h3 className="mb-4 text-lg font-semibold sm:text-xl">Modelos e Atividades</h3>
           <Divider className="mb-6" />
           <p className="text-default-500 text-sm mb-4">
             Lista de IDs separados por vírgula para serem associados a novos clientes
@@ -175,11 +175,21 @@ export default function ClientesPage() {
 
         <Divider />
 
-        <div className="flex justify-end gap-2">
-          <Button color="default" variant="light" onClick={() => fetchSettings()}>
+        <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">
+          <Button
+            color="default"
+            variant="light"
+            onClick={() => fetchSettings()}
+            className="w-full sm:w-auto"
+          >
             Descartar
           </Button>
-          <Button color="primary" isLoading={isSaving} onClick={handleSave}>
+          <Button
+            color="primary"
+            isLoading={isSaving}
+            onClick={handleSave}
+            className="w-full sm:w-auto"
+          >
             Salvar Padrões
           </Button>
         </div>

@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.deps import (
     get_current_active_user,
     get_db,
-    require_admin,
     require_admin_or_func,
 )
 from app.db.models.user import User, UserRole
@@ -26,7 +25,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.get("", response_model=dict, status_code=status.HTTP_200_OK)
 async def list_users(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: User = Depends(require_admin()),
+    _: User = Depends(require_admin_or_func()),
     search: Optional[str] = Query(None, description="Search by name or email"),
     q: Optional[str] = Query(None, include_in_schema=False),
     role: Optional[UserRole] = Query(None, description="Filter by role"),
@@ -100,7 +99,7 @@ async def get_current_user_info(
 async def create_user(
     user_data: UserCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: User = Depends(require_admin()),
+    _: User = Depends(require_admin_or_func()),
 ) -> UserResponse:
     """
     Create a new user (admin/func only).
@@ -122,8 +121,8 @@ async def create_user(
     if await user_repo.email_exists(user_data.email):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-        detail="Email already registered"
-    )
+            detail="Email already registered",
+        )
 
     # Validate password against security policy
     await enforce_password_policy(db, user_data.password)
@@ -297,7 +296,7 @@ async def update_own_password(
 async def delete_user(
     user_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: User = Depends(require_admin()),
+    current_user: User = Depends(require_admin_or_func()),
 ) -> ResponseSchema:
     """
     Delete user (admin/func only).
@@ -307,7 +306,7 @@ async def delete_user(
     Args:
         user_id: User UUID
         db: Database session
-        _: Current user (must be admin/func)
+        current_user: Current user (must be admin/func)
 
     Returns:
         ResponseSchema: Success message
@@ -315,6 +314,12 @@ async def delete_user(
     Raises:
         HTTPException: 404 if user not found
     """
+    if current_user.id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot delete your own user",
+        )
+
     user_repo = UserRepository(db)
 
     deleted = await user_repo.delete(user_id)

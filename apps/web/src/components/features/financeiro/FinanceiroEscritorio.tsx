@@ -718,7 +718,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
             value={monthFilter}
             onChange={handleMonthChange}
             size="sm"
-            className="w-[180px]"
+            className="w-full sm:w-[180px]"
             aria-label="Mês de referência"
           />
         </div>
@@ -728,7 +728,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
             value={startDate}
             onChange={setStartDate}
             size="sm"
-            className="w-[180px]"
+            className="w-full sm:w-[180px]"
             aria-label="Data inicial"
           />
         </div>
@@ -738,11 +738,11 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
             value={endDate}
             onChange={setEndDate}
             size="sm"
-            className="w-[180px]"
+            className="w-full sm:w-[180px]"
             aria-label="Data final"
           />
         </div>
-        <div className="md:ml-auto flex gap-2">
+        <div className="md:ml-auto flex flex-wrap gap-2">
           <Button variant="bordered" onPress={setCurrentMonthRange}>
             Mês atual
           </Button>
@@ -812,48 +812,55 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
 
       {activePendingPanel !== 'all' && (
         <Card className="border border-default-200/50 dark:border-default-100/20">
-          <CardHeader className="flex items-center justify-between">
+          <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
               {activePendingPanel === 'receber'
                 ? 'Lançamentos de Contas a Receber'
                 : 'Lançamentos de Contas a Pagar'}
             </h3>
-            <Button variant="light" size="sm" onPress={() => setActivePendingPanel('all')}>
+            <Button
+              variant="light"
+              size="sm"
+              onPress={() => setActivePendingPanel('all')}
+              className="w-full sm:w-auto"
+            >
               Limpar filtro
             </Button>
           </CardHeader>
-          <CardBody>
-            <Table aria-label="Tabela de baixa rápida" removeWrapper>
-              <TableHeader>
-                <TableColumn>Vencimento</TableColumn>
-                <TableColumn>Descrição</TableColumn>
-                <TableColumn className="text-right">Valor</TableColumn>
-                <TableColumn className="text-right">Ação</TableColumn>
-              </TableHeader>
-              <TableBody emptyContent="Nenhum lançamento pendente encontrado">
-                {panelTransactions.map((transaction) => (
-                  <TableRow key={transaction.id}>
-                    <TableCell>
-                      {new Date(transaction.raw.due_date).toLocaleDateString('pt-BR')}
-                    </TableCell>
-                    <TableCell>{transaction.history}</TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatCurrency(transaction.value)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        color="primary"
-                        variant="flat"
-                        onPress={() => setPendingBaixaTransaction(transaction.raw)}
-                      >
-                        Baixa
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+        <CardBody>
+            <div className="w-full overflow-x-auto">
+              <Table aria-label="Tabela de baixa rápida" removeWrapper className="min-w-[680px]">
+                <TableHeader>
+                  <TableColumn>Vencimento</TableColumn>
+                  <TableColumn>Descrição</TableColumn>
+                  <TableColumn className="text-right">Valor</TableColumn>
+                  <TableColumn className="text-right">Ação</TableColumn>
+                </TableHeader>
+                <TableBody emptyContent="Nenhum lançamento pendente encontrado">
+                  {panelTransactions.map((transaction) => (
+                    <TableRow key={transaction.id}>
+                      <TableCell>
+                        {new Date(transaction.raw.due_date).toLocaleDateString('pt-BR')}
+                      </TableCell>
+                      <TableCell>{transaction.history}</TableCell>
+                      <TableCell className="text-right font-semibold">
+                        {formatCurrency(transaction.value)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          color="primary"
+                          variant="flat"
+                          onPress={() => setPendingBaixaTransaction(transaction.raw)}
+                        >
+                          Baixa
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CardBody>
         </Card>
       )}
@@ -871,6 +878,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
             variant="flat"
             startContent={<Plus className="h-4 w-4" />}
             onPress={() => openBankModal()}
+            className="w-full sm:w-auto"
           >
             Novo Banco
           </Button>
@@ -931,7 +939,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       </Card>
 
       <Card className="border border-default-200/50 dark:border-default-100/20">
-        <CardHeader className="flex items-center justify-between">
+        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             Novo lançamento
           </h3>
@@ -940,6 +948,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
             size="sm"
             startContent={<Plus className="h-4 w-4" />}
             onPress={() => setIsHistoryModalOpen(true)}
+            className="w-full sm:w-auto"
           >
             Novo Histórico
           </Button>
@@ -1063,75 +1072,77 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
 
       <Card className="border border-default-200/50 dark:border-default-100/20">
         <CardBody>
-          <Table aria-label="Tabela de lançamentos do escritório" removeWrapper>
-            <TableHeader>
-              <TableColumn>Data</TableColumn>
-              <TableColumn>Tipo</TableColumn>
-              <TableColumn>Banco</TableColumn>
-              <TableColumn>Histórico</TableColumn>
-              <TableColumn>Status</TableColumn>
-              <TableColumn>Observação</TableColumn>
-              <TableColumn className="text-right">Valor</TableColumn>
-              <TableColumn className="text-right">Ações</TableColumn>
-            </TableHeader>
-            <TableBody emptyContent="Nenhum lançamento cadastrado">
-              {paginatedDisplayTransactions.map((transaction) => (
-                <TableRow key={transaction.id}>
-                  <TableCell>{new Date(transaction.date).toLocaleDateString('pt-BR')}</TableCell>
-                  <TableCell>{transaction.type}</TableCell>
-                  <TableCell>{transaction.bank || '-'}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {transaction.history}
-                      {transaction.isRecurring && (
-                        <Repeat
-                          className="h-4 w-4 text-primary-600"
-                          aria-label="Lançamento recorrente"
-                        />
+          <div className="w-full overflow-x-auto">
+            <Table aria-label="Tabela de lançamentos do escritório" removeWrapper className="min-w-[980px]">
+              <TableHeader>
+                <TableColumn>Data</TableColumn>
+                <TableColumn>Tipo</TableColumn>
+                <TableColumn>Banco</TableColumn>
+                <TableColumn>Histórico</TableColumn>
+                <TableColumn>Status</TableColumn>
+                <TableColumn>Observação</TableColumn>
+                <TableColumn className="text-right">Valor</TableColumn>
+                <TableColumn className="text-right">Ações</TableColumn>
+              </TableHeader>
+              <TableBody emptyContent="Nenhum lançamento cadastrado">
+                {paginatedDisplayTransactions.map((transaction) => (
+                  <TableRow key={transaction.id}>
+                    <TableCell>{new Date(transaction.date).toLocaleDateString('pt-BR')}</TableCell>
+                    <TableCell>{transaction.type}</TableCell>
+                    <TableCell>{transaction.bank || '-'}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {transaction.history}
+                        {transaction.isRecurring && (
+                          <Repeat
+                            className="h-4 w-4 text-primary-600"
+                            aria-label="Lançamento recorrente"
+                          />
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>{getPaymentStatusLabel(transaction.status)}</TableCell>
+                    <TableCell className="text-sm text-slate-600 dark:text-slate-400">
+                      {transaction.observation ?? '-'}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {formatCurrency(transaction.value)}
+                    </TableCell>
+                    <TableCell className="text-right space-x-1">
+                      {isDuePaymentStatus(transaction.status) && (
+                        <Button
+                          size="sm"
+                          variant="flat"
+                          color="primary"
+                          onPress={() => setPendingBaixaTransaction(transaction.raw)}
+                        >
+                          Baixa
+                        </Button>
                       )}
-                    </div>
-                  </TableCell>
-                  <TableCell>{getPaymentStatusLabel(transaction.status)}</TableCell>
-                  <TableCell className="text-sm text-slate-600 dark:text-slate-400">
-                    {transaction.observation ?? '-'}
-                  </TableCell>
-                  <TableCell className="text-right font-semibold">
-                    {formatCurrency(transaction.value)}
-                  </TableCell>
-                  <TableCell className="text-right space-x-1">
-                    {isDuePaymentStatus(transaction.status) && (
                       <Button
                         size="sm"
-                        variant="flat"
-                        color="primary"
-                        onPress={() => setPendingBaixaTransaction(transaction.raw)}
+                        variant="light"
+                        isIconOnly
+                        aria-label="Editar lançamento"
+                        onPress={() => openEditTransaction(transaction.raw)}
                       >
-                        Baixa
+                        <Pencil className="h-4 w-4" />
                       </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="light"
-                      isIconOnly
-                      aria-label="Editar lançamento"
-                      onPress={() => openEditTransaction(transaction.raw)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="light"
-                      isIconOnly
-                      aria-label="Excluir lançamento"
-                      onPress={() => setPendingDeleteTransaction(transaction.raw)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                      <Button
+                        size="sm"
+                        variant="light"
+                        isIconOnly
+                        aria-label="Excluir lançamento"
+                        onPress={() => setPendingDeleteTransaction(transaction.raw)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
           <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-default-500">{transactionRangeLabel}</p>
             <div className="flex items-center gap-2">

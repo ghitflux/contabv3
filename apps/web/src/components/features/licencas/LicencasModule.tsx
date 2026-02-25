@@ -434,16 +434,22 @@ export function LicencasModule() {
           <h1 className="text-3xl font-bold text-foreground">Licenças e Certificações</h1>
           <p className="text-default-500 mt-1">Visualize rapidamente as licenças emitidas para clientes ou para o escritório.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto">
           <Button
             variant="flat"
             startContent={<RefreshCcw className="h-4 w-4" />}
             onPress={() => setRefreshKey((prev) => prev + 1)}
+            className="w-full sm:w-auto"
           >
             Atualizar
           </Button>
           {isAdminOrFunc && (
-            <Button color="primary" onPress={() => setIsCreateOpen(true)} startContent={<Plus className="h-4 w-4" />}>
+            <Button
+              color="primary"
+              onPress={() => setIsCreateOpen(true)}
+              startContent={<Plus className="h-4 w-4" />}
+              className="w-full sm:w-auto"
+            >
               Nova licença
             </Button>
           )}
@@ -482,7 +488,15 @@ export function LicencasModule() {
 
       <Card>
         <CardBody>
-          <Tabs selectedKey={activeTab} onSelectionChange={(key) => setActiveTab(key as TabKey)} color="primary">
+          <Tabs
+            selectedKey={activeTab}
+            onSelectionChange={(key) => setActiveTab(key as TabKey)}
+            color="primary"
+            classNames={{
+              tabList: "max-w-full overflow-x-auto no-scrollbar gap-1 px-1",
+              tab: "whitespace-nowrap",
+            }}
+          >
             <Tab
               key="clients"
               title={
@@ -585,13 +599,14 @@ export function LicencasModule() {
           onDetailsClose();
         }}
         size="3xl"
+        scrollBehavior="inside"
       >
         <ModalContent>
           <ModalHeader>Detalhes da Licença</ModalHeader>
           <ModalBody>
             {selectedLicense && (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
                     <p className="text-sm text-default-500">Cliente</p>
                     <p className="font-semibold">
@@ -639,7 +654,7 @@ export function LicencasModule() {
                     </Chip>
                   </div>
                   {selectedLicense.notes && (
-                    <div className="col-span-2">
+                    <div className="md:col-span-2">
                       <p className="text-sm text-default-500">Notas</p>
                       <p className="font-semibold">{selectedLicense.notes}</p>
                     </div>
@@ -653,12 +668,12 @@ export function LicencasModule() {
             )}
           </ModalBody>
           <ModalFooter>
-            <div className="flex w-full items-center justify-between gap-3">
+            <div className="flex w-full flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
               <Button variant="light" onPress={() => { setSelectedLicense(null); onDetailsClose(); }}>
                 Fechar
               </Button>
               {selectedLicense && isAdminOrFunc && (
-                <div className="flex items-center gap-2">
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                   <Button variant="flat" color="primary" onPress={() => { handleRenew(selectedLicense); onDetailsClose(); }}>
                     Renovar
                   </Button>
@@ -672,7 +687,7 @@ export function LicencasModule() {
         </ModalContent>
       </Modal>
 
-      <Modal isOpen={isEditOpen} onClose={onEditClose} size="2xl">
+      <Modal isOpen={isEditOpen} onClose={onEditClose} size="2xl" scrollBehavior="inside">
         <ModalContent>
           <ModalHeader>Editar Licença</ModalHeader>
           <ModalBody>
@@ -701,7 +716,7 @@ export function LicencasModule() {
                 value={formData.issuing_authority}
                 onChange={(value) => setFormData({ ...formData, issuing_authority: value })}
               />
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <DatePickerField
                   label="Data de Emissão"
                   value={formData.issue_date}
@@ -743,7 +758,7 @@ export function LicencasModule() {
         </ModalContent>
       </Modal>
 
-      <Modal isOpen={isRenewOpen} onClose={onRenewClose} size="2xl">
+      <Modal isOpen={isRenewOpen} onClose={onRenewClose} size="2xl" scrollBehavior="inside">
         <ModalContent>
           <ModalHeader>Renovar Licença</ModalHeader>
           <ModalBody>

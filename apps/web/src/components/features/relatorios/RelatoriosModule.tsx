@@ -311,15 +311,15 @@ export function RelatoriosModule() {
       variants={pageTransition}
       className="space-y-6"
     >
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Relatórios</h1>
+          <h1 className="text-2xl font-bold text-foreground sm:text-3xl">Relatórios</h1>
           <p className="text-default-500 mt-1">Relatórios financeiros essenciais e customizáveis</p>
         </div>
         <Button
           onPress={() => setShowBuilder(true)}
           color="primary"
-          className="gap-2"
+          className="w-full gap-2 sm:w-auto"
           startContent={<PlusIcon className="h-4 w-4" />}
         >
           Relatório Customizado
@@ -335,6 +335,10 @@ export function RelatoriosModule() {
           selectedKey={activeTab}
           onSelectionChange={(key) => setActiveTab(key as string)}
           color="primary"
+          classNames={{
+            tabList: 'max-w-full overflow-x-auto no-scrollbar gap-1 px-1',
+            tab: 'whitespace-nowrap',
+          }}
         >
           <Tab
             key="essenciais"
@@ -559,7 +563,12 @@ export function RelatoriosModule() {
         </Tabs>
       )}
 
-      <Modal isOpen={rangeModalOpen} onOpenChange={(open) => setRangeModalOpen(open)}>
+      <Modal
+        isOpen={rangeModalOpen}
+        onOpenChange={(open) => setRangeModalOpen(open)}
+        size="2xl"
+        scrollBehavior="inside"
+      >
         <ModalContent>
           <ModalHeader>Selecionar período</ModalHeader>
           <ModalBody className="space-y-4">

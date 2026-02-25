@@ -36,8 +36,9 @@ export function DataTable<T>({
   return (
     <Table
       aria-label="Data table"
+      className="min-w-[720px]"
       classNames={{
-        wrapper: 'shadow-none border border-divider',
+        wrapper: 'shadow-none border border-divider overflow-x-auto',
         th: 'bg-default-100',
       }}
     >

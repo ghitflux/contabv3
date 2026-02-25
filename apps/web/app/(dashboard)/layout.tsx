@@ -133,9 +133,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {/* Main Content */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         {/* Header */}
-        <header className="flex h-16 items-center justify-between border-b border-divider bg-background px-6">
+        <header className="flex h-16 items-center justify-between border-b border-divider bg-background px-3 sm:px-4 md:px-6">
           <Button
             isIconOnly
             variant="light"
@@ -147,7 +147,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           <div className="flex-1" />
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             {/* Theme Switcher */}
             <ThemeSwitcher />
 
@@ -183,7 +183,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto bg-background p-6">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-background p-3 sm:p-4 md:p-6">
           <ActivityDueSoonBanner />
           {children}
         </main>

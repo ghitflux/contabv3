@@ -220,7 +220,7 @@ export function FinanceiroHistoricoClientes() {
                 const value = Array.from(keys)[0] as string | undefined;
                 setSelectedClientId(value ?? "all");
               }}
-              className="min-w-[220px]"
+              className="w-full sm:min-w-[220px] sm:w-auto"
               items={[{ id: "all", label: "Todos" }, ...clientOptions.map((c) => ({ id: c.id, label: c.nome_fantasia || c.razao_social }))]}
             >
               {(item) => <SelectItem key={item.id}>{item.label}</SelectItem>}
@@ -233,7 +233,7 @@ export function FinanceiroHistoricoClientes() {
               const value = Array.from(keys)[0] as string | undefined;
               setSelectedEntity(value ?? "all");
             }}
-            className="min-w-[180px]"
+            className="w-full sm:min-w-[180px] sm:w-auto"
           >
             <SelectItem key="all">Todos</SelectItem>
             <SelectItem key="financial_transaction">Lançamentos</SelectItem>
@@ -246,7 +246,7 @@ export function FinanceiroHistoricoClientes() {
               const value = Array.from(keys)[0] as string | undefined;
               setSelectedOrigin(value ?? "all");
             }}
-            className="min-w-[180px]"
+            className="w-full sm:min-w-[180px] sm:w-auto"
           >
             <SelectItem key="all">Todos</SelectItem>
             <SelectItem key="escritorio">Escritório</SelectItem>
@@ -260,35 +260,37 @@ export function FinanceiroHistoricoClientes() {
             <Spinner />
           </div>
         ) : (
-          <Table aria-label="Histórico de ações" removeWrapper>
-            <TableHeader>
-              <TableColumn>Data</TableColumn>
-              <TableColumn>Cliente</TableColumn>
-              <TableColumn>Origem</TableColumn>
-              <TableColumn>Usuário</TableColumn>
-              <TableColumn>Tipo</TableColumn>
-              <TableColumn>Detalhes</TableColumn>
-            </TableHeader>
-            <TableBody emptyContent="Nenhuma ação registrada">
-              {visibleLogs.map((log) => (
-                <TableRow key={log.id}>
-                  <TableCell>{formatDateTime(log.created_at)}</TableCell>
-                  <TableCell>{renderClientName(log)}</TableCell>
-                  <TableCell>{getOriginLabel(log)}</TableCell>
-                  <TableCell>{log.user_name || log.user_email || "-"}</TableCell>
-                  <TableCell>{ENTITY_LABELS[log.entity] || log.entity}</TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">
-                        {ACTION_LABELS[log.action] || log.action}
-                      </p>
-                      <p className="text-xs text-default-500">{renderDetails(log)}</p>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="w-full overflow-x-auto">
+            <Table aria-label="Histórico de ações" removeWrapper className="min-w-[1040px]">
+              <TableHeader>
+                <TableColumn>Data</TableColumn>
+                <TableColumn>Cliente</TableColumn>
+                <TableColumn>Origem</TableColumn>
+                <TableColumn>Usuário</TableColumn>
+                <TableColumn>Tipo</TableColumn>
+                <TableColumn>Detalhes</TableColumn>
+              </TableHeader>
+              <TableBody emptyContent="Nenhuma ação registrada">
+                {visibleLogs.map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell>{formatDateTime(log.created_at)}</TableCell>
+                    <TableCell>{renderClientName(log)}</TableCell>
+                    <TableCell>{getOriginLabel(log)}</TableCell>
+                    <TableCell>{log.user_name || log.user_email || "-"}</TableCell>
+                    <TableCell>{ENTITY_LABELS[log.entity] || log.entity}</TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">
+                          {ACTION_LABELS[log.action] || log.action}
+                        </p>
+                        <p className="text-xs text-default-500">{renderDetails(log)}</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </CardBody>
     </Card>

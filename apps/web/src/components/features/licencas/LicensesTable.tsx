@@ -69,133 +69,135 @@ export function LicensesTable({
   }
 
   return (
-    <Table aria-label="Tabela de licenças">
-      <TableHeader>
-        <TableColumn>CLIENTE</TableColumn>
-        <TableColumn>TIPO</TableColumn>
-        <TableColumn>REGISTRO</TableColumn>
-        <TableColumn>ÓRGÃO EMISSOR</TableColumn>
-        <TableColumn>VENCIMENTO</TableColumn>
-        <TableColumn>STATUS</TableColumn>
-        <TableColumn>AÇÕES</TableColumn>
-      </TableHeader>
-      <TableBody>
-        {licenses.map((license) => (
-          <TableRow key={license.id}>
-            <TableCell>
-              <div>
-                <p className="font-semibold">{license.client_name || 'N/A'}</p>
-                <p className="text-xs text-default-400">{license.client_id}</p>
-              </div>
-            </TableCell>
-            <TableCell>
-              <p className="font-medium">
-                {LICENSE_TYPE_LABELS[normalizeLicenseType(license.license_type)]}
-              </p>
-            </TableCell>
-            <TableCell>
-              <p className="font-mono text-sm">{license.registration_number}</p>
-            </TableCell>
-            <TableCell>
-              <p className="text-sm">{license.issuing_authority}</p>
-            </TableCell>
-            <TableCell>
-              <div>
-                <p
-                  className={
-                    license.is_expired
-                      ? 'text-danger font-semibold'
-                      : license.is_expiring_soon
-                        ? 'text-warning font-semibold'
-                        : ''
-                  }
-                >
-                  {formatDate(license.expiration_date)}
+    <div className="w-full overflow-x-auto">
+      <Table aria-label="Tabela de licenças" className="min-w-[980px]">
+        <TableHeader>
+          <TableColumn>CLIENTE</TableColumn>
+          <TableColumn>TIPO</TableColumn>
+          <TableColumn>REGISTRO</TableColumn>
+          <TableColumn>ÓRGÃO EMISSOR</TableColumn>
+          <TableColumn>VENCIMENTO</TableColumn>
+          <TableColumn>STATUS</TableColumn>
+          <TableColumn>AÇÕES</TableColumn>
+        </TableHeader>
+        <TableBody>
+          {licenses.map((license) => (
+            <TableRow key={license.id}>
+              <TableCell>
+                <div>
+                  <p className="font-semibold">{license.client_name || 'N/A'}</p>
+                  <p className="text-xs text-default-400">{license.client_id}</p>
+                </div>
+              </TableCell>
+              <TableCell>
+                <p className="font-medium">
+                  {LICENSE_TYPE_LABELS[normalizeLicenseType(license.license_type)]}
                 </p>
-                {license.expiration_date && (
-                  <p className="text-xs text-default-400">{formatExpirationStatus(license)}</p>
-                )}
-              </div>
-            </TableCell>
-            <TableCell>
-              <div className="flex flex-col gap-1">
-                <Chip
-                  color={getLicenseStatusColor(license.status) as any}
-                  size="sm"
-                  variant="flat"
-                >
-                  {LICENSE_STATUS_LABELS[normalizeLicenseStatus(license.status)]}
-                </Chip>
-                {license.is_expiring_soon && !license.is_expired && (
-                  <Chip color={getExpirationBadgeColor(license) as any} size="sm" variant="flat">
-                    Vence em {license.days_until_expiration} dias
+              </TableCell>
+              <TableCell>
+                <p className="font-mono text-sm">{license.registration_number}</p>
+              </TableCell>
+              <TableCell>
+                <p className="text-sm">{license.issuing_authority}</p>
+              </TableCell>
+              <TableCell>
+                <div>
+                  <p
+                    className={
+                      license.is_expired
+                        ? 'text-danger font-semibold'
+                        : license.is_expiring_soon
+                          ? 'text-warning font-semibold'
+                          : ''
+                    }
+                  >
+                    {formatDate(license.expiration_date)}
+                  </p>
+                  {license.expiration_date && (
+                    <p className="text-xs text-default-400">{formatExpirationStatus(license)}</p>
+                  )}
+                </div>
+              </TableCell>
+              <TableCell>
+                <div className="flex flex-col gap-1">
+                  <Chip
+                    color={getLicenseStatusColor(license.status) as any}
+                    size="sm"
+                    variant="flat"
+                  >
+                    {LICENSE_STATUS_LABELS[normalizeLicenseStatus(license.status)]}
                   </Chip>
-                )}
-                {license.is_expired && (
-                  <Chip color="danger" size="sm" variant="flat">
-                    Vencida
-                  </Chip>
-                )}
-              </div>
-            </TableCell>
-            <TableCell>
-              <div className="flex gap-2">
-                {onViewDetails && (
-                  <Tooltip content="Ver detalhes">
-                    <Button
-                      isIconOnly
-                      size="sm"
-                      variant="light"
-                      onPress={() => onViewDetails(license)}
-                    >
-                      👁️
-                    </Button>
-                  </Tooltip>
-                )}
-                {onRenew && normalizeLicenseStatus(license.status) !== LicenseStatus.CANCELLED && (
-                  <Tooltip content="Renovar">
-                    <Button
-                      isIconOnly
-                      size="sm"
-                      variant="light"
-                      color="success"
-                      onPress={() => onRenew(license)}
-                    >
-                      🔄
-                    </Button>
-                  </Tooltip>
-                )}
-                {onEdit && normalizeLicenseStatus(license.status) !== LicenseStatus.CANCELLED && (
-                  <Tooltip content="Editar">
-                    <Button
-                      isIconOnly
-                      size="sm"
-                      variant="light"
-                      color="primary"
-                      onPress={() => onEdit(license)}
-                    >
-                      ✏️
-                    </Button>
-                  </Tooltip>
-                )}
-                {onDelete && (
-                  <Tooltip content="Excluir">
-                    <Button
-                      isIconOnly
-                      size="sm"
-                      variant="light"
-                      color="danger"
-                      onPress={() => onDelete(license)}
-                    >
-                      🗑️
-                    </Button>
-                  </Tooltip>
-                )}
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+                  {license.is_expiring_soon && !license.is_expired && (
+                    <Chip color={getExpirationBadgeColor(license) as any} size="sm" variant="flat">
+                      Vence em {license.days_until_expiration} dias
+                    </Chip>
+                  )}
+                  {license.is_expired && (
+                    <Chip color="danger" size="sm" variant="flat">
+                      Vencida
+                    </Chip>
+                  )}
+                </div>
+              </TableCell>
+              <TableCell>
+                <div className="flex gap-2">
+                  {onViewDetails && (
+                    <Tooltip content="Ver detalhes">
+                      <Button
+                        isIconOnly
+                        size="sm"
+                        variant="light"
+                        onPress={() => onViewDetails(license)}
+                      >
+                        👁️
+                      </Button>
+                    </Tooltip>
+                  )}
+                  {onRenew && normalizeLicenseStatus(license.status) !== LicenseStatus.CANCELLED && (
+                    <Tooltip content="Renovar">
+                      <Button
+                        isIconOnly
+                        size="sm"
+                        variant="light"
+                        color="success"
+                        onPress={() => onRenew(license)}
+                      >
+                        🔄
+                      </Button>
+                    </Tooltip>
+                  )}
+                  {onEdit && normalizeLicenseStatus(license.status) !== LicenseStatus.CANCELLED && (
+                    <Tooltip content="Editar">
+                      <Button
+                        isIconOnly
+                        size="sm"
+                        variant="light"
+                        color="primary"
+                        onPress={() => onEdit(license)}
+                      >
+                        ✏️
+                      </Button>
+                    </Tooltip>
+                  )}
+                  {onDelete && (
+                    <Tooltip content="Excluir">
+                      <Button
+                        isIconOnly
+                        size="sm"
+                        variant="light"
+                        color="danger"
+                        onPress={() => onDelete(license)}
+                      >
+                        🗑️
+                      </Button>
+                    </Tooltip>
+                  )}
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }

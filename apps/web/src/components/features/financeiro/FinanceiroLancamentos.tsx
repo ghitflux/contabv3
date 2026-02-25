@@ -568,7 +568,7 @@ export function FinanceiroLancamentos() {
                 value={monthFilter}
                 onChange={handleMonthChange}
                 size="sm"
-                className="w-[180px]"
+                className="w-full sm:w-[180px]"
                 aria-label="Mês de referência"
               />
             </div>
@@ -580,7 +580,7 @@ export function FinanceiroLancamentos() {
                 value={startDate}
                 onChange={setStartDate}
                 size="sm"
-                className="w-[180px]"
+                className="w-full sm:w-[180px]"
                 aria-label="Data inicial"
               />
             </div>
@@ -590,11 +590,11 @@ export function FinanceiroLancamentos() {
                 value={endDate}
                 onChange={setEndDate}
                 size="sm"
-                className="w-[180px]"
+                className="w-full sm:w-[180px]"
                 aria-label="Data final"
               />
             </div>
-            <div className="md:ml-auto flex gap-2">
+            <div className="md:ml-auto flex flex-wrap gap-2">
               <Button variant="bordered" onPress={setCurrentMonthRange}>
                 Mês atual
               </Button>
@@ -693,124 +693,126 @@ export function FinanceiroLancamentos() {
         </div>
 
         <div className="rounded-lg border border-default-200/60 dark:border-default-100/20">
-          <Table aria-label="Tabela de lançamentos financeiros" removeWrapper>
-            <TableHeader>
-              <TableColumn>Data</TableColumn>
-              <TableColumn>Descrição</TableColumn>
-              <TableColumn>Categoria</TableColumn>
-              <TableColumn>Competência</TableColumn>
-              <TableColumn>Cliente</TableColumn>
-              <TableColumn>Tipo</TableColumn>
-              <TableColumn>Status</TableColumn>
-              <TableColumn className="text-right">Valor</TableColumn>
-              <TableColumn className="text-right">Ações</TableColumn>
-            </TableHeader>
-            <TableBody emptyContent="Nenhum lançamento encontrado">
-              {lancamentosPaginados.map((lancamento) => {
-                const categoriaInfo = resolveCategoriaLancamento(lancamento.categoria);
-                return (
-                  <TableRow key={lancamento.id}>
-                    <TableCell className="font-medium">{formatDate(lancamento.data)}</TableCell>
-                    <TableCell>{lancamento.descricao}</TableCell>
-                    <TableCell className="text-sm">
-                      {categoriaInfo ? (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span
-                            className="text-default-700"
-                            title={categoriaInfo.conta?.descricao ?? categoriaInfo.label}
-                          >
-                            {categoriaInfo.label}
-                          </span>
-                          {categoriaInfo.isTax && (
-                            <Chip size="sm" variant="flat" color="warning">
-                              Imposto
-                            </Chip>
-                          )}
-                          {categoriaInfo.isCustom && (
-                            <Chip size="sm" variant="flat" color="secondary">
-                              Personalizada
-                            </Chip>
+          <div className="w-full overflow-x-auto">
+            <Table aria-label="Tabela de lançamentos financeiros" removeWrapper className="min-w-[1100px]">
+              <TableHeader>
+                <TableColumn>Data</TableColumn>
+                <TableColumn>Descrição</TableColumn>
+                <TableColumn>Categoria</TableColumn>
+                <TableColumn>Competência</TableColumn>
+                <TableColumn>Cliente</TableColumn>
+                <TableColumn>Tipo</TableColumn>
+                <TableColumn>Status</TableColumn>
+                <TableColumn className="text-right">Valor</TableColumn>
+                <TableColumn className="text-right">Ações</TableColumn>
+              </TableHeader>
+              <TableBody emptyContent="Nenhum lançamento encontrado">
+                {lancamentosPaginados.map((lancamento) => {
+                  const categoriaInfo = resolveCategoriaLancamento(lancamento.categoria);
+                  return (
+                    <TableRow key={lancamento.id}>
+                      <TableCell className="font-medium">{formatDate(lancamento.data)}</TableCell>
+                      <TableCell>{lancamento.descricao}</TableCell>
+                      <TableCell className="text-sm">
+                        {categoriaInfo ? (
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span
+                              className="text-default-700"
+                              title={categoriaInfo.conta?.descricao ?? categoriaInfo.label}
+                            >
+                              {categoriaInfo.label}
+                            </span>
+                            {categoriaInfo.isTax && (
+                              <Chip size="sm" variant="flat" color="warning">
+                                Imposto
+                              </Chip>
+                            )}
+                            {categoriaInfo.isCustom && (
+                              <Chip size="sm" variant="flat" color="secondary">
+                                Personalizada
+                              </Chip>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-default-400">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-600 dark:text-slate-400">
+                        {formatCompetencia(lancamento.competencia)}
+                      </TableCell>
+                      <TableCell className="text-sm">{lancamento.cliente ?? '-'}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          {lancamento.tipo === TransactionType.RECEITA ? (
+                            <>
+                              <ArrowUpRight className="h-4 w-4 text-green-600" />
+                              <span className="text-sm text-green-600">Receita</span>
+                            </>
+                          ) : (
+                            <>
+                              <ArrowDownRight className="h-4 w-4 text-red-600" />
+                              <span className="text-sm text-red-600">Despesa</span>
+                            </>
                           )}
                         </div>
-                      ) : (
-                        <span className="text-default-400">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm text-slate-600 dark:text-slate-400">
-                      {formatCompetencia(lancamento.competencia)}
-                    </TableCell>
-                    <TableCell className="text-sm">{lancamento.cliente ?? '-'}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        {lancamento.tipo === TransactionType.RECEITA ? (
-                          <>
-                            <ArrowUpRight className="h-4 w-4 text-green-600" />
-                            <span className="text-sm text-green-600">Receita</span>
-                          </>
-                        ) : (
-                          <>
-                            <ArrowDownRight className="h-4 w-4 text-red-600" />
-                            <span className="text-sm text-red-600">Despesa</span>
-                          </>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        color={getPaymentStatusColor(lancamento.status)}
-                        variant="flat"
-                        size="sm"
-                      >
-                        {getPaymentStatusLabel(lancamento.status)}
-                      </Chip>
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      <span
-                        className={
-                          lancamento.tipo === TransactionType.RECEITA
-                            ? 'text-green-600'
-                            : 'text-red-600'
-                        }
-                      >
-                        {formatCurrency(lancamento.valor)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right space-x-1">
-                      {isDuePaymentStatus(lancamento.status) && (
-                        <Button
-                          size="sm"
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          color={getPaymentStatusColor(lancamento.status)}
                           variant="flat"
-                          color="primary"
-                          onPress={() => setPendingBaixaTransaction(lancamento.raw)}
+                          size="sm"
                         >
-                          Baixa
+                          {getPaymentStatusLabel(lancamento.status)}
+                        </Chip>
+                      </TableCell>
+                      <TableCell className="text-right font-semibold">
+                        <span
+                          className={
+                            lancamento.tipo === TransactionType.RECEITA
+                              ? 'text-green-600'
+                              : 'text-red-600'
+                          }
+                        >
+                          {formatCurrency(lancamento.valor)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right space-x-1">
+                        {isDuePaymentStatus(lancamento.status) && (
+                          <Button
+                            size="sm"
+                            variant="flat"
+                            color="primary"
+                            onPress={() => setPendingBaixaTransaction(lancamento.raw)}
+                          >
+                            Baixa
+                          </Button>
+                        )}
+                        <Button
+                          variant="light"
+                          size="sm"
+                          isIconOnly
+                          aria-label="Editar lançamento"
+                          onPress={() => openEditTransaction(lancamento.raw)}
+                        >
+                          <Pencil className="h-4 w-4" />
                         </Button>
-                      )}
-                      <Button
-                        variant="light"
-                        size="sm"
-                        isIconOnly
-                        aria-label="Editar lançamento"
-                        onPress={() => openEditTransaction(lancamento.raw)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="light"
-                        size="sm"
-                        isIconOnly
-                        color="danger"
-                        aria-label="Excluir lançamento"
-                        onPress={() => setPendingDeleteTransaction(lancamento.raw)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                        <Button
+                          variant="light"
+                          size="sm"
+                          isIconOnly
+                          color="danger"
+                          aria-label="Excluir lançamento"
+                          onPress={() => setPendingDeleteTransaction(lancamento.raw)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
           <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-default-500">{lancamentosRangeLabel}</p>
             <div className="flex items-center gap-2">
@@ -852,6 +854,8 @@ export function FinanceiroLancamentos() {
             setIsEditModalOpen(open);
             if (!open) setEditingTransaction(null);
           }}
+          size="3xl"
+          scrollBehavior="inside"
         >
           <ModalContent>
             {(onClose) => (

@@ -51,7 +51,7 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
       <div className="flex items-center gap-3">
         <SettingsIcon className="h-8 w-8" />
         <div>
-          <h1 className="text-3xl font-bold">Configurações</h1>
+          <h1 className="text-2xl font-bold md:text-3xl">Configurações</h1>
           <p className="text-small text-default-500">
             Gerencie as configurações da aplicação e suas preferências
           </p>
@@ -59,68 +59,68 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
       </div>
 
       {/* Tabs */}
-      <Card className="p-0">
+      <Card className="p-0 overflow-hidden">
         <Tabs
-          key={activeTab}
-          defaultSelectedKey={activeTab}
+          selectedKey={activeTab}
           onSelectionChange={handleTabChange}
           aria-label="Abas de configurações"
           color="primary"
           classNames={{
-            tabList: "border-0 !border-0",
-            tab: "border-0 !border-0 [&::before]:hidden [&::after]:hidden",
-            tabContent: "border-0 !border-0",
-            base: "border-0",
+            tabList:
+              'border-0 !border-0 overflow-x-auto no-scrollbar max-w-full px-2 py-2 gap-1',
+            tab: 'border-0 !border-0 [&::before]:hidden [&::after]:hidden whitespace-nowrap',
+            tabContent: 'border-0 !border-0',
+            base: 'border-0',
           }}
         >
           {/* Perfil Tab - Available to all users */}
           <Tab key="perfil" title="Meu Perfil">
-            <div className="p-6">{children}</div>
+            <div className="p-4 md:p-6">{children}</div>
           </Tab>
 
           {/* Admin only tabs */}
           {isUserAdmin ? (
             <>
               <Tab key="usuarios" title="Usuários">
-                <div className="p-6">{children}</div>
+                <div className="p-4 md:p-6">{children}</div>
               </Tab>
               <Tab key="sistema" title="Sistema">
-                <div className="p-6">{children}</div>
+                <div className="p-4 md:p-6">{children}</div>
               </Tab>
               <Tab key="seguranca" title="Segurança">
-                <div className="p-6">{children}</div>
+                <div className="p-4 md:p-6">{children}</div>
               </Tab>
               <Tab key="permissoes" title="Permissões">
-                <div className="p-6">{children}</div>
+                <div className="p-4 md:p-6">{children}</div>
               </Tab>
               <Tab key="clientes" title="Padrões de Clientes">
-                <div className="p-6">{children}</div>
+                <div className="p-4 md:p-6">{children}</div>
               </Tab>
             </>
           ) : (
             <>
               <Tab key="usuarios" title="Usuários" isDisabled>
-                <div className="p-6">
+                <div className="p-4 md:p-6">
                   <p className="text-default-500">Requer permissão de administrador</p>
                 </div>
               </Tab>
               <Tab key="sistema" title="Sistema" isDisabled>
-                <div className="p-6">
+                <div className="p-4 md:p-6">
                   <p className="text-default-500">Requer permissão de administrador</p>
                 </div>
               </Tab>
               <Tab key="seguranca" title="Segurança" isDisabled>
-                <div className="p-6">
+                <div className="p-4 md:p-6">
                   <p className="text-default-500">Requer permissão de administrador</p>
                 </div>
               </Tab>
               <Tab key="permissoes" title="Permissões" isDisabled>
-                <div className="p-6">
+                <div className="p-4 md:p-6">
                   <p className="text-default-500">Requer permissão de administrador</p>
                 </div>
               </Tab>
               <Tab key="clientes" title="Padrões de Clientes" isDisabled>
-                <div className="p-6">
+                <div className="p-4 md:p-6">
                   <p className="text-default-500">Requer permissão de administrador</p>
                 </div>
               </Tab>

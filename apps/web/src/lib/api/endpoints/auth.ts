@@ -11,6 +11,8 @@ import type {
   LogoutRequest,
   PasswordResetRequest,
   PasswordResetConfirm,
+  ApiResponse,
+  PasswordResetRequestData,
   UpdatePasswordRequest,
 } from "@/types/auth";
 import type { User } from "@/types/user";
@@ -76,8 +78,23 @@ export const authApi = {
   /**
    * Request password reset
    */
-  async requestPasswordReset(request: PasswordResetRequest): Promise<void> {
-    await apiClient.post("/auth/password-reset", request);
+  async requestPasswordReset(
+    request: PasswordResetRequest
+  ): Promise<{ message: string; resetToken: string | null }> {
+    const response = await apiClient.post<ApiResponse<PasswordResetRequestData>>(
+      "/auth/password-reset",
+      request
+    );
+
+    return {
+      message:
+        response?.message ||
+        "Se o email estiver cadastrado, as instruções de recuperação serão enviadas.",
+      resetToken:
+        typeof response?.data?.reset_token === "string" && response.data.reset_token.length > 0
+          ? response.data.reset_token
+          : null,
+    };
   },
 
   /**

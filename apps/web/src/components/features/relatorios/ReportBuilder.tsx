@@ -1134,7 +1134,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-lg font-semibold">Criar Novo Relatório</h3>
         <Button variant="light" isIconOnly onPress={onClose}>
           <XIcon className="h-4 w-4" />
@@ -1282,7 +1282,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
         {/* Fields Selection */}
         <div className="space-y-2">
           <label className="text-sm font-medium">Campos a Exibir</label>
-          <div className="grid grid-cols-2 gap-3 p-4 border border-divider rounded-lg">
+          <div className="grid grid-cols-1 gap-3 rounded-lg border border-divider p-4 sm:grid-cols-2">
             {availableFields.map((field) => (
               <Checkbox
                 key={field}
@@ -1315,14 +1315,14 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
           </div>
           <div className="space-y-2">
             {filters.map((filter, index) => (
-              <div key={index} className="flex gap-2 items-center">
+              <div key={index} className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
                 <Select
                   selectedKeys={[filter.field]}
                   onSelectionChange={(keys) => {
                     const selected = Array.from(keys)[0] as string;
                     updateFilter(index, 'field', selected);
                   }}
-                  className="w-[180px]"
+                  className="w-full sm:w-[220px]"
                 >
                   {availableFields.map((field) => (
                     <SelectItem key={field}>{fieldLabels[field] || field}</SelectItem>
@@ -1334,7 +1334,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
                     const selected = Array.from(keys)[0] as string;
                     updateFilter(index, 'operator', selected);
                   }}
-                  className="w-[140px]"
+                  className="w-full sm:w-[170px]"
                 >
                   <SelectItem key="equals">Igual a</SelectItem>
                   <SelectItem key="contains">Contém</SelectItem>
@@ -1347,7 +1347,12 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
                   onValueChange={(value) => updateFilter(index, 'value', value)}
                   className="flex-1"
                 />
-                <Button variant="light" isIconOnly onPress={() => removeFilter(index)}>
+                <Button
+                  variant="light"
+                  isIconOnly
+                  onPress={() => removeFilter(index)}
+                  className="self-end sm:self-auto"
+                >
                   <XIcon className="h-4 w-4" />
                 </Button>
               </div>
@@ -1396,7 +1401,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
         )}
 
         {/* Grouping and Sorting */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Select
               label="Agrupar Por"
@@ -1417,7 +1422,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">Ordenar Por</label>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <Select
                 selectedKeys={sortBy && sortBy !== 'none' ? [sortBy] : []}
                 onSelectionChange={(keys) => {
@@ -1441,7 +1446,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
                   const selected = Array.from(keys)[0] as 'asc' | 'desc';
                   setSortOrder(selected);
                 }}
-                className="w-[120px]"
+                className="w-full sm:w-[140px]"
               >
                 <SelectItem key="asc">Crescente</SelectItem>
                 <SelectItem key="desc">Decrescente</SelectItem>
@@ -1454,8 +1459,8 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
         {showPreview && (
           <div className="space-y-2">
             <label className="text-sm font-medium">Prévia do Relatório</label>
-            <div className="border border-divider rounded-lg overflow-auto max-h-[400px]">
-              <Table aria-label="Preview table">
+            <div className="max-h-[420px] overflow-x-auto overflow-y-auto rounded-lg border border-divider">
+              <Table aria-label="Preview table" className="min-w-[900px]">
                 <TableHeader>
                   {displayFields.map((field) => (
                     <TableColumn key={field}>{fieldLabels[field] || field}</TableColumn>
@@ -1483,19 +1488,21 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
         )}
 
         {/* Actions */}
-        <div className="flex gap-2 justify-between pt-4 border-t border-divider">
+        <div className="flex flex-col gap-3 border-t border-divider pt-4 sm:flex-row sm:items-start sm:justify-between">
           <Button
             variant="bordered"
             onPress={() => setShowPreview(!showPreview)}
             startContent={<EyeIcon className="h-4 w-4" />}
+            className="w-full sm:w-auto"
           >
             {showPreview ? 'Ocultar' : 'Visualizar'} Prévia
           </Button>
-          <div className="flex gap-2">
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
             <Button
               variant="bordered"
               onPress={exportToCSV}
               startContent={<DownloadIcon className="h-4 w-4" />}
+              className="flex-1 sm:flex-none"
             >
               CSV
             </Button>
@@ -1503,6 +1510,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
               variant="bordered"
               onPress={exportToXLSX}
               startContent={<DownloadIcon className="h-4 w-4" />}
+              className="flex-1 sm:flex-none"
             >
               XLSX
             </Button>
@@ -1510,6 +1518,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
               variant="bordered"
               onPress={exportToPDF}
               startContent={<DownloadIcon className="h-4 w-4" />}
+              className="flex-1 sm:flex-none"
             >
               PDF
             </Button>
@@ -1518,6 +1527,7 @@ export function ReportBuilder({ onClose }: ReportBuilderProps) {
               onPress={() => {
                 toast.info('Salvamento de modelo personalizado será disponibilizado em breve.');
               }}
+              className="w-full sm:w-auto"
             >
               Salvar Relatório
             </Button>

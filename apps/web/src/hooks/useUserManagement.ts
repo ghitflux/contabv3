@@ -15,18 +15,35 @@ export interface UserListResponse {
   pages: number;
 }
 
+export interface UserListFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  role?: string;
+  isActive?: boolean;
+}
+
 export function useUserManagement() {
   const [users, setUsers] = useState<User[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchUsers = useCallback(async (page: number = 1, limit: number = 10) => {
+  const fetchUsers = useCallback(async (filters: UserListFilters = {}) => {
     setIsLoading(true);
     setError(null);
     try {
+      const page = Math.max(1, Math.trunc(filters.page ?? 1));
+      const limit = Math.max(1, Math.trunc(filters.limit ?? 10));
+      const params = new URLSearchParams();
+      params.set('skip', String((page - 1) * limit));
+      params.set('limit', String(limit));
+      if (filters.search?.trim()) params.set('search', filters.search.trim());
+      if (filters.role) params.set('role', filters.role);
+      if (typeof filters.isActive === 'boolean') params.set('is_active', String(filters.isActive));
+
       const response = await apiClient.get<UserListResponse>(
-        `/users?skip=${(page - 1) * limit}&limit=${limit}`
+        `/users?${params.toString()}`
       );
       setUsers(response.items);
       setTotal(response.total);
@@ -101,6 +118,45 @@ export function useUserManagement() {
     []
   );
 
+  const activateUser = useCallback(
+    async (userId: string) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const updated = await apiClient.put<User>(`/users/${userId}`, {
+          is_active: true,
+        });
+        setUsers((prev) => prev.map((u) => (u.id === userId ? updated : u)));
+        return updated;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to activate user';
+        setError(message);
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    []
+  );
+
+  const deleteUser = useCallback(
+    async (userId: string) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        await apiClient.delete(`/users/${userId}`);
+        setUsers((prev) => prev.filter((u) => u.id !== userId));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to delete user';
+        setError(message);
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    []
+  );
+
   return {
     users,
     total,
@@ -110,5 +166,7 @@ export function useUserManagement() {
     createUser,
     updateUser,
     deactivateUser,
+    activateUser,
+    deleteUser,
   };
 }

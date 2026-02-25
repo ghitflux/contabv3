@@ -4,6 +4,7 @@ import { Card, Input, Button, Divider } from '@heroui/react';
 import { useState, useCallback } from 'react';
 import { toast } from '@/lib/toast';
 import { authApi } from '@/lib/api/endpoints/auth';
+import type { ApiError } from '@/lib/api/client';
 
 export function PasswordChangeForm() {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -59,20 +60,24 @@ export function PasswordChangeForm() {
       setConfirmPassword('');
       setErrors({});
     } catch (error) {
-      if (error instanceof Error) {
-        if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-          toast.error('Senha atual incorreta');
-        } else {
-          toast.error('Erro ao alterar senha');
-        }
+      const apiError = error as ApiError;
+      const detail = typeof apiError?.data?.detail === 'string' ? apiError.data.detail : '';
+      if (apiError?.status === 401 || detail.toLowerCase().includes('current password')) {
+        toast.error('Senha atual incorreta');
+        return;
       }
+      if (detail) {
+        toast.error(detail);
+        return;
+      }
+      toast.error('Erro ao alterar senha');
     } finally {
       setIsLoading(false);
     }
   }, [currentPassword, newPassword, confirmPassword, validatePasswords]);
 
   return (
-    <Card className="p-6 space-y-6">
+    <Card className="p-4 md:p-6 space-y-6">
       <div>
         <h2 className="text-2xl font-bold mb-2">Alterar Senha</h2>
         <p className="text-default-500">Atualize sua senha regularmente para manter sua conta segura</p>
@@ -121,6 +126,12 @@ export function PasswordChangeForm() {
           isDisabled={isLoading}
           description="Deve conter maiúsculas, minúsculas e números"
         />
+        <div className="rounded-lg border border-default-200 p-3 text-xs text-default-600 space-y-1">
+          <p>Requisitos mínimos:</p>
+          <p>- 8 ou mais caracteres</p>
+          <p>- Pelo menos uma letra maiúscula e uma minúscula</p>
+          <p>- Pelo menos um número</p>
+        </div>
 
         <Input
           type="password"
@@ -145,7 +156,7 @@ export function PasswordChangeForm() {
 
       <Divider />
 
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <Button
           color="default"
           variant="light"
@@ -155,13 +166,14 @@ export function PasswordChangeForm() {
             setConfirmPassword('');
             setErrors({});
           }}
-          disabled={isLoading}
+          isDisabled={isLoading}
         >
           Cancelar
         </Button>
         <Button
           color="primary"
           isLoading={isLoading}
+          isDisabled={isLoading || !currentPassword || !newPassword || !confirmPassword}
           onClick={handleSubmit}
         >
           Alterar Senha

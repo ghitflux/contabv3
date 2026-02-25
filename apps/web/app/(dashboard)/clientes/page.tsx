@@ -394,14 +394,19 @@ export default function ClientesPage() {
       animate="visible"
       exit="exit"
       variants={pageTransition}
-      className="space-y-6 max-w-full overflow-hidden"
+      className="max-w-full space-y-6"
     >
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Clientes</h1>
+          <h1 className="text-2xl font-bold sm:text-3xl">Clientes</h1>
           <p className="text-sm text-default-500">Gerenciar clientes do escritório</p>
         </div>
-        <Button color="primary" onPress={onFormOpen} startContent={<PlusIcon className="h-5 w-5" />}>
+        <Button
+          color="primary"
+          onPress={onFormOpen}
+          startContent={<PlusIcon className="h-5 w-5" />}
+          className="w-full sm:w-auto"
+        >
           Novo Cliente
         </Button>
       </div>
@@ -413,7 +418,7 @@ export default function ClientesPage() {
 
       <Card>
         <CardHeader className="flex flex-col items-start gap-3 px-4 pt-4 sm:gap-4 sm:px-6 sm:pt-6">
-          <div className="flex w-full items-center justify-between">
+          <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold">Lista de Clientes</h2>
               <p className="text-sm text-default-500">
@@ -432,7 +437,7 @@ export default function ClientesPage() {
                   placeholder="Buscar por razão social ou CNPJ..."
                 />
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   size="sm"
                   variant={statusFilter === '' ? 'solid' : 'bordered'}
@@ -529,7 +534,7 @@ export default function ClientesPage() {
                   classNames={{
                     th: "px-2 py-2 sm:px-3 sm:py-2.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-default-500 whitespace-nowrap",
                     td: "px-2 py-2 sm:px-3 sm:py-2.5 text-[11px] sm:text-xs whitespace-nowrap",
-                    table: "min-w-full",
+                    table: "min-w-[1240px]",
                     tr: "cursor-pointer hover:bg-default-100 transition-colors",
                   }}
                 >

@@ -193,7 +193,7 @@ export function LicencasHistorico({ officeClientId }: LicencasHistoricoProps) {
                 const value = Array.from(keys)[0] as string | undefined;
                 setSelectedClientId(value ?? "all");
               }}
-              className="min-w-[220px]"
+              className="w-full sm:min-w-[220px] sm:w-auto"
               items={[
                 { id: "all", label: "Todos" },
                 ...clientOptions.map((client) => ({
@@ -212,7 +212,7 @@ export function LicencasHistorico({ officeClientId }: LicencasHistoricoProps) {
               const value = Array.from(keys)[0] as string | undefined;
               setSelectedAction(value ?? "all");
             }}
-            className="min-w-[220px]"
+            className="w-full sm:min-w-[220px] sm:w-auto"
             items={actionOptions}
           >
             {(item) => <SelectItem key={item.id}>{item.label}</SelectItem>}
@@ -225,7 +225,7 @@ export function LicencasHistorico({ officeClientId }: LicencasHistoricoProps) {
                 const value = Array.from(keys)[0] as OriginFilter | undefined;
                 setSelectedOrigin(value ?? "all");
               }}
-              className="min-w-[180px]"
+              className="w-full sm:min-w-[180px] sm:w-auto"
             >
               <SelectItem key="all">Todos</SelectItem>
               <SelectItem key="office">Escritório</SelectItem>
@@ -242,51 +242,55 @@ export function LicencasHistorico({ officeClientId }: LicencasHistoricoProps) {
         ) : (
           <>
             {isCliente ? (
-              <Table aria-label="Histórico de licenças" removeWrapper>
-                <TableHeader>
-                  <TableColumn>Data</TableColumn>
-                  <TableColumn>Empresa</TableColumn>
-                  <TableColumn>Usuário</TableColumn>
-                  <TableColumn>Ação</TableColumn>
-                  <TableColumn>Detalhes</TableColumn>
-                </TableHeader>
-                <TableBody emptyContent="Nenhuma alteração registrada">
-                  {visibleLogs.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell>{formatDateTime(log.created_at)}</TableCell>
-                      <TableCell>{renderClientName(log)}</TableCell>
-                      <TableCell>{log.user_name || log.user_email || "-"}</TableCell>
-                      <TableCell>{getActionLabel(log.action)}</TableCell>
-                      <TableCell>{renderDetails(log)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <div className="w-full overflow-x-auto">
+                <Table aria-label="Histórico de licenças" removeWrapper className="min-w-[900px]">
+                  <TableHeader>
+                    <TableColumn>Data</TableColumn>
+                    <TableColumn>Empresa</TableColumn>
+                    <TableColumn>Usuário</TableColumn>
+                    <TableColumn>Ação</TableColumn>
+                    <TableColumn>Detalhes</TableColumn>
+                  </TableHeader>
+                  <TableBody emptyContent="Nenhuma alteração registrada">
+                    {visibleLogs.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell>{formatDateTime(log.created_at)}</TableCell>
+                        <TableCell>{renderClientName(log)}</TableCell>
+                        <TableCell>{log.user_name || log.user_email || "-"}</TableCell>
+                        <TableCell>{getActionLabel(log.action)}</TableCell>
+                        <TableCell>{renderDetails(log)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             ) : (
-              <Table aria-label="Histórico de licenças" removeWrapper>
-                <TableHeader>
-                  <TableColumn>Data</TableColumn>
-                  <TableColumn>Empresa</TableColumn>
-                  <TableColumn>Origem</TableColumn>
-                  <TableColumn>Usuário</TableColumn>
-                  <TableColumn>Ação</TableColumn>
-                  <TableColumn>Detalhes</TableColumn>
-                </TableHeader>
-                <TableBody emptyContent="Nenhuma alteração registrada">
-                  {visibleLogs.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell>{formatDateTime(log.created_at)}</TableCell>
-                      <TableCell>{renderClientName(log)}</TableCell>
-                      <TableCell>
-                        {getOriginKey(log, officeClientId) === "office" ? "Escritório" : "Cliente"}
-                      </TableCell>
-                      <TableCell>{log.user_name || log.user_email || "-"}</TableCell>
-                      <TableCell>{getActionLabel(log.action)}</TableCell>
-                      <TableCell>{renderDetails(log)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <div className="w-full overflow-x-auto">
+                <Table aria-label="Histórico de licenças" removeWrapper className="min-w-[1040px]">
+                  <TableHeader>
+                    <TableColumn>Data</TableColumn>
+                    <TableColumn>Empresa</TableColumn>
+                    <TableColumn>Origem</TableColumn>
+                    <TableColumn>Usuário</TableColumn>
+                    <TableColumn>Ação</TableColumn>
+                    <TableColumn>Detalhes</TableColumn>
+                  </TableHeader>
+                  <TableBody emptyContent="Nenhuma alteração registrada">
+                    {visibleLogs.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell>{formatDateTime(log.created_at)}</TableCell>
+                        <TableCell>{renderClientName(log)}</TableCell>
+                        <TableCell>
+                          {getOriginKey(log, officeClientId) === "office" ? "Escritório" : "Cliente"}
+                        </TableCell>
+                        <TableCell>{log.user_name || log.user_email || "-"}</TableCell>
+                        <TableCell>{getActionLabel(log.action)}</TableCell>
+                        <TableCell>{renderDetails(log)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </>
         )}

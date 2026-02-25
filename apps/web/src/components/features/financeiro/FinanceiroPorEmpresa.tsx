@@ -759,7 +759,7 @@ export function FinanceiroPorEmpresa({
                 value={monthFilter}
                 onChange={handleMonthChange}
                 size="sm"
-                className="w-[180px]"
+                className="w-full sm:w-[180px]"
                 aria-label="Mês de referência"
               />
             </div>
@@ -771,7 +771,7 @@ export function FinanceiroPorEmpresa({
                 value={startDate}
                 onChange={setStartDate}
                 size="sm"
-                className="w-[180px]"
+                className="w-full sm:w-[180px]"
                 aria-label="Data inicial"
               />
             </div>
@@ -781,11 +781,11 @@ export function FinanceiroPorEmpresa({
                 value={endDate}
                 onChange={setEndDate}
                 size="sm"
-                className="w-[180px]"
+                className="w-full sm:w-[180px]"
                 aria-label="Data final"
               />
             </div>
-            <div className="md:ml-auto flex gap-2">
+            <div className="md:ml-auto flex flex-wrap gap-2">
               <Button variant="bordered" onPress={setCurrentMonthRange}>
                 Mês atual
               </Button>
@@ -871,48 +871,55 @@ export function FinanceiroPorEmpresa({
 
       {activePendingPanel !== 'all' && (
         <Card className="border border-default-200/50 dark:border-default-100/20">
-          <CardHeader className="flex items-center justify-between">
+          <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-lg font-semibold">
               {activePendingPanel === 'receber'
                 ? 'Lançamentos de Contas a Receber'
                 : 'Lançamentos de Contas a Pagar'}
             </h3>
-            <Button variant="light" size="sm" onPress={() => setActivePendingPanel('all')}>
+            <Button
+              variant="light"
+              size="sm"
+              onPress={() => setActivePendingPanel('all')}
+              className="w-full sm:w-auto"
+            >
               Limpar filtro
             </Button>
           </CardHeader>
-          <CardBody>
-            <Table aria-label="Tabela de baixa rápida por empresa" removeWrapper>
-              <TableHeader>
-                <TableColumn>Vencimento</TableColumn>
-                <TableColumn>Descrição</TableColumn>
-                <TableColumn className="text-right">Valor</TableColumn>
-                <TableColumn className="text-right">Ação</TableColumn>
-              </TableHeader>
-              <TableBody emptyContent="Nenhum lançamento pendente encontrado">
-                {panelTransactions.map((transaction) => (
-                  <TableRow key={transaction.id}>
-                    <TableCell>
-                      {new Date(transaction.due_date).toLocaleDateString('pt-BR')}
-                    </TableCell>
-                    <TableCell>{transaction.description}</TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatCurrency(transaction.amount)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        color="primary"
-                        variant="flat"
-                        onPress={() => requestMarkAsPaid(transaction)}
-                      >
-                        Baixa
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+        <CardBody>
+            <div className="w-full overflow-x-auto">
+              <Table aria-label="Tabela de baixa rápida por empresa" removeWrapper className="min-w-[680px]">
+                <TableHeader>
+                  <TableColumn>Vencimento</TableColumn>
+                  <TableColumn>Descrição</TableColumn>
+                  <TableColumn className="text-right">Valor</TableColumn>
+                  <TableColumn className="text-right">Ação</TableColumn>
+                </TableHeader>
+                <TableBody emptyContent="Nenhum lançamento pendente encontrado">
+                  {panelTransactions.map((transaction) => (
+                    <TableRow key={transaction.id}>
+                      <TableCell>
+                        {new Date(transaction.due_date).toLocaleDateString('pt-BR')}
+                      </TableCell>
+                      <TableCell>{transaction.description}</TableCell>
+                      <TableCell className="text-right font-semibold">
+                        {formatCurrency(transaction.amount)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          color="primary"
+                          variant="flat"
+                          onPress={() => requestMarkAsPaid(transaction)}
+                        >
+                          Baixa
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CardBody>
         </Card>
       )}
@@ -933,6 +940,7 @@ export function FinanceiroPorEmpresa({
             startContent={<Plus className="h-4 w-4" />}
             onPress={() => openBankModal()}
             isDisabled={isAdminOrFunc && !selectedClient}
+            className="w-full sm:w-auto"
           >
             Novo Banco
           </Button>
@@ -1027,68 +1035,70 @@ export function FinanceiroPorEmpresa({
       <Card className="border border-default-200/50 dark:border-default-100/20">
         <CardBody className="space-y-4">
           <h3 className="text-lg font-semibold">Lançamentos</h3>
-          <Table aria-label="Lançamentos financeiros por empresa" removeWrapper>
-            <TableHeader>
-              <TableColumn>Data</TableColumn>
-              <TableColumn>Tipo</TableColumn>
-              <TableColumn>Histórico</TableColumn>
-              <TableColumn className="text-right">Valor</TableColumn>
-              <TableColumn>Recebimento</TableColumn>
-              <TableColumn className="text-right">Ações</TableColumn>
-            </TableHeader>
-            <TableBody
-              emptyContent={
-                !selectedClient
-                  ? 'Selecione uma empresa para visualizar os lançamentos'
-                  : 'Nenhum lançamento encontrado para o período selecionado'
-              }
-            >
-              {paginatedDisplayTransactions.map((transaction) => (
-                <TableRow key={transaction.id}>
-                  <TableCell>{new Date(transaction.date).toLocaleDateString('pt-BR')}</TableCell>
-                  <TableCell>
-                    {transaction.type === TransactionType.RECEITA ? 'Entrada' : 'Saída'}
-                  </TableCell>
-                  <TableCell>{transaction.history}</TableCell>
-                  <TableCell className="text-right font-semibold">
-                    {formatCurrency(transaction.value)}
-                  </TableCell>
-                  <TableCell>{transaction.payment}</TableCell>
-                  <TableCell className="text-right space-x-1">
-                    {isDuePaymentStatus(transaction.raw.payment_status) && (
+          <div className="w-full overflow-x-auto">
+            <Table aria-label="Lançamentos financeiros por empresa" removeWrapper className="min-w-[900px]">
+              <TableHeader>
+                <TableColumn>Data</TableColumn>
+                <TableColumn>Tipo</TableColumn>
+                <TableColumn>Histórico</TableColumn>
+                <TableColumn className="text-right">Valor</TableColumn>
+                <TableColumn>Recebimento</TableColumn>
+                <TableColumn className="text-right">Ações</TableColumn>
+              </TableHeader>
+              <TableBody
+                emptyContent={
+                  !selectedClient
+                    ? 'Selecione uma empresa para visualizar os lançamentos'
+                    : 'Nenhum lançamento encontrado para o período selecionado'
+                }
+              >
+                {paginatedDisplayTransactions.map((transaction) => (
+                  <TableRow key={transaction.id}>
+                    <TableCell>{new Date(transaction.date).toLocaleDateString('pt-BR')}</TableCell>
+                    <TableCell>
+                      {transaction.type === TransactionType.RECEITA ? 'Entrada' : 'Saída'}
+                    </TableCell>
+                    <TableCell>{transaction.history}</TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {formatCurrency(transaction.value)}
+                    </TableCell>
+                    <TableCell>{transaction.payment}</TableCell>
+                    <TableCell className="text-right space-x-1">
+                      {isDuePaymentStatus(transaction.raw.payment_status) && (
+                        <Button
+                          size="sm"
+                          variant="flat"
+                          color="primary"
+                          onPress={() => requestMarkAsPaid(transaction.raw)}
+                        >
+                          Baixa
+                        </Button>
+                      )}
                       <Button
                         size="sm"
-                        variant="flat"
-                        color="primary"
-                        onPress={() => requestMarkAsPaid(transaction.raw)}
+                        variant="light"
+                        isIconOnly
+                        aria-label="Editar lançamento"
+                        onPress={() => openEditTransaction(transaction.raw)}
                       >
-                        Baixa
+                        <Pencil className="h-4 w-4" />
                       </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="light"
-                      isIconOnly
-                      aria-label="Editar lançamento"
-                      onPress={() => openEditTransaction(transaction.raw)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="light"
-                      color="danger"
-                      isIconOnly
-                      aria-label="Excluir lançamento"
-                      onPress={() => requestDeleteTransaction(transaction.raw)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                      <Button
+                        size="sm"
+                        variant="light"
+                        color="danger"
+                        isIconOnly
+                        aria-label="Excluir lançamento"
+                        onPress={() => requestDeleteTransaction(transaction.raw)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
           <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-default-500">{transactionRangeLabel}</p>
             <div className="flex items-center gap-2">

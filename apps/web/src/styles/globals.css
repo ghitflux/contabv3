@@ -110,3 +110,25 @@ button[data-slot='tab'][data-selected='true'] * {
 .dark aside {
   background-color: #1F1E1D !important;
 }
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  /* Keep tables usable on mobile with horizontal scroll */
+  [data-slot='wrapper']:has([data-slot='table']),
+  [data-slot='base']:has([data-slot='table']) {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  [data-slot='table'] {
+    min-width: 720px;
+  }
+}

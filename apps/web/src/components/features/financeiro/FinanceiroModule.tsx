@@ -169,10 +169,10 @@ export function FinanceiroModule() {
     >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Painel Financeiro — Livro-Caixa</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Painel Financeiro - Livro-Caixa</h1>
           <p className="text-default-500 mt-1">Gestão completa de receitas, despesas e análises financeiras</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto">
           <Button
             variant="flat"
             startContent={<Download className="h-4 w-4" />}
@@ -192,6 +192,11 @@ export function FinanceiroModule() {
         selectedKey={activeTab}
         onSelectionChange={(key) => setActiveTab(key as string)}
         color="primary"
+        classNames={{
+          tabList:
+            "max-w-full overflow-x-auto no-scrollbar border-0 !border-0 gap-1 px-1",
+          tab: "whitespace-nowrap",
+        }}
       >
         {isAdminOrFunc && (
           <Tab key="escritorio" title="Escritório">
@@ -250,7 +255,11 @@ export function FinanceiroModule() {
         </Tab>
       </Tabs>
 
-      <Modal isOpen={isExportOpen} onOpenChange={(open) => setIsExportOpen(open)}>
+      <Modal
+        isOpen={isExportOpen}
+        onOpenChange={(open) => setIsExportOpen(open)}
+        scrollBehavior="inside"
+      >
         <ModalContent>
           <ModalHeader>Exportar Livro Caixa</ModalHeader>
           <ModalBody className="space-y-4">

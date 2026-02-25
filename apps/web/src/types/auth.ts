@@ -41,6 +41,16 @@ export interface PasswordResetRequest {
   email: string;
 }
 
+export interface ApiResponse<T = Record<string, unknown> | null> {
+  success: boolean;
+  message?: string | null;
+  data?: T | null;
+}
+
+export interface PasswordResetRequestData {
+  reset_token?: string | null;
+}
+
 export interface PasswordResetConfirm {
   token: string;
   new_password: string;

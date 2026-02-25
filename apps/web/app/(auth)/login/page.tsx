@@ -65,7 +65,7 @@ export default function LoginPage() {
               <div className="text-sm text-danger">{loginError || error}</div>
             )}
             <div className="flex items-center justify-between text-sm">
-              <Link href="#" size="sm" className="text-default-500">
+              <Link href="/reset-password" size="sm" className="text-default-500">
                 Esqueceu a senha?
               </Link>
             </div>
