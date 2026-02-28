@@ -19,6 +19,7 @@ import { TransactionType, PaymentStatus, PaymentMethod } from "@/types/finance";
 import { isPlanoContaCodigo } from "@/constants/planoDeContas";
 import { formatISO } from "date-fns";
 import { toast } from "@/lib/toast";
+import { normalizeAmountForRequest } from "@/lib/finance/amount";
 
 interface NovoLancamentoModalProps {
   isOpen: boolean;
@@ -45,6 +46,10 @@ export interface NovoLancamentoData {
   invoice_number?: string | null;
 }
 
+type NovoLancamentoFormData = Omit<NovoLancamentoData, "amount"> & {
+  amount: string;
+};
+
 const buildDefaultDates = (baseDate: Date) => {
   const dueDate = formatISO(baseDate, { representation: "date" });
   return {
@@ -69,11 +74,12 @@ export function NovoLancamentoModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [categoryMode, setCategoryMode] = useState<CategoryMode>("plano");
   const [customCategory, setCustomCategory] = useState("");
-  const [formData, setFormData] = useState<Partial<NovoLancamentoData>>({
+  const [formData, setFormData] = useState<Partial<NovoLancamentoFormData>>({
     transaction_type: TransactionType.RECEITA,
     payment_status: PaymentStatus.PENDENTE,
     due_date: "",
     reference_month: "",
+    amount: "",
   });
 
   useEffect(() => {
@@ -105,12 +111,18 @@ export function NovoLancamentoModal({
       // Validate required fields
       if (
         !formData.client_id ||
-        !formData.amount ||
+        !formData.amount?.trim() ||
         !formData.due_date ||
         !formData.reference_month ||
         !formData.description
       ) {
         toast.error("Preencha todos os campos obrigatórios.");
+        return;
+      }
+
+      const amountValue = normalizeAmountForRequest(formData.amount);
+      if (!Number.isFinite(amountValue) || amountValue <= 0) {
+        toast.error("Informe um valor válido.");
         return;
       }
 
@@ -134,7 +146,8 @@ export function NovoLancamentoModal({
       }
 
       await onSave({
-        ...(formData as NovoLancamentoData),
+        ...(formData as NovoLancamentoFormData),
+        amount: amountValue,
         category: normalizedCategory,
       });
       onOpenChange(false);
@@ -147,6 +160,7 @@ export function NovoLancamentoModal({
         payment_status: PaymentStatus.PENDENTE,
         due_date: "",
         reference_month: "",
+        amount: "",
         category: null,
       });
     } catch (error) {
@@ -263,12 +277,10 @@ export function NovoLancamentoModal({
                 <Input
                   label="Valor (R$)"
                   placeholder="0,00"
-                  type="number"
-                  step="0.01"
-                  value={formData.amount?.toString() || ""}
-                  onValueChange={(value) =>
-                    setFormData((prev) => ({ ...prev, amount: Number.parseFloat(value) || 0 }))
-                  }
+                  type="text"
+                  inputMode="decimal"
+                  value={formData.amount || ""}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, amount: value }))}
                   isRequired
                   variant="bordered"
                   startContent={

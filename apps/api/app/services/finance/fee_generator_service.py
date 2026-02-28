@@ -1,7 +1,7 @@
 """Fee Generator Service - Generates monthly fees for clients."""
 
 import logging
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -116,7 +116,7 @@ class FeeGeneratorService:
             )
             return []
 
-        # Calculate due date (default: 10th day of next month)
+        # Calculate due date (always: 1st day of next month)
         due_date = self._calculate_due_date(reference_month)
 
         # Create transaction
@@ -208,7 +208,7 @@ class FeeGeneratorService:
         """
         Calculate due date for a fee.
 
-        Default: 10th day of the following month.
+        Default: 1st day of the following month.
 
         Args:
             reference_month: Reference month (first day)
@@ -222,11 +222,11 @@ class FeeGeneratorService:
         else:
             next_month = date(reference_month.year, reference_month.month + 1, 1)
 
-        # Set due date to 10th day of next month
+        # Set due date to 1st day of next month
         try:
-            due_date = next_month.replace(day=10)
+            due_date = next_month.replace(day=1)
         except ValueError:
-            # In case the month doesn't have a 10th day (shouldn't happen, but defensive)
+            # Defensive fallback
             due_date = next_month
 
         return due_date

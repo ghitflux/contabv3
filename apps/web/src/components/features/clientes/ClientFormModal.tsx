@@ -209,7 +209,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
           cidade: null,
           uf: null,
           honorarios_mensais: 0,
-          dia_vencimento: 10,
+          dia_vencimento: 1,
           gerar_lancamentos_honorarios: true,
           regime_tributario: RegimeTributario.SIMPLES_NACIONAL,
           tipo_empresa: TipoEmpresa.COMERCIO,
@@ -266,7 +266,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
         cidade: null,
         uf: null,
         honorarios_mensais: 0,
-        dia_vencimento: 10,
+        dia_vencimento: 1,
         gerar_lancamentos_honorarios: true,
         regime_tributario: RegimeTributario.SIMPLES_NACIONAL,
         tipo_empresa: TipoEmpresa.COMERCIO,
@@ -934,7 +934,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
                           onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
                           type="number"
                           label="Dia do Vencimento"
-                          placeholder="10"
+                          placeholder="1"
                           min={1}
                           max={31}
                           isRequired

@@ -55,6 +55,7 @@ import type { BankAccount } from '@/types/bank-account';
 import { TransactionTrashModal } from './TransactionTrashModal';
 import { ConfirmBaixaLancamentoDialog } from './ConfirmBaixaLancamentoDialog';
 import { ConfirmDeleteLancamentoDialog } from './ConfirmDeleteLancamentoDialog';
+import { normalizeAmountForRequest } from '@/lib/finance/amount';
 
 type DisplayTransactionType = 'Entrada' | 'Saída';
 
@@ -114,7 +115,6 @@ const formatCurrency = (value: number) =>
     currency: 'BRL',
   }).format(value);
 
-const normalizeDecimalInput = (value: string): number => Number.parseFloat(value.replace(',', '.'));
 const TRANSACTIONS_PER_PAGE = 20;
 
 const normalizeDateInput = (value?: string | null): string => {
@@ -243,7 +243,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       return;
     }
 
-    const balanceValue = bankForm.balance ? normalizeDecimalInput(bankForm.balance) : 0;
+    const balanceValue = bankForm.balance ? normalizeAmountForRequest(bankForm.balance) : 0;
     if (Number.isNaN(balanceValue) || balanceValue < 0) {
       toast.error('Informe um saldo inicial válido (mínimo R$ 0,00).');
       return;
@@ -544,7 +544,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       return;
     }
 
-    const amount = normalizeDecimalInput(newTransaction.value);
+    const amount = normalizeAmountForRequest(newTransaction.value);
     if (Number.isNaN(amount) || amount <= 0) {
       toast.error('Informe um valor válido.');
       return;
@@ -650,7 +650,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   const handleUpdateTransaction = async () => {
     if (!editingTransaction) return;
 
-    const amountValue = normalizeDecimalInput(editForm.amount);
+    const amountValue = normalizeAmountForRequest(editForm.amount);
     if (Number.isNaN(amountValue) || amountValue <= 0) {
       toast.error('Informe um valor válido.');
       return;

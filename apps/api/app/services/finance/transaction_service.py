@@ -1,7 +1,7 @@
 """Transaction Service - Business logic for financial transactions."""
 
 from datetime import date, datetime, timezone
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Optional
 from uuid import UUID
 
@@ -20,6 +20,11 @@ class TransactionService:
         self.db = db
         self.transaction_repo = TransactionRepository(db)
         self.client_repo = ClientRepository(db)
+
+    @staticmethod
+    def _normalize_amount(value: Decimal) -> Decimal:
+        """Normalize transaction amount to 2 decimal places."""
+        return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     @staticmethod
     def _to_naive_utc(value: datetime | None) -> datetime | None:
@@ -62,7 +67,7 @@ class TransactionService:
             client_id=data.client_id,
             obligation_id=data.obligation_id,
             transaction_type=data.transaction_type,
-            amount=data.amount,
+            amount=self._normalize_amount(data.amount),
             payment_method=data.payment_method,
             payment_status=data.payment_status,
             due_date=data.due_date,
@@ -107,7 +112,7 @@ class TransactionService:
 
         # Update fields if provided
         if data.amount is not None:
-            transaction.amount = data.amount
+            transaction.amount = self._normalize_amount(data.amount)
         if data.payment_method is not None:
             transaction.payment_method = data.payment_method
         if data.payment_status is not None:

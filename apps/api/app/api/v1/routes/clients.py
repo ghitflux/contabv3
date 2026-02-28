@@ -180,7 +180,7 @@ async def update_client(
     client_id: UUID,
     client_data: ClientUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: User = Depends(require_admin_or_func()),
+    current_user: User = Depends(require_admin_or_func()),
 ) -> ClientResponse:
     """
     Update client (admin or func only).
@@ -189,7 +189,7 @@ async def update_client(
         client_id: Client UUID
         client_data: Client update data
         db: Database session
-        _: Current user (must be admin or func)
+        current_user: Current user (must be admin or func)
 
     Returns:
         Updated client
@@ -198,7 +198,7 @@ async def update_client(
         HTTPException: 404 if not found, 409 if CNPJ conflict
     """
     service = ClientService(db)
-    return await service.update_client(client_id, client_data)
+    return await service.update_client(client_id, client_data, updated_by_id=current_user.id)
 
 
 @router.delete("/{client_id}", response_model=ResponseSchema, status_code=status.HTTP_200_OK)

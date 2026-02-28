@@ -47,6 +47,11 @@ const normalizePositiveInt = (value: number | undefined, fallback: number, max: 
   return Math.min(intValue, max);
 };
 
+const normalizeCurrencyNumber = (value: number): number => {
+  if (!Number.isFinite(value)) return value;
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+};
+
 export const financeApi = {
   async getTransactions(filters?: TransactionFilters): Promise<TransactionListResponse> {
     const params = new URLSearchParams();
@@ -86,11 +91,18 @@ export const financeApi = {
   },
 
   async createTransaction(data: TransactionCreate): Promise<Transaction> {
-    return apiClient.post<Transaction>('/finance', data);
+    return apiClient.post<Transaction>('/finance', {
+      ...data,
+      amount: normalizeCurrencyNumber(data.amount),
+    });
   },
 
   async updateTransaction(id: string, data: TransactionUpdate): Promise<Transaction> {
-    return apiClient.put<Transaction>(`/finance/${id}`, data);
+    return apiClient.put<Transaction>(`/finance/${id}`, {
+      ...data,
+      amount:
+        typeof data.amount === 'number' ? normalizeCurrencyNumber(data.amount) : data.amount,
+    });
   },
 
   async deleteTransaction(id: string): Promise<void> {

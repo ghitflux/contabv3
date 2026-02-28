@@ -213,6 +213,121 @@ class ClientService:
                 detail="Client drafts are disabled",
             )
 
+    @staticmethod
+    def _get_first_day_of_next_month(reference_date: date) -> date:
+        """Return the first day of the month after reference_date."""
+        if reference_date.month == 12:
+            return date(reference_date.year + 1, 1, 1)
+        return date(reference_date.year, reference_date.month + 1, 1)
+
+    async def _create_honorarios_transactions_for_client(
+        self,
+        client: Client,
+        *,
+        created_by_id: UUID | None,
+        trigger_label: str,
+    ) -> None:
+        """
+        Create recurring honorários transactions for a client (if eligible).
+
+        Transactions are always created with due_date on the first day of the next month.
+        """
+        if not (
+            client.gerar_lancamentos_honorarios
+            and client.honorarios_mensais
+            and float(client.honorarios_mensais) > 0
+        ):
+            return
+
+        from sqlalchemy import select
+
+        from app.core.config import settings
+        from app.db.models.finance import FinancialTransaction, PaymentStatus, TransactionType
+
+        due_date = self._get_first_day_of_next_month(date.today())
+        reference_month = due_date
+        reference_label = reference_month.strftime("%m/%Y")
+        creator_id = created_by_id or client.user_id
+
+        if not creator_id:
+            raise RuntimeError("created_by_id not available for honorarios auto-launch")
+
+        # Client: accounts payable (expense)
+        client_description = f"Honorários do escritório - {reference_label}"
+        existing_client_tx = await self.session.scalar(
+            select(FinancialTransaction.id)
+            .where(
+                FinancialTransaction.client_id == client.id,
+                FinancialTransaction.reference_month == reference_month,
+                FinancialTransaction.transaction_type == TransactionType.DESPESA,
+                FinancialTransaction.description == client_description,
+                FinancialTransaction.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+        if not existing_client_tx:
+            self.session.add(
+                FinancialTransaction(
+                    client_id=client.id,
+                    obligation_id=None,
+                    transaction_type=TransactionType.DESPESA,
+                    amount=client.honorarios_mensais,
+                    payment_method=None,
+                    payment_status=PaymentStatus.PENDENTE,
+                    due_date=due_date,
+                    paid_date=None,
+                    reference_month=reference_month,
+                    description=client_description,
+                    category=None,
+                    notes=f"Gerado automaticamente {trigger_label} (honorários recorrentes).",
+                    invoice_number=None,
+                    created_by_id=creator_id,
+                )
+            )
+
+        # Office: recurring revenue entry (if configured)
+        if settings.OFFICE_CLIENT_ID:
+            office_description = (
+                f"Honorários - {client.razao_social} ({client.cnpj}) - {reference_label}"
+            )
+            existing_office_tx = await self.session.scalar(
+                select(FinancialTransaction.id)
+                .where(
+                    FinancialTransaction.client_id == settings.OFFICE_CLIENT_ID,
+                    FinancialTransaction.reference_month == reference_month,
+                    FinancialTransaction.transaction_type == TransactionType.RECEITA,
+                    FinancialTransaction.description == office_description,
+                    FinancialTransaction.deleted_at.is_(None),
+                )
+                .limit(1)
+            )
+            if not existing_office_tx:
+                self.session.add(
+                    FinancialTransaction(
+                        client_id=settings.OFFICE_CLIENT_ID,
+                        obligation_id=None,
+                        transaction_type=TransactionType.RECEITA,
+                        amount=client.honorarios_mensais,
+                        payment_method=None,
+                        payment_status=PaymentStatus.PENDENTE,
+                        due_date=due_date,
+                        paid_date=None,
+                        reference_month=reference_month,
+                        description=office_description,
+                        category=None,
+                        notes=(
+                            f"Gerado automaticamente {trigger_label} (honorários recorrentes). "
+                            f"Cliente: {client.id}"
+                        ),
+                        invoice_number=None,
+                        created_by_id=creator_id,
+                    )
+                )
+        else:
+            print(
+                "Warning: OFFICE_CLIENT_ID not configured; skipping office honorarios transaction creation"
+            )
+
     async def create_client(
         self,
         client_data: ClientCreate,
@@ -327,115 +442,12 @@ class ClientService:
 
         # Create recurring honorarios transactions (client expense + office revenue)
         try:
-            if (
-                client.gerar_lancamentos_honorarios
-                and client.honorarios_mensais
-                and float(client.honorarios_mensais) > 0
-            ):
-                from calendar import monthrange
-                from datetime import date as date_type
-
-                from sqlalchemy import select
-
-                from app.core.config import settings
-                from app.db.models.finance import FinancialTransaction, PaymentStatus, TransactionType
-
-                today = date_type.today()
-                target_day = int(client.dia_vencimento or 10)
-
-                # Next due date based on dia_vencimento (clamped to month length)
-                last_day = monthrange(today.year, today.month)[1]
-                due_date = date_type(today.year, today.month, min(target_day, last_day))
-                if due_date < today:
-                    next_year = today.year + (1 if today.month == 12 else 0)
-                    next_month = 1 if today.month == 12 else today.month + 1
-                    last_day = monthrange(next_year, next_month)[1]
-                    due_date = date_type(next_year, next_month, min(target_day, last_day))
-
-                reference_month = due_date.replace(day=1)
-                reference_label = reference_month.strftime("%m/%Y")
-                creator_id = created_by_id or payload.get("user_id") or client.user_id
-
-                if not creator_id:
-                    raise RuntimeError("created_by_id not available for honorarios auto-launch")
-
-                # Client: accounts payable (expense)
-                client_description = f"Honorários do escritório - {reference_label}"
-                existing_client_tx = await self.session.scalar(
-                    select(FinancialTransaction.id)
-                    .where(
-                        FinancialTransaction.client_id == client.id,
-                        FinancialTransaction.reference_month == reference_month,
-                        FinancialTransaction.transaction_type == TransactionType.DESPESA,
-                        FinancialTransaction.description == client_description,
-                        FinancialTransaction.deleted_at.is_(None),
-                    )
-                    .limit(1)
-                )
-                if not existing_client_tx:
-                    self.session.add(
-                        FinancialTransaction(
-                            client_id=client.id,
-                            obligation_id=None,
-                            transaction_type=TransactionType.DESPESA,
-                            amount=client.honorarios_mensais,
-                            payment_method=None,
-                            payment_status=PaymentStatus.PENDENTE,
-                            due_date=due_date,
-                            paid_date=None,
-                            reference_month=reference_month,
-                            description=client_description,
-                            category=None,
-                            notes="Gerado automaticamente ao cadastrar cliente (honorários recorrentes).",
-                            invoice_number=None,
-                            created_by_id=creator_id,
-                        )
-                    )
-
-                # Office: recurring revenue entry (if configured)
-                if settings.OFFICE_CLIENT_ID:
-                    office_description = (
-                        f"Honorários - {client.razao_social} ({client.cnpj}) - {reference_label}"
-                    )
-                    existing_office_tx = await self.session.scalar(
-                        select(FinancialTransaction.id)
-                        .where(
-                            FinancialTransaction.client_id == settings.OFFICE_CLIENT_ID,
-                            FinancialTransaction.reference_month == reference_month,
-                            FinancialTransaction.transaction_type == TransactionType.RECEITA,
-                            FinancialTransaction.description == office_description,
-                            FinancialTransaction.deleted_at.is_(None),
-                        )
-                        .limit(1)
-                    )
-                    if not existing_office_tx:
-                        self.session.add(
-                            FinancialTransaction(
-                                client_id=settings.OFFICE_CLIENT_ID,
-                                obligation_id=None,
-                                transaction_type=TransactionType.RECEITA,
-                                amount=client.honorarios_mensais,
-                                payment_method=None,
-                                payment_status=PaymentStatus.PENDENTE,
-                                due_date=due_date,
-                                paid_date=None,
-                                reference_month=reference_month,
-                                description=office_description,
-                                category=None,
-                                notes=(
-                                    f"Gerado automaticamente ao cadastrar cliente (honorários recorrentes). "
-                                    f"Cliente: {client.id}"
-                                ),
-                                invoice_number=None,
-                                created_by_id=creator_id,
-                            )
-                        )
-                else:
-                    print(
-                        "Warning: OFFICE_CLIENT_ID not configured; skipping office honorarios transaction creation"
-                    )
-
-                await self.session.commit()
+            await self._create_honorarios_transactions_for_client(
+                client,
+                created_by_id=created_by_id or payload.get("user_id"),
+                trigger_label="ao cadastrar cliente",
+            )
+            await self.session.commit()
         except Exception as e:
             print(f"Warning: Failed to create honorarios transactions for client {client.id}: {e}")
             await self.session.rollback()
@@ -496,6 +508,7 @@ class ClientService:
         self,
         client_id: UUID,
         client_data: ClientUpdate,
+        updated_by_id: UUID | None = None,
     ) -> ClientResponse:
         """
         Update client.
@@ -503,6 +516,7 @@ class ClientService:
         Args:
             client_id: Client UUID
             client_data: Client update data
+            updated_by_id: User ID that triggered update (optional)
 
         Returns:
             Updated client
@@ -542,6 +556,19 @@ class ClientService:
         client = await self.repo.update(client)
         await self.session.commit()
         await self.session.refresh(client)
+
+        # Ensure recurring honorários launch is created/updated after edition
+        try:
+            await self._create_honorarios_transactions_for_client(
+                client,
+                created_by_id=updated_by_id or update_data.get("user_id"),
+                trigger_label="ao editar cliente",
+            )
+            await self.session.commit()
+        except Exception as e:
+            print(f"Warning: Failed to create honorarios transactions for updated client {client.id}: {e}")
+            await self.session.rollback()
+            pass
 
         return self._build_client_response(client)
 

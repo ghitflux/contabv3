@@ -9,8 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
-from calendar import monthrange
-from datetime import date, datetime
+from datetime import date
 from uuid import UUID
 
 from sqlalchemy import and_, select, update
@@ -29,10 +28,11 @@ _CLIENT_ID_IN_NOTES_RE = re.compile(
     re.IGNORECASE,
 )
 
-
-def _clamp_day_to_month(year: int, month: int, day: int) -> int:
-    last_day = monthrange(year, month)[1]
-    return max(1, min(day, last_day))
+def _get_first_day_of_next_month(reference_date: date) -> date:
+    """Return the first day of the month after reference_date."""
+    if reference_date.month == 12:
+        return date(reference_date.year + 1, 1, 1)
+    return date(reference_date.year, reference_date.month + 1, 1)
 
 
 async def _resolve_system_user_id(session: AsyncSession) -> UUID:
@@ -75,6 +75,10 @@ async def generate_monthly_honorarios(
     if reference_month.day != 1:
         reference_month = reference_month.replace(day=1)
 
+    # Honorários are generated for the first day of the next month.
+    reference_month = _get_first_day_of_next_month(reference_month)
+    due_date = reference_month
+
     office_client_id = settings.OFFICE_CLIENT_ID
     reference_label = reference_month.strftime("%m/%Y")
 
@@ -101,9 +105,6 @@ async def generate_monthly_honorarios(
             if not client.honorarios_mensais or float(client.honorarios_mensais) <= 0:
                 skipped += 1
                 continue
-
-            due_day = _clamp_day_to_month(reference_month.year, reference_month.month, int(client.dia_vencimento or 10))
-            due_date = reference_month.replace(day=due_day)
 
             # Client: accounts payable (expense)
             client_description = f"Honorários do escritório - {reference_label}"
@@ -279,7 +280,7 @@ async def run_finance_daily_automation() -> dict:
     Runs daily:
     - Marks overdue receivables
     - Syncs Client.status (pendente/ativo)
-    - Generates monthly honorários on day 01
+    - Generates next month's honorários on day 01
     """
     today = date.today()
     reference_month = today.replace(day=1)
@@ -302,7 +303,7 @@ async def run_finance_daily_automation() -> dict:
         # 2) Sync client status based on overdue honorários
         sync_summary = await sync_clients_pending_status(session, today=today)
 
-        # 3) Generate monthly honorários only on day 01
+        # 3) Generate next month's honorários only on day 01
         generation_summary = None
         if today.day == 1:
             generation_summary = await generate_monthly_honorarios(

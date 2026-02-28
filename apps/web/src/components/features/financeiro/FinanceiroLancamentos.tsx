@@ -49,6 +49,7 @@ import { TransactionTrashModal } from './TransactionTrashModal';
 import { ConfirmBaixaLancamentoDialog } from './ConfirmBaixaLancamentoDialog';
 import { ConfirmDeleteLancamentoDialog } from './ConfirmDeleteLancamentoDialog';
 import { PlanoDeContasAutocomplete } from '@/components/ui/PlanoDeContasAutocomplete';
+import { normalizeAmountForRequest } from '@/lib/finance/amount';
 
 type LancamentoTipo = TransactionType;
 type LancamentoStatus = PaymentStatus;
@@ -67,7 +68,6 @@ interface Lancamento {
   raw: Transaction;
 }
 
-const normalizeDecimalInput = (value: string): number => Number.parseFloat(value.replace(',', '.'));
 const LANCAMENTOS_PER_PAGE = 20;
 const MAX_CUSTOM_CATEGORY_LENGTH = 20;
 
@@ -416,7 +416,7 @@ export function FinanceiroLancamentos() {
 
   const handleUpdateTransaction = async () => {
     if (!editingTransaction) return;
-    const amountValue = normalizeDecimalInput(editForm.amount);
+    const amountValue = normalizeAmountForRequest(editForm.amount);
     if (Number.isNaN(amountValue) || amountValue <= 0) {
       toast.error('Informe um valor válido.');
       return;
