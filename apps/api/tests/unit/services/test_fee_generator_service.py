@@ -34,6 +34,12 @@ def test_get_first_day_of_next_month():
     assert FeeGeneratorService._get_first_day_of_next_month(date(2026, 12, 1)) == date(2027, 1, 1)
 
 
+def test_resolve_due_date_for_client_clamps_day_to_month():
+    assert FeeGeneratorService._resolve_due_date_for_client(date(2026, 2, 1), 31) == date(2026, 2, 28)
+    assert FeeGeneratorService._resolve_due_date_for_client(date(2026, 3, 1), 31) == date(2026, 3, 31)
+    assert FeeGeneratorService._resolve_due_date_for_client(date(2026, 4, 1), 31) == date(2026, 4, 30)
+
+
 @pytest.mark.asyncio
 async def test_generate_for_client_creates_client_and_office_entries(monkeypatch: pytest.MonkeyPatch):
     office_client_id = uuid4()
@@ -61,8 +67,8 @@ async def test_generate_for_client_creates_client_and_office_entries(monkeypatch
 
     assert client_tx.transaction_type == TransactionType.DESPESA
     assert office_tx.transaction_type == TransactionType.RECEITA
-    assert client_tx.due_date == date(2026, 2, 1)
-    assert office_tx.due_date == date(2026, 2, 1)
+    assert client_tx.due_date == date(2026, 2, 28)
+    assert office_tx.due_date == date(2026, 2, 28)
 
     db.add_all.assert_called_once()
     assert db.refresh.await_count == 2
@@ -208,3 +214,5 @@ async def test_get_generation_preview_returns_full_selected_list(monkeypatch: py
     assert result["has_more"] is False
     assert result["clients"][0]["client_cnpj"]
     assert result["clients"][1]["client_cnpj"]
+    assert result["clients"][0]["due_date"] == "2026-03-31"
+    assert result["clients"][1]["due_date"] == "2026-03-31"

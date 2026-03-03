@@ -4,6 +4,7 @@ Client service with business logic.
 
 import secrets
 import string
+from calendar import monthrange
 from datetime import date
 from typing import Optional
 from uuid import UUID
@@ -220,6 +221,14 @@ class ClientService:
             return date(reference_date.year + 1, 1, 1)
         return date(reference_date.year, reference_date.month + 1, 1)
 
+    @staticmethod
+    def _resolve_due_date_for_client(reference_month: date, due_day: int | None) -> date:
+        """Resolve due date in month using client day, clamped by month length."""
+        safe_due_day = due_day if isinstance(due_day, int) else 1
+        safe_due_day = max(1, min(31, safe_due_day))
+        last_day = monthrange(reference_month.year, reference_month.month)[1]
+        return reference_month.replace(day=min(safe_due_day, last_day))
+
     async def _create_honorarios_transactions_for_client(
         self,
         client: Client,
@@ -230,7 +239,7 @@ class ClientService:
         """
         Create recurring honorários transactions for a client (if eligible).
 
-        Transactions are created for next month with due_date fixed on day 1.
+        Transactions are created for next month with due_date based on client due day.
         """
         if not (
             client.gerar_lancamentos_honorarios
@@ -245,7 +254,7 @@ class ClientService:
         from app.db.models.finance import FinancialTransaction, PaymentStatus, TransactionType
 
         reference_month = self._get_first_day_of_next_month(date.today())
-        due_date = reference_month
+        due_date = self._resolve_due_date_for_client(reference_month, client.dia_vencimento)
         reference_label = reference_month.strftime("%m/%Y")
         creator_id = created_by_id or client.user_id
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
+from calendar import monthrange
 from datetime import date
 from uuid import UUID
 
@@ -33,6 +34,14 @@ def _get_first_day_of_next_month(reference_date: date) -> date:
     if reference_date.month == 12:
         return date(reference_date.year + 1, 1, 1)
     return date(reference_date.year, reference_date.month + 1, 1)
+
+
+def _resolve_due_date_for_client(reference_month: date, due_day: int | None) -> date:
+    """Resolve due date in reference month from client due day with clamping."""
+    safe_due_day = due_day if isinstance(due_day, int) else 1
+    safe_due_day = max(1, min(31, safe_due_day))
+    last_day = monthrange(reference_month.year, reference_month.month)[1]
+    return reference_month.replace(day=min(safe_due_day, last_day))
 
 
 async def _resolve_system_user_id(session: AsyncSession) -> UUID:
@@ -75,7 +84,7 @@ async def generate_monthly_honorarios(
     if reference_month.day != 1:
         reference_month = reference_month.replace(day=1)
 
-    # Honorários are generated for the first day of the next month.
+    # Honorários use next-month reference, with due date based on each client profile.
     reference_month = _get_first_day_of_next_month(reference_month)
     office_client_id = settings.OFFICE_CLIENT_ID
     reference_label = reference_month.strftime("%m/%Y")
@@ -104,7 +113,7 @@ async def generate_monthly_honorarios(
                 skipped += 1
                 continue
 
-            due_date = reference_month
+            due_date = _resolve_due_date_for_client(reference_month, client.dia_vencimento)
 
             # Client: accounts payable (expense)
             client_description = f"Honorários do escritório - {reference_label}"

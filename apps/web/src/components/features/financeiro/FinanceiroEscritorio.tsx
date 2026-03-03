@@ -1193,7 +1193,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
               Referência da geração:{' '}
               <strong>{formatMonthYear(feesPreview?.reference_month ?? selectedReferenceMonth)}</strong>
             </p>
-            <p>Regra: honorários com vencimento sempre no dia 01 do mês seguinte.</p>
+            <p>Regra: honorários gerados no dia 01 e vencimento conforme cadastro do cliente.</p>
             {isLoadingFeesPreview ? (
               <p>Validando clientes sem honorários gerados...</p>
             ) : feesPreview ? (
@@ -1268,7 +1268,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                       {formatMonthYear(feesPreview?.reference_month ?? selectedReferenceMonth)}
                     </strong>
                   </p>
-                  <p>Vencimento aplicado: sempre no dia 01.</p>
+                  <p>Vencimento aplicado: dia de vencimento definido no cadastro de cada cliente.</p>
                   <p>
                     Selecionados: <strong>{selectedFeeClientIds.length}</strong> cliente(s), total{' '}
                     <strong>{formatCurrency(selectedPreviewTotal)}</strong>.

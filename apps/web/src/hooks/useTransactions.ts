@@ -17,6 +17,16 @@ interface UseTransactionsOptions {
   fetchAllPages?: boolean;
 }
 
+const dedupeTransactionsById = (items: Transaction[]): Transaction[] => {
+  const uniqueById = new Map<string, Transaction>();
+  for (const item of items) {
+    if (!uniqueById.has(item.id)) {
+      uniqueById.set(item.id, item);
+    }
+  }
+  return Array.from(uniqueById.values());
+};
+
 const buildFiltersKey = (filters?: TransactionFilters) => {
   const normalized = {
     client_id: filters?.client_id ?? null,
@@ -74,9 +84,10 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
         if (!fetchAllPages) {
           const response = await financeApi.getTransactions(mergedFilters);
           const normalizedItems = response.items.map(normalizeTransaction);
-          setTransactions(normalizedItems);
+          const dedupedItems = dedupeTransactionsById(normalizedItems);
+          setTransactions(dedupedItems);
           setTotal(response.total);
-          return { ...response, items: normalizedItems };
+          return { ...response, items: dedupedItems };
         }
 
         const pageSize =
@@ -111,11 +122,12 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
           currentPage += 1;
         }
 
-        setTransactions(allItems);
+        const dedupedAllItems = dedupeTransactionsById(allItems);
+        setTransactions(dedupedAllItems);
         setTotal(totalFromApi);
 
         return {
-          items: allItems,
+          items: dedupedAllItems,
           total: totalFromApi,
           skip: 0,
           limit: pageSize,
@@ -139,7 +151,7 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
     async (data: TransactionCreate) => {
       try {
         const created = normalizeTransaction(await financeApi.createTransaction(data));
-        setTransactions((prev) => [created, ...prev]);
+        setTransactions((prev) => dedupeTransactionsById([created, ...prev]));
         setTotal((prev) => prev + 1);
         return created;
       } catch (err) {
@@ -195,7 +207,7 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
           if (prev.some((transaction) => transaction.id === id)) {
             return prev.map((transaction) => (transaction.id === id ? restored : transaction));
           }
-          return [restored, ...prev];
+          return dedupeTransactionsById([restored, ...prev]);
         });
         setTotal((prev) => prev + 1);
         return restored;

@@ -1,6 +1,7 @@
 """Fee Generator Service - Generates monthly fees for clients."""
 
 import logging
+from calendar import monthrange
 from datetime import date
 from decimal import Decimal
 from typing import Optional
@@ -42,6 +43,18 @@ class FeeGeneratorService:
         if reference_date.month == 12:
             return date(reference_date.year + 1, 1, 1)
         return date(reference_date.year, reference_date.month + 1, 1)
+
+    @staticmethod
+    def _resolve_due_date_for_client(reference_month: date, due_day: int | None) -> date:
+        """
+        Resolve due date for the reference month using client due day.
+
+        If due day exceeds month length, clamp to the last day of month.
+        """
+        safe_due_day = due_day if isinstance(due_day, int) else 1
+        safe_due_day = max(1, min(31, safe_due_day))
+        last_day = monthrange(reference_month.year, reference_month.month)[1]
+        return reference_month.replace(day=min(safe_due_day, last_day))
 
     @staticmethod
     def _is_client_eligible(client: Client) -> bool:
@@ -108,7 +121,7 @@ class FeeGeneratorService:
         """
         if reference_month.day != 1:
             reference_month = reference_month.replace(day=1)
-        # Business rule: honorários always vencem no dia 1 do mês seguinte.
+        # Business rule: generation references the next month; due date follows client profile.
         reference_month = self._get_first_day_of_next_month(reference_month)
 
         selected_client_ids = self._normalize_client_ids(
@@ -252,7 +265,7 @@ class FeeGeneratorService:
             return []
 
         reference_label = self._format_reference_label(reference_month)
-        due_date = reference_month
+        due_date = self._resolve_due_date_for_client(reference_month, client.dia_vencimento)
         creator_id = generated_by_id or client.user_id
         if not creator_id:
             raise ValueError(
@@ -425,7 +438,7 @@ class FeeGeneratorService:
         """
         if reference_month.day != 1:
             reference_month = reference_month.replace(day=1)
-        # Preview follows same rule as generation: next month, day 1.
+        # Preview follows same reference rule as generation: next month.
         reference_month = self._get_first_day_of_next_month(reference_month)
 
         selected_client_ids = self._normalize_client_ids(
@@ -445,7 +458,7 @@ class FeeGeneratorService:
                 }
 
             reference_label = self._format_reference_label(reference_month)
-            due_date = reference_month
+            due_date = self._resolve_due_date_for_client(reference_month, client.dia_vencimento)
             client_description = self._build_client_description(reference_label)
             office_description = self._build_office_description(client, reference_label)
 
@@ -547,7 +560,7 @@ class FeeGeneratorService:
             total_entries += int(would_create_client_entry) + int(would_create_office_entry)
             total_amount += Decimal(str(client.honorarios_mensais))
 
-            due_date = reference_month
+            due_date = self._resolve_due_date_for_client(reference_month, client.dia_vencimento)
             clients_preview.append(
                 {
                     "client_id": str(client.id),
@@ -566,7 +579,7 @@ class FeeGeneratorService:
             "would_generate_entries": total_entries,
             "total_amount": float(total_amount),
             "reference_month": reference_month.isoformat(),
-            "due_date_strategy": "primeiro_dia_mes_seguinte",
+            "due_date_strategy": "dia_vencimento_cliente",
             "clients": clients_preview,
             "has_more": False,
         }

@@ -85,7 +85,11 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
             select(FinancialTransaction)
             .where(and_(*conditions))
             .options(selectinload(FinancialTransaction.client))
-            .order_by(FinancialTransaction.due_date.desc())
+            .order_by(
+                FinancialTransaction.due_date.desc(),
+                FinancialTransaction.created_at.desc(),
+                FinancialTransaction.id.desc(),
+            )
             .offset(skip)
             .limit(limit)
         )
@@ -142,7 +146,11 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
             select(FinancialTransaction)
             .where(and_(*conditions))
             .options(selectinload(FinancialTransaction.client))
-            .order_by(FinancialTransaction.due_date.desc())
+            .order_by(
+                FinancialTransaction.due_date.desc(),
+                FinancialTransaction.created_at.desc(),
+                FinancialTransaction.id.desc(),
+            )
             .offset(skip)
             .limit(limit)
         )
