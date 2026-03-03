@@ -126,14 +126,40 @@ export interface TransactionFilters {
 export interface MonthlyFeeGenerateRequest {
   reference_month: string; // ISO date string (first day of month)
   client_id?: string | null;
+  client_ids?: string[];
 }
 
 export interface MonthlyFeeGenerateResponse {
   success: boolean;
   total_clients: number;
   total_transactions: number;
+  reference_month?: string | null;
+  created_client_entries?: number | null;
+  created_office_entries?: number | null;
+  skipped?: number | null;
   errors: number;
   message: string;
+}
+
+export interface MonthlyFeePreviewClient {
+  client_id: string;
+  client_name: string;
+  client_cnpj?: string;
+  amount: number;
+  due_date?: string;
+  would_create_client_entry?: boolean;
+  would_create_office_entry?: boolean;
+}
+
+export interface MonthlyFeePreviewResponse {
+  total_clients: number;
+  would_generate_count: number;
+  would_generate_entries?: number;
+  total_amount: number;
+  reference_month: string;
+  due_date_strategy?: string;
+  clients: MonthlyFeePreviewClient[];
+  has_more: boolean;
 }
 
 // Financial KPIs

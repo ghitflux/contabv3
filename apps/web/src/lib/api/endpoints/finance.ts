@@ -13,6 +13,7 @@ import type {
   TransactionCancel,
   MonthlyFeeGenerateRequest,
   MonthlyFeeGenerateResponse,
+  MonthlyFeePreviewResponse,
   FinancialDashboardKPIs,
   ReceivablesAgingReport,
   RevenueByPeriodReport,
@@ -125,11 +126,20 @@ export const financeApi = {
     return apiClient.post<MonthlyFeeGenerateResponse>('/finance/fees/generate', data);
   },
 
-  async previewMonthlyFees(params: { reference_month: string; client_id?: string }): Promise<any> {
+  async previewMonthlyFees(params: {
+    reference_month: string;
+    client_id?: string;
+    client_ids?: string[];
+  }): Promise<MonthlyFeePreviewResponse> {
     const query = new URLSearchParams();
     query.append('reference_month', params.reference_month);
     if (params.client_id) query.append('client_id', params.client_id);
-    return apiClient.get(`/finance/fees/preview?${query.toString()}`);
+    if (params.client_ids?.length) {
+      params.client_ids.forEach((clientId) => {
+        query.append('client_ids', clientId);
+      });
+    }
+    return apiClient.get<MonthlyFeePreviewResponse>(`/finance/fees/preview?${query.toString()}`);
   },
 
   async getDashboardKPIs(): Promise<FinancialDashboardKPIs> {

@@ -46,15 +46,19 @@ export interface NovoLancamentoData {
   invoice_number?: string | null;
 }
 
-type NovoLancamentoFormData = Omit<NovoLancamentoData, "amount"> & {
+type NovoLancamentoFormData = Omit<NovoLancamentoData, "amount" | "reference_month"> & {
   amount: string;
+  launch_date: string;
 };
 
+const toReferenceMonth = (dateValue: string) =>
+  dateValue ? `${dateValue.slice(0, 7)}-01` : "";
+
 const buildDefaultDates = (baseDate: Date) => {
-  const dueDate = formatISO(baseDate, { representation: "date" });
+  const launchDate = formatISO(baseDate, { representation: "date" });
   return {
-    due_date: dueDate,
-    reference_month: `${dueDate.slice(0, 7)}-01`,
+    launch_date: launchDate,
+    due_date: launchDate,
   };
 };
 
@@ -77,8 +81,8 @@ export function NovoLancamentoModal({
   const [formData, setFormData] = useState<Partial<NovoLancamentoFormData>>({
     transaction_type: TransactionType.RECEITA,
     payment_status: PaymentStatus.PENDENTE,
+    launch_date: "",
     due_date: "",
-    reference_month: "",
     amount: "",
   });
 
@@ -112,8 +116,8 @@ export function NovoLancamentoModal({
       if (
         !formData.client_id ||
         !formData.amount?.trim() ||
+        !formData.launch_date ||
         !formData.due_date ||
-        !formData.reference_month ||
         !formData.description
       ) {
         toast.error("Preencha todos os campos obrigatórios.");
@@ -123,6 +127,15 @@ export function NovoLancamentoModal({
       const amountValue = normalizeAmountForRequest(formData.amount);
       if (!Number.isFinite(amountValue) || amountValue <= 0) {
         toast.error("Informe um valor válido.");
+        return;
+      }
+
+      const clientId = formData.client_id;
+      const launchDate = formData.launch_date;
+      const dueDate = formData.due_date;
+      const description = formData.description?.trim();
+      if (!clientId || !launchDate || !dueDate || !description) {
+        toast.error("Preencha todos os campos obrigatórios.");
         return;
       }
 
@@ -146,9 +159,19 @@ export function NovoLancamentoModal({
       }
 
       await onSave({
-        ...(formData as NovoLancamentoFormData),
+        client_id: clientId,
+        transaction_type: formData.transaction_type ?? TransactionType.RECEITA,
         amount: amountValue,
+        payment_method: formData.payment_method ?? null,
+        payment_status: formData.payment_status ?? PaymentStatus.PENDENTE,
+        due_date: dueDate,
+        paid_date:
+          formData.payment_status === PaymentStatus.PAGO ? formData.paid_date ?? null : null,
+        reference_month: toReferenceMonth(launchDate),
+        description,
         category: normalizedCategory,
+        notes: formData.notes?.trim() || null,
+        invoice_number: formData.invoice_number?.trim() || null,
       });
       onOpenChange(false);
 
@@ -158,8 +181,8 @@ export function NovoLancamentoModal({
       setFormData({
         transaction_type: TransactionType.RECEITA,
         payment_status: PaymentStatus.PENDENTE,
+        launch_date: "",
         due_date: "",
-        reference_month: "",
         amount: "",
         category: null,
       });
@@ -290,7 +313,26 @@ export function NovoLancamentoModal({
                   }
                 />
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {/* Data de Lançamento */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Data de Lançamento *</label>
+                    <DatePickerField
+                      value={formData.launch_date || ""}
+                      onChange={(value) =>
+                        setFormData((prev) => {
+                          const shouldSyncDueDate =
+                            !prev.due_date || prev.due_date === prev.launch_date;
+                          return {
+                            ...prev,
+                            launch_date: value,
+                            due_date: shouldSyncDueDate ? value : prev.due_date,
+                          };
+                        })
+                      }
+                    />
+                  </div>
+
                   {/* Data de Vencimento */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Data de Vencimento *</label>
@@ -299,19 +341,6 @@ export function NovoLancamentoModal({
                       onChange={(value) => setFormData((prev) => ({ ...prev, due_date: value }))}
                     />
                   </div>
-
-                  {/* Mês de Competência */}
-                  <Input
-                    label="Competência (YYYY-MM)"
-                    placeholder="2024-01"
-                    type="month"
-                    value={formData.reference_month?.slice(0, 7) || ""}
-                    onValueChange={(value) =>
-                      setFormData((prev) => ({ ...prev, reference_month: value ? `${value}-01` : "" }))
-                    }
-                    isRequired
-                    variant="bordered"
-                  />
                 </div>
 
                 {/* Status do Pagamento */}

@@ -187,7 +187,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
           servicos_contratados: client.servicos_contratados || [],
           licencas_necessarias: client.licencas_necessarias || [],
           obligation_types_ids: client.obligation_types_ids || [],
-          gerar_lancamentos_honorarios: client.gerar_lancamentos_honorarios ?? false,
+          gerar_lancamentos_honorarios: client.gerar_lancamentos_honorarios ?? true,
         }
       : {
           razao_social: "",
@@ -243,7 +243,7 @@ export function ClientFormModal({ client, isOpen, onClose, onSave, isEditing = f
         servicos_contratados: client.servicos_contratados || [],
         licencas_necessarias: client.licencas_necessarias || [],
         obligation_types_ids: client.obligation_types_ids || [],
-        gerar_lancamentos_honorarios: client.gerar_lancamentos_honorarios ?? false,
+        gerar_lancamentos_honorarios: client.gerar_lancamentos_honorarios ?? true,
       });
     } else if (isOpen && !isEditing) {
       reset({

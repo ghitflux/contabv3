@@ -41,6 +41,8 @@ import {
   PaymentMethod,
   PaymentStatus,
   TransactionType,
+  type MonthlyFeePreviewClient,
+  type MonthlyFeePreviewResponse,
   type Transaction,
   type TransactionUpdate,
   isDuePaymentStatus,
@@ -51,6 +53,7 @@ import { toast } from '@/lib/toast';
 import { formatISO, subMonths } from 'date-fns';
 import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
 import { bankAccountsApi } from '@/lib/api/endpoints/bank-accounts';
+import { financeApi } from '@/lib/api/endpoints/finance';
 import type { BankAccount } from '@/types/bank-account';
 import { TransactionTrashModal } from './TransactionTrashModal';
 import { ConfirmBaixaLancamentoDialog } from './ConfirmBaixaLancamentoDialog';
@@ -123,6 +126,16 @@ const normalizeDateInput = (value?: string | null): string => {
   return datePart ?? '';
 };
 
+const HONORARIOS_DESCRIPTION_PATTERN = /^Honorários - (.+?) \(([^)]+)\) - (\d{2}\/\d{4})$/;
+
+const formatMonthYear = (value: string) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return `${String(parsed.getMonth() + 1).padStart(2, '0')}/${parsed.getFullYear()}`;
+};
+
 export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => void }) {
   const [monthFilter, setMonthFilter] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -168,6 +181,13 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   const [isConfirmingBaixa, setIsConfirmingBaixa] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [transactionsPage, setTransactionsPage] = useState(1);
+  const [isGeneratingFees, setIsGeneratingFees] = useState(false);
+  const [feesPreview, setFeesPreview] = useState<MonthlyFeePreviewResponse | null>(null);
+  const [isLoadingFeesPreview, setIsLoadingFeesPreview] = useState(false);
+  const [isFeeGenerationModalOpen, setIsFeeGenerationModalOpen] = useState(false);
+  const [selectedFeeClientIds, setSelectedFeeClientIds] = useState<string[]>([]);
+  const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([]);
+  const [isBulkUpdatingTransactions, setIsBulkUpdatingTransactions] = useState(false);
   const [editForm, setEditForm] = useState({
     description: '',
     amount: '',
@@ -350,6 +370,11 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     }
   }, [transactionsPage, totalTransactionPages]);
 
+  useEffect(() => {
+    const validIds = new Set(displayTransactions.map((transaction) => transaction.id));
+    setSelectedTransactionIds((prev) => prev.filter((id) => validIds.has(id)));
+  }, [displayTransactions]);
+
   const paginatedDisplayTransactions = useMemo(() => {
     const startIndex = (transactionsPage - 1) * TRANSACTIONS_PER_PAGE;
     const endIndex = startIndex + TRANSACTIONS_PER_PAGE;
@@ -426,6 +451,66 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     return [];
   }, [activePendingPanel, displayTransactions]);
 
+  const honorariosTransactions = useMemo(() => {
+    return transactions
+      .filter(
+        (transaction) =>
+          transaction.client_id === OFFICE_CLIENT_ID &&
+          transaction.transaction_type === TransactionType.RECEITA &&
+          transaction.description.startsWith('Honorários -')
+      )
+      .map((transaction) => {
+        const descriptionMatch = transaction.description.match(HONORARIOS_DESCRIPTION_PATTERN);
+        const cliente = descriptionMatch?.[1] ?? '-';
+        const cnpj = descriptionMatch?.[2] ?? '-';
+        const competenciaLabel =
+          descriptionMatch?.[3] ?? formatMonthYear(transaction.reference_month);
+
+        return {
+          id: transaction.id,
+          cliente,
+          cnpj,
+          competenciaLabel,
+          dueDate: transaction.due_date,
+          paidDate: transaction.paid_date ?? null,
+          amount: transaction.amount,
+          paymentStatus: transaction.payment_status,
+          paymentMethod: transaction.payment_method ?? null,
+        };
+      });
+  }, [transactions, OFFICE_CLIENT_ID]);
+
+  const totalHonorarios = useMemo(
+    () => honorariosTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
+    [honorariosTransactions]
+  );
+
+  const previewClients = feesPreview?.clients ?? [];
+  const selectedFeeClientSet = useMemo(() => new Set(selectedFeeClientIds), [selectedFeeClientIds]);
+  const selectedPreviewClients = useMemo(
+    () => previewClients.filter((client) => selectedFeeClientSet.has(client.client_id)),
+    [previewClients, selectedFeeClientSet]
+  );
+  const selectedPreviewTotal = useMemo(
+    () => selectedPreviewClients.reduce((sum, client) => sum + client.amount, 0),
+    [selectedPreviewClients]
+  );
+  const isAllPreviewClientsSelected = useMemo(
+    () => previewClients.length > 0 && selectedFeeClientIds.length === previewClients.length,
+    [previewClients.length, selectedFeeClientIds.length]
+  );
+
+  const selectedTransactionSet = useMemo(
+    () => new Set(selectedTransactionIds),
+    [selectedTransactionIds]
+  );
+  const isAllTransactionsOnPageSelected = useMemo(
+    () =>
+      paginatedDisplayTransactions.length > 0 &&
+      paginatedDisplayTransactions.every((transaction) => selectedTransactionSet.has(transaction.id)),
+    [paginatedDisplayTransactions, selectedTransactionSet]
+  );
+
   const setRangeForMonth = (monthValue: string) => {
     if (!monthValue) return;
     const [year, month] = monthValue.split('-');
@@ -489,6 +574,37 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     }
   }, [startDate, endDate, monthFilter]);
 
+  const selectedReferenceMonth = useMemo(() => {
+    if (monthFilter) {
+      return `${monthFilter}-01`;
+    }
+    const today = formatISO(new Date(), { representation: 'date' });
+    return `${today.slice(0, 7)}-01`;
+  }, [monthFilter]);
+
+  const loadFeesPreview = useCallback(async (referenceMonth: string) => {
+    setIsLoadingFeesPreview(true);
+    try {
+      const preview = await financeApi.previewMonthlyFees({ reference_month: referenceMonth });
+      setFeesPreview(preview);
+      setSelectedFeeClientIds(preview.clients.map((client) => client.client_id));
+    } catch (error) {
+      console.error('Erro ao carregar prévia de honorários', error);
+      setFeesPreview(null);
+      setSelectedFeeClientIds([]);
+    } finally {
+      setIsLoadingFeesPreview(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!OFFICE_CLIENT_ID) {
+      setFeesPreview(null);
+      return;
+    }
+    void loadFeesPreview(selectedReferenceMonth);
+  }, [loadFeesPreview, selectedReferenceMonth, OFFICE_CLIENT_ID]);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const handleRefresh = () => {
@@ -501,6 +617,181 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       window.removeEventListener('finance:transactions-updated', handleRefresh);
     };
   }, [refresh]);
+
+  const openFeesGenerationModal = async () => {
+    if (!OFFICE_CLIENT_ID) {
+      toast.error(
+        'Configure o ID do escritório (NEXT_PUBLIC_OFFICE_CLIENT_ID) para gerar honorários.'
+      );
+      return;
+    }
+
+    setIsFeeGenerationModalOpen(true);
+    await loadFeesPreview(selectedReferenceMonth);
+  };
+
+  const togglePreviewClientSelection = (clientId: string, checked: boolean) => {
+    setSelectedFeeClientIds((prev) => {
+      if (checked) {
+        if (prev.includes(clientId)) return prev;
+        return [...prev, clientId];
+      }
+      return prev.filter((id) => id !== clientId);
+    });
+  };
+
+  const toggleAllPreviewClients = (checked: boolean) => {
+    if (!checked) {
+      setSelectedFeeClientIds([]);
+      return;
+    }
+    setSelectedFeeClientIds(previewClients.map((client) => client.client_id));
+  };
+
+  const getPreviewEntryLabel = (client: MonthlyFeePreviewClient) => {
+    if (client.would_create_client_entry && client.would_create_office_entry) {
+      return 'Cliente + Escritório';
+    }
+    if (client.would_create_client_entry) return 'Cliente';
+    if (client.would_create_office_entry) return 'Escritório';
+    return '-';
+  };
+
+  const handleGenerateMissingFees = async () => {
+    if (!OFFICE_CLIENT_ID) {
+      toast.error(
+        'Configure o ID do escritório (NEXT_PUBLIC_OFFICE_CLIENT_ID) para gerar honorários.'
+      );
+      return;
+    }
+    if (!selectedFeeClientIds.length) {
+      toast.error('Selecione pelo menos um cliente na prévia para gerar os honorários.');
+      return;
+    }
+
+    try {
+      setIsGeneratingFees(true);
+      const result = await financeApi.generateMonthlyFees({
+        reference_month: selectedReferenceMonth,
+        client_ids: selectedFeeClientIds,
+      });
+      toast.success(result.message);
+      await refresh();
+      await loadFeesPreview(selectedReferenceMonth);
+      setIsFeeGenerationModalOpen(false);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
+      }
+    } catch (error) {
+      console.error('Erro ao gerar honorários pendentes', error);
+      const errorDetail = (error as { data?: { detail?: string } })?.data?.detail;
+      const message =
+        typeof errorDetail === 'string'
+          ? errorDetail
+          : 'Não foi possível gerar os honorários pendentes.';
+      toast.error(message);
+    } finally {
+      setIsGeneratingFees(false);
+    }
+  };
+
+  const toggleTransactionSelection = (transactionId: string, checked: boolean) => {
+    setSelectedTransactionIds((prev) => {
+      if (checked) {
+        if (prev.includes(transactionId)) return prev;
+        return [...prev, transactionId];
+      }
+      return prev.filter((id) => id !== transactionId);
+    });
+  };
+
+  const toggleAllTransactionsOnPage = (checked: boolean) => {
+    if (!checked) {
+      const pageIds = new Set(paginatedDisplayTransactions.map((transaction) => transaction.id));
+      setSelectedTransactionIds((prev) => prev.filter((id) => !pageIds.has(id)));
+      return;
+    }
+
+    setSelectedTransactionIds((prev) => {
+      const next = new Set(prev);
+      paginatedDisplayTransactions.forEach((transaction) => next.add(transaction.id));
+      return Array.from(next);
+    });
+  };
+
+  const handleBulkUpdateTransactions = async (targetStatus: PaymentStatus) => {
+    if (!selectedTransactionIds.length) {
+      toast.error('Selecione pelo menos um lançamento.');
+      return;
+    }
+
+    const selectedTransactions = displayTransactions
+      .filter((transaction) => selectedTransactionSet.has(transaction.id))
+      .map((transaction) => transaction.raw);
+
+    const transactionsToUpdate = selectedTransactions.filter((transaction) => {
+      if (targetStatus === PaymentStatus.PAGO) {
+        return transaction.payment_status !== PaymentStatus.PAGO;
+      }
+      return (
+        transaction.payment_status !== PaymentStatus.PENDENTE ||
+        Boolean(transaction.paid_date)
+      );
+    });
+
+    if (!transactionsToUpdate.length) {
+      toast.error(
+        targetStatus === PaymentStatus.PAGO
+          ? 'Os lançamentos selecionados já estão baixados.'
+          : 'Os lançamentos selecionados já estão pendentes.'
+      );
+      return;
+    }
+
+    setIsBulkUpdatingTransactions(true);
+    let updatedCount = 0;
+    let failedCount = 0;
+
+    try {
+      for (const transaction of transactionsToUpdate) {
+        try {
+          const payload: TransactionUpdate =
+            targetStatus === PaymentStatus.PAGO
+              ? {
+                  payment_status: PaymentStatus.PAGO,
+                  payment_method: transaction.payment_method ?? PaymentMethod.TRANSFERENCIA,
+                  paid_date: new Date().toISOString(),
+                }
+              : {
+                  payment_status: PaymentStatus.PENDENTE,
+                  paid_date: null,
+                };
+          await updateTransaction(transaction.id, payload);
+          updatedCount += 1;
+        } catch (error) {
+          console.error('Erro ao atualizar lançamento em lote', error);
+          failedCount += 1;
+        }
+      }
+
+      await refresh();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
+      }
+
+      setSelectedTransactionIds([]);
+
+      if (failedCount > 0) {
+        toast.error(
+          `${updatedCount} lançamento(s) atualizado(s) e ${failedCount} com falha na operação em lote.`
+        );
+      } else {
+        toast.success(`${updatedCount} lançamento(s) atualizado(s) em lote.`);
+      }
+    } finally {
+      setIsBulkUpdatingTransactions(false);
+    }
+  };
 
   const kpis: FinanceiroKpi[] = [
     {
@@ -869,6 +1160,228 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Honorários dos Clientes
+            </h3>
+            <p className="text-sm text-default-500">
+              Total listado: {formatCurrency(totalHonorarios)} em {honorariosTransactions.length}{' '}
+              lançamento(s)
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+            <Button
+              variant="bordered"
+              onPress={() => void loadFeesPreview(selectedReferenceMonth)}
+              isLoading={isLoadingFeesPreview}
+              isDisabled={!OFFICE_CLIENT_ID}
+              className="w-full sm:w-auto"
+            >
+              Atualizar prévia
+            </Button>
+            <Button
+              color="primary"
+              onPress={() => void openFeesGenerationModal()}
+              isDisabled={!OFFICE_CLIENT_ID}
+              className="w-full sm:w-auto"
+            >
+              Prévia para gerar
+            </Button>
+          </div>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <div className="rounded-lg border border-default-200/60 bg-default-50/60 px-3 py-2 text-sm text-default-600">
+            <p>
+              Referência da geração:{' '}
+              <strong>{formatMonthYear(feesPreview?.reference_month ?? selectedReferenceMonth)}</strong>
+            </p>
+            <p>Regra: honorários com vencimento sempre no dia 01 do mês seguinte.</p>
+            {isLoadingFeesPreview ? (
+              <p>Validando clientes sem honorários gerados...</p>
+            ) : feesPreview ? (
+              <p>
+                {feesPreview.would_generate_count} cliente(s) com pendência de honorários e{' '}
+                {feesPreview.would_generate_entries ?? 0} lançamento(s) a gerar.
+              </p>
+            ) : (
+              <p>Não foi possível carregar a prévia de geração.</p>
+            )}
+          </div>
+          <div className="w-full overflow-x-auto">
+            <Table
+              aria-label="Tabela detalhada de honorários do escritório"
+              removeWrapper
+              className="min-w-[1100px]"
+            >
+              <TableHeader>
+                <TableColumn>Competência</TableColumn>
+                <TableColumn>Cliente</TableColumn>
+                <TableColumn>CNPJ</TableColumn>
+                <TableColumn>Vencimento</TableColumn>
+                <TableColumn className="text-right">Valor</TableColumn>
+                <TableColumn>Status</TableColumn>
+                <TableColumn>Pagamento</TableColumn>
+                <TableColumn>Data Baixa</TableColumn>
+              </TableHeader>
+              <TableBody emptyContent="Nenhum honorário encontrado para o período selecionado">
+                {honorariosTransactions.map((transaction) => (
+                  <TableRow key={transaction.id}>
+                    <TableCell>{transaction.competenciaLabel}</TableCell>
+                    <TableCell>{transaction.cliente}</TableCell>
+                    <TableCell>{transaction.cnpj}</TableCell>
+                    <TableCell>{new Date(transaction.dueDate).toLocaleDateString('pt-BR')}</TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {formatCurrency(transaction.amount)}
+                    </TableCell>
+                    <TableCell>{getPaymentStatusLabel(transaction.paymentStatus)}</TableCell>
+                    <TableCell>
+                      {transaction.paymentMethod
+                        ? getPaymentMethodLabel(transaction.paymentMethod)
+                        : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {transaction.paidDate
+                        ? new Date(transaction.paidDate).toLocaleDateString('pt-BR')
+                        : '-'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardBody>
+      </Card>
+
+      <Modal
+        isOpen={isFeeGenerationModalOpen}
+        onOpenChange={setIsFeeGenerationModalOpen}
+        size="5xl"
+        scrollBehavior="inside"
+      >
+        <ModalContent>
+          {(onClose) => (
+            <>
+              <ModalHeader>Prévia da geração de honorários</ModalHeader>
+              <ModalBody className="space-y-4">
+                <div className="rounded-lg border border-default-200/60 bg-default-50/60 px-3 py-2 text-sm text-default-600">
+                  <p>
+                    Competência alvo:{' '}
+                    <strong>
+                      {formatMonthYear(feesPreview?.reference_month ?? selectedReferenceMonth)}
+                    </strong>
+                  </p>
+                  <p>Vencimento aplicado: sempre no dia 01.</p>
+                  <p>
+                    Selecionados: <strong>{selectedFeeClientIds.length}</strong> cliente(s), total{' '}
+                    <strong>{formatCurrency(selectedPreviewTotal)}</strong>.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="bordered"
+                    onPress={() => toggleAllPreviewClients(true)}
+                    isDisabled={previewClients.length === 0}
+                  >
+                    Marcar todos
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="bordered"
+                    onPress={() => toggleAllPreviewClients(false)}
+                    isDisabled={selectedFeeClientIds.length === 0}
+                  >
+                    Desmarcar todos
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="light"
+                    onPress={() => void loadFeesPreview(selectedReferenceMonth)}
+                    isLoading={isLoadingFeesPreview}
+                  >
+                    Recarregar prévia
+                  </Button>
+                </div>
+
+                <div className="w-full overflow-x-auto">
+                  <Table
+                    aria-label="Prévia detalhada de honorários por cliente"
+                    removeWrapper
+                    className="min-w-[900px]"
+                  >
+                    <TableHeader>
+                      <TableColumn className="w-16">
+                        <Checkbox
+                          isSelected={isAllPreviewClientsSelected}
+                          onValueChange={toggleAllPreviewClients}
+                          aria-label="Selecionar todos os clientes da prévia"
+                          isDisabled={previewClients.length === 0}
+                        />
+                      </TableColumn>
+                      <TableColumn>Cliente</TableColumn>
+                      <TableColumn>CNPJ</TableColumn>
+                      <TableColumn>Vencimento</TableColumn>
+                      <TableColumn>Lançamentos</TableColumn>
+                      <TableColumn className="text-right">Valor</TableColumn>
+                    </TableHeader>
+                    <TableBody
+                      emptyContent={
+                        isLoadingFeesPreview
+                          ? 'Carregando prévia de geração...'
+                          : 'Nenhum cliente com honorários pendentes para esta competência.'
+                      }
+                    >
+                      {previewClients.map((client) => (
+                        <TableRow key={client.client_id}>
+                          <TableCell>
+                            <Checkbox
+                              isSelected={selectedFeeClientSet.has(client.client_id)}
+                              onValueChange={(checked) =>
+                                togglePreviewClientSelection(client.client_id, checked)
+                              }
+                              aria-label={`Selecionar ${client.client_name}`}
+                            />
+                          </TableCell>
+                          <TableCell>{client.client_name}</TableCell>
+                          <TableCell>{client.client_cnpj ?? '-'}</TableCell>
+                          <TableCell>
+                            {new Date(
+                              client.due_date ?? feesPreview?.reference_month ?? selectedReferenceMonth
+                            ).toLocaleDateString('pt-BR')}
+                          </TableCell>
+                          <TableCell>{getPreviewEntryLabel(client)}</TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {formatCurrency(client.amount)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="light" onPress={onClose} isDisabled={isGeneratingFees}>
+                  Cancelar
+                </Button>
+                <Button
+                  color="primary"
+                  onPress={handleGenerateMissingFees}
+                  isLoading={isGeneratingFees}
+                  isDisabled={selectedFeeClientIds.length === 0 || isLoadingFeesPreview}
+                >
+                  {isGeneratingFees
+                    ? 'Gerando...'
+                    : `Gerar ${selectedFeeClientIds.length} selecionado(s)`}
+                </Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
+
+      <Card className="border border-default-200/50 dark:border-default-100/20">
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
               Saldo de Bancos e Caixa
             </h3>
             <p className="text-sm text-default-500">Gerencie as contas bancárias do escritório</p>
@@ -1072,9 +1585,63 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
 
       <Card className="border border-default-200/50 dark:border-default-100/20">
         <CardBody>
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-default-600">
+              Selecionados: <strong>{selectedTransactionIds.length}</strong> lançamento(s)
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="bordered"
+                onPress={() => toggleAllTransactionsOnPage(!isAllTransactionsOnPageSelected)}
+                isDisabled={paginatedDisplayTransactions.length === 0 || isBulkUpdatingTransactions}
+              >
+                {isAllTransactionsOnPageSelected ? 'Desmarcar página' : 'Marcar página'}
+              </Button>
+              <Button
+                size="sm"
+                color="primary"
+                variant="flat"
+                onPress={() => void handleBulkUpdateTransactions(PaymentStatus.PAGO)}
+                isDisabled={selectedTransactionIds.length === 0 || isBulkUpdatingTransactions}
+                isLoading={isBulkUpdatingTransactions}
+              >
+                Marcar pagos
+              </Button>
+              <Button
+                size="sm"
+                variant="flat"
+                onPress={() => void handleBulkUpdateTransactions(PaymentStatus.PENDENTE)}
+                isDisabled={selectedTransactionIds.length === 0 || isBulkUpdatingTransactions}
+                isLoading={isBulkUpdatingTransactions}
+              >
+                Desmarcar baixa
+              </Button>
+              <Button
+                size="sm"
+                variant="light"
+                onPress={() => setSelectedTransactionIds([])}
+                isDisabled={selectedTransactionIds.length === 0 || isBulkUpdatingTransactions}
+              >
+                Limpar seleção
+              </Button>
+            </div>
+          </div>
           <div className="w-full overflow-x-auto">
-            <Table aria-label="Tabela de lançamentos do escritório" removeWrapper className="min-w-[980px]">
+            <Table
+              aria-label="Tabela de lançamentos do escritório"
+              removeWrapper
+              className="min-w-[1040px]"
+            >
               <TableHeader>
+                <TableColumn className="w-16">
+                  <Checkbox
+                    isSelected={isAllTransactionsOnPageSelected}
+                    onValueChange={toggleAllTransactionsOnPage}
+                    aria-label="Selecionar todos os lançamentos da página"
+                    isDisabled={paginatedDisplayTransactions.length === 0}
+                  />
+                </TableColumn>
                 <TableColumn>Data</TableColumn>
                 <TableColumn>Tipo</TableColumn>
                 <TableColumn>Banco</TableColumn>
@@ -1087,6 +1654,15 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
               <TableBody emptyContent="Nenhum lançamento cadastrado">
                 {paginatedDisplayTransactions.map((transaction) => (
                   <TableRow key={transaction.id}>
+                    <TableCell>
+                      <Checkbox
+                        isSelected={selectedTransactionSet.has(transaction.id)}
+                        onValueChange={(checked) =>
+                          toggleTransactionSelection(transaction.id, checked)
+                        }
+                        aria-label={`Selecionar lançamento ${transaction.history}`}
+                      />
+                    </TableCell>
                     <TableCell>{new Date(transaction.date).toLocaleDateString('pt-BR')}</TableCell>
                     <TableCell>{transaction.type}</TableCell>
                     <TableCell>{transaction.bank || '-'}</TableCell>

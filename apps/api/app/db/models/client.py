@@ -81,8 +81,8 @@ class Client(Base, UUIDMixin, TimestampMixin):
     gerar_lancamentos_honorarios: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
-        default=False,
-        server_default="false",
+        default=True,
+        server_default="true",
         comment="Se deve lançar honorários automaticamente como despesa/receita recorrente",
     )
 

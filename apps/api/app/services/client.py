@@ -4,9 +4,9 @@ Client service with business logic.
 
 import secrets
 import string
+from datetime import date
 from typing import Optional
 from uuid import UUID
-from datetime import date
 
 from app.services.obligation.generator import ObligationGenerator
 
@@ -230,7 +230,7 @@ class ClientService:
         """
         Create recurring honorários transactions for a client (if eligible).
 
-        Transactions are always created with due_date on the first day of the next month.
+        Transactions are created for next month with due_date fixed on day 1.
         """
         if not (
             client.gerar_lancamentos_honorarios
@@ -244,8 +244,8 @@ class ClientService:
         from app.core.config import settings
         from app.db.models.finance import FinancialTransaction, PaymentStatus, TransactionType
 
-        due_date = self._get_first_day_of_next_month(date.today())
-        reference_month = due_date
+        reference_month = self._get_first_day_of_next_month(date.today())
+        due_date = reference_month
         reference_label = reference_month.strftime("%m/%Y")
         creator_id = created_by_id or client.user_id
 

@@ -565,6 +565,7 @@ async def generate_monthly_fees(
         result = await service.generate_monthly_fees(
             reference_month=data.reference_month,
             client_id=data.client_id,
+            client_ids=data.client_ids,
             generated_by_id=current_user.id,
         )
         return result
@@ -581,6 +582,7 @@ async def preview_monthly_fees(
     current_user: Annotated[User, Depends(get_current_active_user)],
     reference_month: date = Query(...),
     client_id: Optional[UUID] = Query(None),
+    client_ids: Optional[list[UUID]] = Query(None),
 ):
     """
     Preview monthly fees generation without creating them.
@@ -599,6 +601,7 @@ async def preview_monthly_fees(
         result = await service.get_generation_preview(
             reference_month=reference_month,
             client_id=client_id,
+            client_ids=client_ids,
         )
         return result
     except ValueError as e:

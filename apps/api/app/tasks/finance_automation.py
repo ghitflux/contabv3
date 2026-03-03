@@ -77,8 +77,6 @@ async def generate_monthly_honorarios(
 
     # Honorários are generated for the first day of the next month.
     reference_month = _get_first_day_of_next_month(reference_month)
-    due_date = reference_month
-
     office_client_id = settings.OFFICE_CLIENT_ID
     reference_label = reference_month.strftime("%m/%Y")
 
@@ -105,6 +103,8 @@ async def generate_monthly_honorarios(
             if not client.honorarios_mensais or float(client.honorarios_mensais) <= 0:
                 skipped += 1
                 continue
+
+            due_date = reference_month
 
             # Client: accounts payable (expense)
             client_description = f"Honorários do escritório - {reference_label}"

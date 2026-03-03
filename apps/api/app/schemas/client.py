@@ -65,7 +65,7 @@ class ClientBase(BaseSchema):
     # Financial
     honorarios_mensais: float = Field(..., ge=0)
     dia_vencimento: int = Field(..., ge=1, le=31)
-    gerar_lancamentos_honorarios: bool = False
+    gerar_lancamentos_honorarios: bool = True
 
     # Tax info
     regime_tributario: RegimeTributario

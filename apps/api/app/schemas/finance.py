@@ -182,6 +182,10 @@ class MonthlyFeeGenerateRequest(BaseModel):
 
     reference_month: date = Field(..., description="Reference month - first day of month")
     client_id: Optional[UUID] = Field(None, description="Generate for specific client (optional)")
+    client_ids: Optional[list[UUID]] = Field(
+        None,
+        description="Generate for a list of specific clients (optional)",
+    )
 
     @field_validator("reference_month")
     def validate_reference_month(cls, v: date) -> date:
@@ -190,11 +194,26 @@ class MonthlyFeeGenerateRequest(BaseModel):
             return v.replace(day=1)
         return v
 
+    @field_validator("client_ids")
+    def validate_client_ids(cls, v: Optional[list[UUID]]) -> Optional[list[UUID]]:
+        """Normalize client_ids removing duplicates while preserving order."""
+        if not v:
+            return v
+        seen: set[UUID] = set()
+        deduped: list[UUID] = []
+        for item in v:
+            if item in seen:
+                continue
+            seen.add(item)
+            deduped.append(item)
+        return deduped
+
     class Config:
         json_schema_extra = {
             "example": {
                 "reference_month": "2025-11-01",
-                "client_id": None
+                "client_id": None,
+                "client_ids": None,
             }
         }
 
@@ -205,6 +224,10 @@ class MonthlyFeeGenerateResponse(BaseModel):
     success: bool
     total_clients: int
     total_transactions: int
+    reference_month: Optional[date] = None
+    created_client_entries: Optional[int] = None
+    created_office_entries: Optional[int] = None
+    skipped: Optional[int] = None
     errors: int
     message: str
 
