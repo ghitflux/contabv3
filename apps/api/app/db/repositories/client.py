@@ -201,7 +201,7 @@ class ClientRepository(BaseRepository[Client]):
             select(Client)
             .where(
                 and_(
-                    Client.status == ClientStatus.ATIVO,
+                    Client.status.in_([ClientStatus.ATIVO, ClientStatus.INADIMPLENTE]),
                     Client.deleted_at.is_(None)
                 )
             )

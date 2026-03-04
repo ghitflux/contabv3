@@ -80,7 +80,12 @@ export function ClientKPIs({ stats, isLoading }: ClientKPIsProps) {
         icon={CheckCircleIcon}
         color="success"
       />
-      <KPICard label="Pendentes" value={stats.pendentes} icon={ClockIcon} color="warning" />
+      <KPICard
+        label="Inadimplentes"
+        value={stats.inadimplentes ?? stats.pendentes}
+        icon={ClockIcon}
+        color="danger"
+      />
       <KPICard
         label="Receita Mensal"
         value={formatCurrency(stats.receita_total)}

@@ -206,8 +206,8 @@ async def sync_clients_pending_status(session: AsyncSession, *, today: date | No
     Sync Client.status based on overdue honorários without baixa (unpaid).
 
     Rules:
-    - If there is an overdue office RECEITA honorários transaction for a client, mark as PENDENTE
-    - If client is PENDENTE but has no overdue honorários, mark as ATIVO
+    - If there is an overdue office RECEITA honorários transaction for a client, mark as INADIMPLENTE
+    - If client is INADIMPLENTE but has no overdue honorários, mark as ATIVO
     - INATIVO clients are not changed
     """
     if today is None:
@@ -216,7 +216,12 @@ async def sync_clients_pending_status(session: AsyncSession, *, today: date | No
     office_client_id = settings.OFFICE_CLIENT_ID
     if not office_client_id:
         logger.warning("OFFICE_CLIENT_ID not configured; skipping client pending sync")
-        return {"success": True, "pending_clients": 0, "activated_clients": 0, "mode": "skipped"}
+        return {
+            "success": True,
+            "inadimplente_clients": 0,
+            "activated_clients": 0,
+            "mode": "skipped",
+        }
 
     overdue_notes = await session.execute(
         select(FinancialTransaction.notes)
@@ -245,7 +250,7 @@ async def sync_clients_pending_status(session: AsyncSession, *, today: date | No
         except ValueError:
             continue
 
-    pending_count = 0
+    inadimplente_count = 0
     activated_count = 0
 
     if overdue_client_ids:
@@ -257,15 +262,15 @@ async def sync_clients_pending_status(session: AsyncSession, *, today: date | No
                 Client.status != ClientStatus.INATIVO,
                 Client.gerar_lancamentos_honorarios.is_(True),
             )
-            .values(status=ClientStatus.PENDENTE)
+            .values(status=ClientStatus.INADIMPLENTE)
         )
-        pending_count = int(res.rowcount or 0)
+        inadimplente_count = int(res.rowcount or 0)
 
     res = await session.execute(
         update(Client)
         .where(
             Client.deleted_at.is_(None),
-            Client.status == ClientStatus.PENDENTE,
+            Client.status == ClientStatus.INADIMPLENTE,
             Client.status != ClientStatus.INATIVO,
             Client.gerar_lancamentos_honorarios.is_(True),
             Client.id.notin_(overdue_client_ids) if overdue_client_ids else True,
@@ -276,7 +281,7 @@ async def sync_clients_pending_status(session: AsyncSession, *, today: date | No
 
     return {
         "success": True,
-        "pending_clients": pending_count,
+        "inadimplente_clients": inadimplente_count,
         "activated_clients": activated_count,
         "overdue_honorarios": len(overdue_client_ids),
         "mode": "office",
@@ -288,7 +293,7 @@ async def run_finance_daily_automation() -> dict:
     Entry point for scheduled finance automation.
     Runs daily:
     - Marks overdue receivables
-    - Syncs Client.status (pendente/ativo)
+    - Syncs Client.status (inadimplente/ativo)
     - Generates next month's honorários on day 01
     """
     today = date.today()

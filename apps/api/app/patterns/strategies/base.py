@@ -137,6 +137,6 @@ class ObligationRule(ABC):
         from app.db.models.client import ClientStatus
 
         return (
-            client.status == ClientStatus.ATIVO and
+            client.status in [ClientStatus.ATIVO, ClientStatus.INADIMPLENTE] and
             client.deleted_at is None
         )

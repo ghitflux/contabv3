@@ -6,6 +6,7 @@ export enum ClientStatus {
   ATIVO = 'ativo',
   INATIVO = 'inativo',
   PENDENTE = 'pendente',
+  INADIMPLENTE = 'inadimplente',
 }
 
 export enum RegimeTributario {
@@ -218,6 +219,7 @@ export function getStatusLabel(status: ClientStatus): string {
     [ClientStatus.ATIVO]: 'Ativo',
     [ClientStatus.INATIVO]: 'Inativo',
     [ClientStatus.PENDENTE]: 'Pendente',
+    [ClientStatus.INADIMPLENTE]: 'Inadimplente',
   };
   return labels[status];
 }
@@ -281,6 +283,7 @@ export interface ClientStats {
   total: number;
   ativos: number;
   pendentes: number;
+  inadimplentes?: number;
   inativos: number;
   receita_total: number;
   ticket_medio: number;

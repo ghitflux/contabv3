@@ -18,6 +18,7 @@ class ClientStatus(str, Enum):
     ATIVO = "ativo"
     INATIVO = "inativo"
     PENDENTE = "pendente"
+    INADIMPLENTE = "inadimplente"
 
 
 class RegimeTributario(str, Enum):

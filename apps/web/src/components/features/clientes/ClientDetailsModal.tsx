@@ -68,7 +68,9 @@ export function ClientDetailsModal({ client, isOpen, onClose, onEdit }: ClientDe
                       ? 'success'
                       : client.status === 'pendente'
                         ? 'warning'
-                        : 'danger'
+                        : client.status === 'inadimplente'
+                          ? 'danger'
+                          : 'default'
                   }
                   variant="flat"
                   size="sm"

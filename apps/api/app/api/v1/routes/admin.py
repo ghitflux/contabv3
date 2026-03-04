@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from app.api.v1.deps import get_current_active_user, get_db
 from app.db.models.user import User, UserRole
-from app.db.models.client import Client
+from app.db.models.client import Client, ClientStatus
 from app.services.obligation.generator import ObligationGenerator
 from app.services.obligation.seed_types import ensure_obligation_types
 from datetime import date
@@ -51,7 +51,12 @@ async def seed_obligations(
         )
 
     # Get active clients
-    result = await db.execute(select(Client).where(Client.status == "ativo", Client.deleted_at.is_(None)))
+    result = await db.execute(
+        select(Client).where(
+            Client.status.in_([ClientStatus.ATIVO, ClientStatus.INADIMPLENTE]),
+            Client.deleted_at.is_(None),
+        )
+    )
     clients = result.scalars().all()
 
     if not clients:

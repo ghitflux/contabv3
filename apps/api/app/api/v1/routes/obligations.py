@@ -297,7 +297,7 @@ async def get_obligations_matrix(
     normalized_starts_with = (starts_with or "").strip().upper()
     reference_label = f"Referência: {month:02d}/{year}"
 
-    from app.db.models.client import Client
+    from app.db.models.client import Client, ClientStatus
 
     clients = []
     if current_user.role == UserRole.CLIENTE:
@@ -1376,7 +1376,10 @@ async def list_obligations_simple(
         return []
 
     # Query clients
-    query = select(Client).where(Client.deleted_at.is_(None), Client.status == "ativo")
+    query = select(Client).where(
+        Client.deleted_at.is_(None),
+        Client.status.in_([ClientStatus.ATIVO, ClientStatus.INADIMPLENTE]),
+    )
     if search:
         query = query.where(Client.razao_social.ilike(f"%{search}%"))
     query = query.order_by(Client.razao_social)

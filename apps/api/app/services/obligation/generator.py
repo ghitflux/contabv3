@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models.client import Client
+from app.db.models.client import Client, ClientStatus
 from app.db.models.obligation import Obligation, ObligationStatus
 from app.db.models.obligation_type import ObligationType
 from app.db.models.obligation_event import ObligationEvent, ObligationEventType
@@ -111,8 +111,11 @@ class ObligationGenerator:
             Dictionary with statistics about generation
         """
         await ensure_obligation_types(self.db)
-        # Get all active clients
-        stmt = select(Client).where(Client.status == "ativo")
+        # Get all operational clients (active + delinquent)
+        stmt = select(Client).where(
+            Client.status.in_([ClientStatus.ATIVO, ClientStatus.INADIMPLENTE]),
+            Client.deleted_at.is_(None),
+        )
         result = await self.db.execute(stmt)
         clients = result.scalars().all()
 

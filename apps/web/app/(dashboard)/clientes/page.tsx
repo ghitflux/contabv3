@@ -68,15 +68,17 @@ export default function ClientesPage() {
       const byStatus = summary.by_status ?? {};
       const ativos = Number(byStatus.ativo ?? 0);
       const pendentes = Number(byStatus.pendente ?? 0);
+      const inadimplentes = Number(byStatus.inadimplente ?? 0);
       const inativos = Number(byStatus.inativo ?? 0);
       const total = Number(summary.total ?? 0);
       const receita_total = Number(summary.total_revenue ?? 0);
-      const chargeable = ativos + pendentes;
+      const chargeable = ativos + pendentes + inadimplentes;
 
       setStats({
         total,
         ativos,
         pendentes,
+        inadimplentes,
         inativos,
         receita_total,
         ticket_medio: chargeable > 0 ? receita_total / chargeable : 0,
@@ -364,10 +366,11 @@ export default function ClientesPage() {
     onFormClose();
   };
 
-  const statusColors: Record<ClientStatus, "success" | "warning" | "default"> = {
+  const statusColors: Record<ClientStatus, "success" | "warning" | "default" | "danger"> = {
     ativo: "success",
     pendente: "warning",
     inativo: "default",
+    inadimplente: "danger",
   };
 
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -717,6 +720,15 @@ export default function ClientesPage() {
                                   className={client.status === ClientStatus.PENDENTE ? 'hidden' : ''}
                                 >
                                   Marcar como Pendente
+                                </DropdownItem>
+                                <DropdownItem
+                                  key="status-inadimplente"
+                                  startContent={<ClockIcon className="h-4 w-4" />}
+                                  onPress={() => handleChangeStatus(client, ClientStatus.INADIMPLENTE)}
+                                  className={client.status === ClientStatus.INADIMPLENTE ? 'hidden' : ''}
+                                  color="danger"
+                                >
+                                  Marcar como Inadimplente
                                 </DropdownItem>
                                 <DropdownItem
                                   key="status-inativo"

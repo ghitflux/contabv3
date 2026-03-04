@@ -2,6 +2,8 @@
 
 import { DatePickerField } from '@/components/ui/DatePickerField';
 import {
+  Accordion,
+  AccordionItem,
   Button,
   Card,
   CardBody,
@@ -329,8 +331,9 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     useTransactions({
       filters: {
         client_id: OFFICE_CLIENT_ID || undefined,
-        due_date_from: startDate,
-        due_date_to: endDate,
+        ...(monthFilter
+          ? { reference_month: monthFilter }
+          : { due_date_from: startDate, due_date_to: endDate }),
         page: 1,
         size: 100,
       },
@@ -1205,48 +1208,67 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
               <p>Não foi possível carregar a prévia de geração.</p>
             )}
           </div>
-          <div className="w-full overflow-x-auto">
-            <Table
-              aria-label="Tabela detalhada de honorários do escritório"
-              removeWrapper
-              className="min-w-[1100px]"
+          <Accordion variant="splitted">
+            <AccordionItem
+              key="tabela-honorarios-clientes"
+              aria-label="Tabela detalhada de honorários dos clientes"
+              title={
+                <div className="flex w-full items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-default-700">
+                    Tabela detalhada de honorários
+                  </span>
+                  <span className="text-xs text-default-500">
+                    {honorariosTransactions.length} lançamento(s)
+                  </span>
+                </div>
+              }
             >
-              <TableHeader>
-                <TableColumn>Competência</TableColumn>
-                <TableColumn>Cliente</TableColumn>
-                <TableColumn>CNPJ</TableColumn>
-                <TableColumn>Vencimento</TableColumn>
-                <TableColumn className="text-right">Valor</TableColumn>
-                <TableColumn>Status</TableColumn>
-                <TableColumn>Pagamento</TableColumn>
-                <TableColumn>Data Baixa</TableColumn>
-              </TableHeader>
-              <TableBody emptyContent="Nenhum honorário encontrado para o período selecionado">
-                {honorariosTransactions.map((transaction) => (
-                  <TableRow key={transaction.id}>
-                    <TableCell>{transaction.competenciaLabel}</TableCell>
-                    <TableCell>{transaction.cliente}</TableCell>
-                    <TableCell>{transaction.cnpj}</TableCell>
-                    <TableCell>{new Date(transaction.dueDate).toLocaleDateString('pt-BR')}</TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatCurrency(transaction.amount)}
-                    </TableCell>
-                    <TableCell>{getPaymentStatusLabel(transaction.paymentStatus)}</TableCell>
-                    <TableCell>
-                      {transaction.paymentMethod
-                        ? getPaymentMethodLabel(transaction.paymentMethod)
-                        : '-'}
-                    </TableCell>
-                    <TableCell>
-                      {transaction.paidDate
-                        ? new Date(transaction.paidDate).toLocaleDateString('pt-BR')
-                        : '-'}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+              <div className="w-full overflow-x-auto">
+                <Table
+                  aria-label="Tabela detalhada de honorários do escritório"
+                  removeWrapper
+                  className="min-w-[1100px]"
+                >
+                  <TableHeader>
+                    <TableColumn>Competência</TableColumn>
+                    <TableColumn>Cliente</TableColumn>
+                    <TableColumn>CNPJ</TableColumn>
+                    <TableColumn>Vencimento</TableColumn>
+                    <TableColumn className="text-right">Valor</TableColumn>
+                    <TableColumn>Status</TableColumn>
+                    <TableColumn>Pagamento</TableColumn>
+                    <TableColumn>Data Baixa</TableColumn>
+                  </TableHeader>
+                  <TableBody emptyContent="Nenhum honorário encontrado para o período selecionado">
+                    {honorariosTransactions.map((transaction) => (
+                      <TableRow key={transaction.id}>
+                        <TableCell>{transaction.competenciaLabel}</TableCell>
+                        <TableCell>{transaction.cliente}</TableCell>
+                        <TableCell>{transaction.cnpj}</TableCell>
+                        <TableCell>
+                          {new Date(transaction.dueDate).toLocaleDateString('pt-BR')}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold">
+                          {formatCurrency(transaction.amount)}
+                        </TableCell>
+                        <TableCell>{getPaymentStatusLabel(transaction.paymentStatus)}</TableCell>
+                        <TableCell>
+                          {transaction.paymentMethod
+                            ? getPaymentMethodLabel(transaction.paymentMethod)
+                            : '-'}
+                        </TableCell>
+                        <TableCell>
+                          {transaction.paidDate
+                            ? new Date(transaction.paidDate).toLocaleDateString('pt-BR')
+                            : '-'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </AccordionItem>
+          </Accordion>
         </CardBody>
       </Card>
 
@@ -2008,8 +2030,9 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         onOpenChange={setIsTrashModalOpen}
         filters={{
           client_id: OFFICE_CLIENT_ID || undefined,
-          due_date_from: startDate,
-          due_date_to: endDate,
+          ...(monthFilter
+            ? { reference_month: monthFilter }
+            : { due_date_from: startDate, due_date_to: endDate }),
         }}
         title="Lixeira do Escritório"
         onRestored={async () => {

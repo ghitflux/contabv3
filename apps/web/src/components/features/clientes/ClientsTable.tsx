@@ -16,16 +16,18 @@ interface ClientsTableProps {
   isLoading?: boolean;
 }
 
-const statusColorMap: Record<ClientStatus, 'success' | 'warning' | 'default'> = {
+const statusColorMap: Record<ClientStatus, 'success' | 'warning' | 'default' | 'danger'> = {
   ativo: 'success',
   pendente: 'warning',
   inativo: 'default',
+  inadimplente: 'danger',
 };
 
 const statusLabelMap: Record<ClientStatus, string> = {
   ativo: 'Ativo',
   pendente: 'Pendente',
   inativo: 'Inativo',
+  inadimplente: 'Inadimplente',
 };
 
 export function ClientsTable({ clients, isLoading = false }: ClientsTableProps) {

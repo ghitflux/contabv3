@@ -53,6 +53,9 @@ export function ClientsFilters({
           <SelectItem key="pendente">
             Pendente
           </SelectItem>
+          <SelectItem key="inadimplente">
+            Inadimplente
+          </SelectItem>
         </Select>
       </div>
       <ButtonGroup>
