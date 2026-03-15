@@ -64,7 +64,28 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
             conditions.append(FinancialTransaction.payment_status == status)
 
         if reference_month:
-            conditions.append(FinancialTransaction.reference_month == reference_month)
+            conditions.append(
+                or_(
+                    # Non-paid: filter by billing month (competência)
+                    and_(
+                        FinancialTransaction.payment_status != PaymentStatus.PAGO,
+                        FinancialTransaction.reference_month == reference_month,
+                    ),
+                    # Paid with paid_date: filter by payment month (caixa)
+                    and_(
+                        FinancialTransaction.payment_status == PaymentStatus.PAGO,
+                        FinancialTransaction.paid_date.is_not(None),
+                        func.extract('year', FinancialTransaction.paid_date) == reference_month.year,
+                        func.extract('month', FinancialTransaction.paid_date) == reference_month.month,
+                    ),
+                    # Paid without paid_date: fallback to billing month
+                    and_(
+                        FinancialTransaction.payment_status == PaymentStatus.PAGO,
+                        FinancialTransaction.paid_date.is_(None),
+                        FinancialTransaction.reference_month == reference_month,
+                    ),
+                )
+            )
 
         if due_date_from:
             conditions.append(FinancialTransaction.due_date >= due_date_from)
@@ -125,7 +146,28 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
             conditions.append(FinancialTransaction.payment_status == status)
 
         if reference_month:
-            conditions.append(FinancialTransaction.reference_month == reference_month)
+            conditions.append(
+                or_(
+                    # Non-paid: filter by billing month (competência)
+                    and_(
+                        FinancialTransaction.payment_status != PaymentStatus.PAGO,
+                        FinancialTransaction.reference_month == reference_month,
+                    ),
+                    # Paid with paid_date: filter by payment month (caixa)
+                    and_(
+                        FinancialTransaction.payment_status == PaymentStatus.PAGO,
+                        FinancialTransaction.paid_date.is_not(None),
+                        func.extract('year', FinancialTransaction.paid_date) == reference_month.year,
+                        func.extract('month', FinancialTransaction.paid_date) == reference_month.month,
+                    ),
+                    # Paid without paid_date: fallback to billing month
+                    and_(
+                        FinancialTransaction.payment_status == PaymentStatus.PAGO,
+                        FinancialTransaction.paid_date.is_(None),
+                        FinancialTransaction.reference_month == reference_month,
+                    ),
+                )
+            )
 
         if due_date_from:
             conditions.append(FinancialTransaction.due_date >= due_date_from)
@@ -272,7 +314,23 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
         ]
 
         if reference_month:
-            conditions.append(FinancialTransaction.reference_month == reference_month)
+            if status == PaymentStatus.PAGO:
+                # For paid totals: use payment month (caixa basis)
+                conditions.append(
+                    or_(
+                        and_(
+                            FinancialTransaction.paid_date.is_not(None),
+                            func.extract('year', FinancialTransaction.paid_date) == reference_month.year,
+                            func.extract('month', FinancialTransaction.paid_date) == reference_month.month,
+                        ),
+                        and_(
+                            FinancialTransaction.paid_date.is_(None),
+                            FinancialTransaction.reference_month == reference_month,
+                        ),
+                    )
+                )
+            else:
+                conditions.append(FinancialTransaction.reference_month == reference_month)
 
         if client_id:
             conditions.append(FinancialTransaction.client_id == client_id)
