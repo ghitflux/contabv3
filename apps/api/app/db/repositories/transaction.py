@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models.client import Client
-from app.db.models.finance import FinancialTransaction, PaymentStatus
+from app.db.models.finance import FinancialTransaction, PaymentStatus, TransactionType
 from app.db.repositories.base import BaseRepository
 
 
@@ -263,8 +263,9 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
         status: PaymentStatus,
         reference_month: Optional[date] = None,
         client_id: Optional[UUID] = None,
+        transaction_type: Optional[TransactionType] = None,
     ) -> Decimal:
-        """Get total amount by payment status."""
+        """Get total amount by payment status, optionally filtered by transaction type."""
         conditions = [
             FinancialTransaction.payment_status == status,
             FinancialTransaction.deleted_at.is_(None),
@@ -275,6 +276,9 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
 
         if client_id:
             conditions.append(FinancialTransaction.client_id == client_id)
+
+        if transaction_type:
+            conditions.append(FinancialTransaction.transaction_type == transaction_type)
 
         stmt = (
             select(func.sum(FinancialTransaction.amount))
@@ -288,7 +292,7 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
         start_month: date,
         end_month: date,
     ) -> Sequence[tuple[date, Decimal]]:
-        """Get revenue grouped by month for a period."""
+        """Get revenue (RECEITA only) grouped by month for a period."""
         stmt = (
             select(
                 FinancialTransaction.reference_month,
@@ -299,6 +303,7 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
                     FinancialTransaction.reference_month >= start_month,
                     FinancialTransaction.reference_month <= end_month,
                     FinancialTransaction.payment_status == PaymentStatus.PAGO,
+                    FinancialTransaction.transaction_type == TransactionType.RECEITA,
                     FinancialTransaction.deleted_at.is_(None),
                 )
             )

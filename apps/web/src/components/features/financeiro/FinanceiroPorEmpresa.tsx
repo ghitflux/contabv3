@@ -50,6 +50,7 @@ import { TransactionTrashModal } from './TransactionTrashModal';
 import { ConfirmBaixaLancamentoDialog } from './ConfirmBaixaLancamentoDialog';
 import { ConfirmDeleteLancamentoDialog } from './ConfirmDeleteLancamentoDialog';
 import { normalizeAmountForRequest } from '@/lib/finance/amount';
+import { formatLocalDate } from '@/lib/finance/date';
 
 interface ClientTransaction {
   id: string;
@@ -373,12 +374,13 @@ export function FinanceiroPorEmpresa({
   const transactionFilters = useMemo(
     () => ({
       client_id: selectedClient || undefined,
-      due_date_from: startDate,
-      due_date_to: endDate,
+      ...(monthFilter
+        ? { reference_month: monthFilter }
+        : { due_date_from: startDate, due_date_to: endDate }),
       page: 1,
       size: 100,
     }),
-    [selectedClient, startDate, endDate]
+    [selectedClient, monthFilter, startDate, endDate]
   );
 
   const { transactions, refresh, createTransaction, updateTransaction, deleteTransaction } =
@@ -899,7 +901,7 @@ export function FinanceiroPorEmpresa({
                   {panelTransactions.map((transaction) => (
                     <TableRow key={transaction.id}>
                       <TableCell>
-                        {new Date(transaction.due_date).toLocaleDateString('pt-BR')}
+                        {formatLocalDate(transaction.due_date)}
                       </TableCell>
                       <TableCell>{transaction.description}</TableCell>
                       <TableCell className="text-right font-semibold">
@@ -1054,7 +1056,7 @@ export function FinanceiroPorEmpresa({
               >
                 {paginatedDisplayTransactions.map((transaction) => (
                   <TableRow key={transaction.id}>
-                    <TableCell>{new Date(transaction.date).toLocaleDateString('pt-BR')}</TableCell>
+                    <TableCell>{formatLocalDate(transaction.date)}</TableCell>
                     <TableCell>
                       {transaction.type === TransactionType.RECEITA ? 'Entrada' : 'Saída'}
                     </TableCell>
@@ -1317,8 +1319,9 @@ export function FinanceiroPorEmpresa({
         onOpenChange={setIsTrashModalOpen}
         filters={{
           client_id: selectedClient || undefined,
-          due_date_from: startDate,
-          due_date_to: endDate,
+          ...(monthFilter
+            ? { reference_month: monthFilter }
+            : { due_date_from: startDate, due_date_to: endDate }),
         }}
         title="Lixeira por Empresa"
         onRestored={async () => {

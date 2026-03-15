@@ -61,6 +61,7 @@ import { TransactionTrashModal } from './TransactionTrashModal';
 import { ConfirmBaixaLancamentoDialog } from './ConfirmBaixaLancamentoDialog';
 import { ConfirmDeleteLancamentoDialog } from './ConfirmDeleteLancamentoDialog';
 import { normalizeAmountForRequest } from '@/lib/finance/amount';
+import { formatLocalDate } from '@/lib/finance/date';
 
 type DisplayTransactionType = 'Entrada' | 'Saída';
 
@@ -1134,7 +1135,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                   {panelTransactions.map((transaction) => (
                     <TableRow key={transaction.id}>
                       <TableCell>
-                        {new Date(transaction.raw.due_date).toLocaleDateString('pt-BR')}
+                        {formatLocalDate(transaction.raw.due_date)}
                       </TableCell>
                       <TableCell>{transaction.history}</TableCell>
                       <TableCell className="text-right font-semibold">
@@ -1246,7 +1247,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                         <TableCell>{transaction.cliente}</TableCell>
                         <TableCell>{transaction.cnpj}</TableCell>
                         <TableCell>
-                          {new Date(transaction.dueDate).toLocaleDateString('pt-BR')}
+                          {formatLocalDate(transaction.dueDate)}
                         </TableCell>
                         <TableCell className="text-right font-semibold">
                           {formatCurrency(transaction.amount)}
@@ -1259,7 +1260,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                         </TableCell>
                         <TableCell>
                           {transaction.paidDate
-                            ? new Date(transaction.paidDate).toLocaleDateString('pt-BR')
+                            ? formatLocalDate(transaction.paidDate)
                             : '-'}
                         </TableCell>
                       </TableRow>
@@ -1366,9 +1367,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                           <TableCell>{client.client_name}</TableCell>
                           <TableCell>{client.client_cnpj ?? '-'}</TableCell>
                           <TableCell>
-                            {new Date(
-                              client.due_date ?? feesPreview?.reference_month ?? selectedReferenceMonth
-                            ).toLocaleDateString('pt-BR')}
+                            {formatLocalDate(client.due_date ?? feesPreview?.reference_month ?? selectedReferenceMonth)}
                           </TableCell>
                           <TableCell>{getPreviewEntryLabel(client)}</TableCell>
                           <TableCell className="text-right font-semibold">
@@ -1685,7 +1684,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                         aria-label={`Selecionar lançamento ${transaction.history}`}
                       />
                     </TableCell>
-                    <TableCell>{new Date(transaction.date).toLocaleDateString('pt-BR')}</TableCell>
+                    <TableCell>{formatLocalDate(transaction.date)}</TableCell>
                     <TableCell>{transaction.type}</TableCell>
                     <TableCell>{transaction.bank || '-'}</TableCell>
                     <TableCell>

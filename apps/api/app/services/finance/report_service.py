@@ -37,16 +37,18 @@ class FinancialReportService:
         else:
             previous_month_start = date(current_month_start.year, current_month_start.month - 1, 1)
 
-        # Current month revenue (paid transactions)
+        # Current month revenue (paid RECEITA transactions only)
         total_receita_mes_atual = await self.transaction_repo.get_total_by_status(
             status=PaymentStatus.PAGO,
             reference_month=current_month_start,
+            transaction_type=TransactionType.RECEITA,
         )
 
-        # Previous month revenue
+        # Previous month revenue (paid RECEITA transactions only)
         total_receita_mes_anterior = await self.transaction_repo.get_total_by_status(
             status=PaymentStatus.PAGO,
             reference_month=previous_month_start,
+            transaction_type=TransactionType.RECEITA,
         )
 
         # Calculate growth percentage
@@ -84,7 +86,7 @@ class FinancialReportService:
             "receita_crescimento_percentual": receita_crescimento_percentual,
             "total_pendente": float(total_pendente),
             "total_atrasado": float(total_atrasado),
-            "total_pago_mes_atual": float(total_receita_mes_atual),
+            "total_pago_mes_atual": float(total_receita_mes_atual),  # total RECEITA paga no mês atual (coincide com total_receita_mes_atual pois ambos filtram PAGO+RECEITA+mês)
             "count_pendente": count_pendente,
             "count_atrasado": count_atrasado,
             "count_pago_mes_atual": count_pago_mes_atual,

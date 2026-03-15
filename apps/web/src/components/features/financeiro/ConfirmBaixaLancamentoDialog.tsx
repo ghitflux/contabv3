@@ -10,6 +10,7 @@ import {
 } from '@/heroui';
 import { BadgeCheck, CalendarDays, CircleDollarSign, ReceiptText } from 'lucide-react';
 import { Transaction, TransactionType } from '@/types/finance';
+import { formatLocalDate } from '@/lib/finance/date';
 
 interface ConfirmBaixaLancamentoDialogProps {
   isOpen: boolean;
@@ -25,12 +26,7 @@ const formatCurrency = (value: number) =>
     currency: 'BRL',
   }).format(value);
 
-const formatDate = (value?: string | null) => {
-  if (!value) return '-';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '-';
-  return parsed.toLocaleDateString('pt-BR');
-};
+const formatDate = formatLocalDate;
 
 const getTypeLabel = (type: TransactionType) =>
   type === TransactionType.RECEITA ? 'Contas a Receber' : 'Contas a Pagar';
