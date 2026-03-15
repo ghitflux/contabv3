@@ -25,7 +25,7 @@ import {
   Textarea,
   useDisclosure,
 } from '@/heroui';
-import { Download, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Download, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { clientsApi } from '@/lib/api/endpoints/clients';
 import { useTransactions } from '@/hooks/useTransactions';
 import type { Client, ClientListItem } from '@/types/client';
@@ -97,6 +97,7 @@ export function FinanceiroPorEmpresa({
   const [transactionsPage, setTransactionsPage] = useState(1);
   const [activePendingPanel, setActivePendingPanel] = useState<'all' | 'receber' | 'pagar'>('all');
   const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [bankForm, setBankForm] = useState({
     name: '',
     account_number: '',
@@ -447,10 +448,26 @@ export function FinanceiroPorEmpresa({
     setTransactionsPage(1);
   }, [selectedClient, startDate, endDate]);
 
+  useEffect(() => {
+    setTransactionsPage(1);
+  }, [searchQuery]);
+
+  const filteredDisplayTransactions = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return displayTransactions;
+    return displayTransactions.filter((t) => {
+      return (
+        t.history.toLowerCase().includes(query) ||
+        (t.raw.category ?? '').toLowerCase().includes(query) ||
+        (t.raw.notes ?? '').toLowerCase().includes(query)
+      );
+    });
+  }, [displayTransactions, searchQuery]);
+
   const totalTransactionPages = useMemo(() => {
-    if (displayTransactions.length === 0) return 1;
-    return Math.ceil(displayTransactions.length / LANCAMENTOS_PER_PAGE);
-  }, [displayTransactions.length]);
+    if (filteredDisplayTransactions.length === 0) return 1;
+    return Math.ceil(filteredDisplayTransactions.length / LANCAMENTOS_PER_PAGE);
+  }, [filteredDisplayTransactions.length]);
 
   useEffect(() => {
     if (transactionsPage > totalTransactionPages) {
@@ -461,17 +478,17 @@ export function FinanceiroPorEmpresa({
   const paginatedDisplayTransactions = useMemo(() => {
     const startIndex = (transactionsPage - 1) * LANCAMENTOS_PER_PAGE;
     const endIndex = startIndex + LANCAMENTOS_PER_PAGE;
-    return displayTransactions.slice(startIndex, endIndex);
-  }, [displayTransactions, transactionsPage]);
+    return filteredDisplayTransactions.slice(startIndex, endIndex);
+  }, [filteredDisplayTransactions, transactionsPage]);
 
   const transactionRangeLabel = useMemo(() => {
-    if (displayTransactions.length === 0) {
+    if (filteredDisplayTransactions.length === 0) {
       return 'Mostrando 0 de 0';
     }
     const startIndex = (transactionsPage - 1) * LANCAMENTOS_PER_PAGE + 1;
-    const endIndex = Math.min(transactionsPage * LANCAMENTOS_PER_PAGE, displayTransactions.length);
-    return `Mostrando ${startIndex}-${endIndex} de ${displayTransactions.length}`;
-  }, [displayTransactions.length, transactionsPage]);
+    const endIndex = Math.min(transactionsPage * LANCAMENTOS_PER_PAGE, filteredDisplayTransactions.length);
+    return `Mostrando ${startIndex}-${endIndex} de ${filteredDisplayTransactions.length}`;
+  }, [filteredDisplayTransactions.length, transactionsPage]);
 
   const filteredClients = useMemo(() => {
     const query = clientSearch.trim().toLowerCase();
@@ -785,6 +802,19 @@ export function FinanceiroPorEmpresa({
                 size="sm"
                 className="w-full sm:w-[180px]"
                 aria-label="Data final"
+              />
+            </div>
+            <div className="space-y-2 flex-1 min-w-[200px]">
+              <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Buscar</label>
+              <Input
+                size="sm"
+                placeholder="Descrição, categoria ou histórico..."
+                value={searchQuery}
+                onValueChange={setSearchQuery}
+                startContent={<Search className="h-4 w-4 text-default-400" />}
+                isClearable
+                onClear={() => setSearchQuery('')}
+                aria-label="Buscar lançamentos"
               />
             </div>
             <div className="md:ml-auto flex flex-wrap gap-2">

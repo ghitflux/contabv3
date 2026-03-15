@@ -5,6 +5,7 @@ import {
   Card,
   CardBody,
   CardHeader,
+  Input,
   Select,
   SelectItem,
   Spinner,
@@ -15,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/heroui";
+import { Search } from "lucide-react";
 import { auditLogsApi } from "@/lib/api/endpoints/audit-logs";
 import { clientsApi } from "@/lib/api/endpoints/clients";
 import type { AuditLog } from "@/types/audit";
@@ -48,6 +50,7 @@ export function FinanceiroHistoricoClientes() {
   const [selectedClientId, setSelectedClientId] = useState<string>("all");
   const [selectedEntity, setSelectedEntity] = useState<string>("all");
   const [selectedOrigin, setSelectedOrigin] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
   useEffect(() => {
     if (!user) return;
@@ -196,9 +199,21 @@ export function FinanceiroHistoricoClientes() {
   };
 
   const visibleLogs = useMemo(() => {
-    if (selectedOrigin === "all") return logs;
-    return logs.filter((log) => getOriginKey(log) === selectedOrigin);
-  }, [logs, selectedOrigin]);
+    let filtered = selectedOrigin === "all" ? logs : logs.filter((log) => getOriginKey(log) === selectedOrigin);
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return filtered;
+    return filtered.filter((log) => {
+      const details = [
+        ACTION_LABELS[log.action] ?? log.action,
+        String(log.payload?.description ?? ""),
+        String(log.payload?.summary ?? ""),
+        log.user_name ?? "",
+        log.user_email ?? "",
+        (() => { const c = clientMap.get(log.payload?.client_id as string); return c ? (c.nome_fantasia || c.razao_social) : ""; })(),
+      ].join(" ").toLowerCase();
+      return details.includes(query);
+    });
+  }, [logs, selectedOrigin, searchQuery, clientMap]);
 
   return (
     <Card className="border border-default-200/50 dark:border-default-100/20">
@@ -212,6 +227,17 @@ export function FinanceiroHistoricoClientes() {
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Input
+            size="sm"
+            placeholder="Buscar por ação, descrição ou usuário..."
+            value={searchQuery}
+            onValueChange={setSearchQuery}
+            startContent={<Search className="h-4 w-4 text-default-400" />}
+            isClearable
+            onClear={() => setSearchQuery("")}
+            className="w-full sm:min-w-[240px] sm:w-auto"
+            aria-label="Buscar no histórico"
+          />
           {!isCliente && (
             <Select
               label="Cliente"

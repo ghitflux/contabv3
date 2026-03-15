@@ -32,6 +32,7 @@ import {
   Pencil,
   Plus,
   Repeat,
+  Search,
   Trash2,
   TrendingDown,
   TrendingUp,
@@ -191,6 +192,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   const [selectedFeeClientIds, setSelectedFeeClientIds] = useState<string[]>([]);
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([]);
   const [isBulkUpdatingTransactions, setIsBulkUpdatingTransactions] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [editForm, setEditForm] = useState({
     description: '',
     amount: '',
@@ -363,10 +365,26 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     setTransactionsPage(1);
   }, [startDate, endDate, OFFICE_CLIENT_ID]);
 
+  useEffect(() => {
+    setTransactionsPage(1);
+  }, [searchQuery]);
+
+  const filteredDisplayTransactions = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return displayTransactions;
+    return displayTransactions.filter((t) => {
+      return (
+        t.history.toLowerCase().includes(query) ||
+        (t.observation ?? '').toLowerCase().includes(query) ||
+        (t.raw.category ?? '').toLowerCase().includes(query)
+      );
+    });
+  }, [displayTransactions, searchQuery]);
+
   const totalTransactionPages = useMemo(() => {
-    if (displayTransactions.length === 0) return 1;
-    return Math.ceil(displayTransactions.length / TRANSACTIONS_PER_PAGE);
-  }, [displayTransactions.length]);
+    if (filteredDisplayTransactions.length === 0) return 1;
+    return Math.ceil(filteredDisplayTransactions.length / TRANSACTIONS_PER_PAGE);
+  }, [filteredDisplayTransactions.length]);
 
   useEffect(() => {
     if (transactionsPage > totalTransactionPages) {
@@ -375,24 +393,24 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   }, [transactionsPage, totalTransactionPages]);
 
   useEffect(() => {
-    const validIds = new Set(displayTransactions.map((transaction) => transaction.id));
+    const validIds = new Set(filteredDisplayTransactions.map((transaction) => transaction.id));
     setSelectedTransactionIds((prev) => prev.filter((id) => validIds.has(id)));
-  }, [displayTransactions]);
+  }, [filteredDisplayTransactions]);
 
   const paginatedDisplayTransactions = useMemo(() => {
     const startIndex = (transactionsPage - 1) * TRANSACTIONS_PER_PAGE;
     const endIndex = startIndex + TRANSACTIONS_PER_PAGE;
-    return displayTransactions.slice(startIndex, endIndex);
-  }, [displayTransactions, transactionsPage]);
+    return filteredDisplayTransactions.slice(startIndex, endIndex);
+  }, [filteredDisplayTransactions, transactionsPage]);
 
   const transactionRangeLabel = useMemo(() => {
-    if (displayTransactions.length === 0) {
+    if (filteredDisplayTransactions.length === 0) {
       return 'Mostrando 0 de 0';
     }
     const startIndex = (transactionsPage - 1) * TRANSACTIONS_PER_PAGE + 1;
-    const endIndex = Math.min(transactionsPage * TRANSACTIONS_PER_PAGE, displayTransactions.length);
-    return `Mostrando ${startIndex}-${endIndex} de ${displayTransactions.length}`;
-  }, [displayTransactions.length, transactionsPage]);
+    const endIndex = Math.min(transactionsPage * TRANSACTIONS_PER_PAGE, filteredDisplayTransactions.length);
+    return `Mostrando ${startIndex}-${endIndex} de ${filteredDisplayTransactions.length}`;
+  }, [filteredDisplayTransactions.length, transactionsPage]);
 
   // Calcula receita e despesa com TODAS as transações (não apenas pagas)
   const receita = useMemo(
@@ -439,21 +457,21 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
 
   const panelTransactions = useMemo<DisplayTransaction[]>(() => {
     if (activePendingPanel === 'receber') {
-      return displayTransactions.filter(
+      return filteredDisplayTransactions.filter(
         (transaction) =>
           transaction.raw.transaction_type === TransactionType.RECEITA &&
           isDuePaymentStatus(transaction.status)
       );
     }
     if (activePendingPanel === 'pagar') {
-      return displayTransactions.filter(
+      return filteredDisplayTransactions.filter(
         (transaction) =>
           transaction.raw.transaction_type === TransactionType.DESPESA &&
           isDuePaymentStatus(transaction.status)
       );
     }
     return [];
-  }, [activePendingPanel, displayTransactions]);
+  }, [activePendingPanel, filteredDisplayTransactions]);
 
   const honorariosTransactions = useMemo(() => {
     return transactions
@@ -1035,6 +1053,19 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
             size="sm"
             className="w-full sm:w-[180px]"
             aria-label="Data final"
+          />
+        </div>
+        <div className="space-y-2 flex-1 min-w-[200px]">
+          <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Buscar</label>
+          <Input
+            size="sm"
+            placeholder="Descrição, categoria ou histórico..."
+            value={searchQuery}
+            onValueChange={setSearchQuery}
+            startContent={<Search className="h-4 w-4 text-default-400" />}
+            isClearable
+            onClear={() => setSearchQuery('')}
+            aria-label="Buscar lançamentos"
           />
         </div>
         <div className="md:ml-auto flex flex-wrap gap-2">
