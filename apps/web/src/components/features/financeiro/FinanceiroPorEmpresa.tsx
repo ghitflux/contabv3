@@ -958,8 +958,8 @@ export function FinanceiroPorEmpresa({
                       <TableCell className="text-right font-semibold">
                         {formatCurrency(transaction.amount)}
                       </TableCell>
-                      {isAdminOrFunc && (
-                        <TableCell className="text-right">
+                      <TableCell className={isAdminOrFunc ? 'text-right' : 'hidden w-0 p-0'}>
+                        {isAdminOrFunc && (
                           <Button
                             size="sm"
                             color="primary"
@@ -968,8 +968,8 @@ export function FinanceiroPorEmpresa({
                           >
                             Baixa
                           </Button>
-                        </TableCell>
-                      )}
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
