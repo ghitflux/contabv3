@@ -946,7 +946,7 @@ export function FinanceiroPorEmpresa({
                   <TableColumn>Vencimento</TableColumn>
                   <TableColumn>Descrição</TableColumn>
                   <TableColumn className="text-right">Valor</TableColumn>
-                  {isAdminOrFunc && <TableColumn className="text-right">Ação</TableColumn>}
+                  <TableColumn className={isAdminOrFunc ? 'text-right' : 'hidden w-0 p-0'}>{isAdminOrFunc ? 'Ação' : ''}</TableColumn>
                 </TableHeader>
                 <TableBody emptyContent="Nenhum lançamento pendente encontrado">
                   {panelTransactions.map((transaction) => (
