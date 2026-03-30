@@ -215,13 +215,6 @@ class ClientService:
             )
 
     @staticmethod
-    def _get_first_day_of_next_month(reference_date: date) -> date:
-        """Return the first day of the month after reference_date."""
-        if reference_date.month == 12:
-            return date(reference_date.year + 1, 1, 1)
-        return date(reference_date.year, reference_date.month + 1, 1)
-
-    @staticmethod
     def _resolve_due_date_for_client(reference_month: date, due_day: int | None) -> date:
         """Resolve due date in month using client day, clamped by month length."""
         safe_due_day = due_day if isinstance(due_day, int) else 1
@@ -239,10 +232,12 @@ class ClientService:
         """
         Create recurring honorários transactions for a client (if eligible).
 
-        Transactions are created for next month with due_date based on client due day.
+        Transactions are created for the current month with due_date based on client due day.
         """
         if not (
-            client.gerar_lancamentos_honorarios
+            client.deleted_at is None
+            and client.status != ClientStatus.INATIVO
+            and client.gerar_lancamentos_honorarios
             and client.honorarios_mensais
             and float(client.honorarios_mensais) > 0
         ):
@@ -253,7 +248,7 @@ class ClientService:
         from app.core.config import settings
         from app.db.models.finance import FinancialTransaction, PaymentStatus, TransactionType
 
-        reference_month = self._get_first_day_of_next_month(date.today())
+        reference_month = date.today().replace(day=1)
         due_date = self._resolve_due_date_for_client(reference_month, client.dia_vencimento)
         reference_label = reference_month.strftime("%m/%Y")
         creator_id = created_by_id or client.user_id

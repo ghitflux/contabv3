@@ -2,7 +2,7 @@
  * Finance API endpoints
  */
 
-import { apiClient } from '../client';
+import { apiClient, resolveApiBaseUrl } from '../client';
 import type {
   Transaction,
   TransactionCreate,
@@ -13,7 +13,6 @@ import type {
   TransactionCancel,
   MonthlyFeeGenerateRequest,
   MonthlyFeeGenerateResponse,
-  MonthlyFeePreviewResponse,
   FinancialDashboardKPIs,
   ReceivablesAgingReport,
   RevenueByPeriodReport,
@@ -51,6 +50,11 @@ const normalizePositiveInt = (value: number | undefined, fallback: number, max: 
 const normalizeCurrencyNumber = (value: number): number => {
   if (!Number.isFinite(value)) return value;
   return Math.round((value + Number.EPSILON) * 100) / 100;
+};
+
+const resolveDownloadFileName = (contentDisposition: string | null, fallback: string) => {
+  const headerFileNameMatch = contentDisposition?.match(/filename=\"?([^\";]+)\"?/i);
+  return headerFileNameMatch?.[1] || fallback;
 };
 
 export const financeApi = {
@@ -126,20 +130,37 @@ export const financeApi = {
     return apiClient.post<MonthlyFeeGenerateResponse>('/finance/fees/generate', data);
   },
 
-  async previewMonthlyFees(params: {
-    reference_month: string;
-    client_id?: string;
-    client_ids?: string[];
-  }): Promise<MonthlyFeePreviewResponse> {
-    const query = new URLSearchParams();
-    query.append('reference_month', params.reference_month);
-    if (params.client_id) query.append('client_id', params.client_id);
-    if (params.client_ids?.length) {
-      params.client_ids.forEach((clientId) => {
-        query.append('client_ids', clientId);
-      });
+  async uploadTransactionAttachment(transactionId: string, file: File): Promise<Transaction> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiClient.upload<Transaction>(`/finance/${transactionId}/attachment`, formData);
+  },
+
+  async downloadTransactionAttachment(
+    transactionId: string
+  ): Promise<{ blob: Blob; filename: string }> {
+    const apiBase = resolveApiBaseUrl();
+    const url = `${apiBase}/finance/${transactionId}/attachment`;
+
+    const accessToken =
+      apiClient.getAccessToken() ||
+      (typeof window !== 'undefined' ? localStorage.getItem('access_token') : null);
+
+    const response = await fetch(url, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+    });
+
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`Failed to download attachment (${response.status}) ${detail}`);
     }
-    return apiClient.get<MonthlyFeePreviewResponse>(`/finance/fees/preview?${query.toString()}`);
+
+    const filename = resolveDownloadFileName(
+      response.headers.get('content-disposition'),
+      `attachment_${transactionId}`
+    );
+
+    return { blob: await response.blob(), filename };
   },
 
   async getDashboardKPIs(): Promise<FinancialDashboardKPIs> {

@@ -1,8 +1,8 @@
 'use client';
 
-import { Button, Popover, PopoverContent, PopoverTrigger, Select, SelectItem } from '@/heroui';
-import { CalendarIcon, XIcon } from '@/lib/icons';
-import { useMemo, useState } from 'react';
+import { Button, Popover, PopoverContent, PopoverTrigger } from '@/heroui';
+import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, XIcon } from '@/lib/icons';
+import { useEffect, useMemo, useState } from 'react';
 
 interface MonthYearPickerProps {
   value?: string | null;
@@ -27,20 +27,20 @@ export function MonthYearPicker({
 }: MonthYearPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const now = useMemo(() => new Date(), []);
-  const monthNames = useMemo(
+  const monthOptions = useMemo(
     () => [
-      'janeiro',
-      'fevereiro',
-      'março',
-      'abril',
-      'maio',
-      'junho',
-      'julho',
-      'agosto',
-      'setembro',
-      'outubro',
-      'novembro',
-      'dezembro',
+      { label: 'Jan', fullLabel: 'janeiro', value: 1 },
+      { label: 'Fev', fullLabel: 'fevereiro', value: 2 },
+      { label: 'Mar', fullLabel: 'março', value: 3 },
+      { label: 'Abr', fullLabel: 'abril', value: 4 },
+      { label: 'Mai', fullLabel: 'maio', value: 5 },
+      { label: 'Jun', fullLabel: 'junho', value: 6 },
+      { label: 'Jul', fullLabel: 'julho', value: 7 },
+      { label: 'Ago', fullLabel: 'agosto', value: 8 },
+      { label: 'Set', fullLabel: 'setembro', value: 9 },
+      { label: 'Out', fullLabel: 'outubro', value: 10 },
+      { label: 'Nov', fullLabel: 'novembro', value: 11 },
+      { label: 'Dez', fullLabel: 'dezembro', value: 12 },
     ],
     []
   );
@@ -57,21 +57,16 @@ export function MonthYearPicker({
     } catch {
       return null;
     }
-  }, [monthNames, value]);
+  }, [value]);
 
   const selectedYear = parsedValue?.year ?? now.getFullYear();
   const selectedMonth = parsedValue?.month ?? now.getMonth() + 1;
+  const [viewYear, setViewYear] = useState(selectedYear);
 
-  const years = useMemo(() => {
-    const pivot = selectedYear || now.getFullYear();
-    const start = pivot - 5;
-    const end = pivot + 5;
-    const list: number[] = [];
-    for (let year = start; year <= end; year += 1) {
-      list.push(year);
-    }
-    return list;
-  }, [now, selectedYear]);
+  useEffect(() => {
+    if (!isOpen) return;
+    setViewYear(selectedYear);
+  }, [isOpen, selectedYear]);
 
   const displayValue = useMemo(() => {
     if (!value) return '';
@@ -80,11 +75,22 @@ export function MonthYearPicker({
       if (!year || !month) return value;
       const monthIndex = parseInt(month, 10) - 1;
       if (monthIndex < 0 || monthIndex > 11) return value;
-      return `${monthNames[monthIndex]} de ${year}`;
+      return `${monthOptions[monthIndex]?.fullLabel ?? value} de ${year}`;
     } catch {
       return value;
     }
-  }, [value]);
+  }, [monthOptions, value]);
+
+  const currentMonthValue = useMemo(() => {
+    const monthValue = String(now.getMonth() + 1).padStart(2, '0');
+    return `${now.getFullYear()}-${monthValue}`;
+  }, [now]);
+
+  const handleMonthSelect = (month: number) => {
+    const monthValue = String(month).padStart(2, '0');
+    onChange(`${viewYear}-${monthValue}`);
+    setIsOpen(false);
+  };
 
   return (
     <div className={className}>
@@ -121,7 +127,10 @@ export function MonthYearPicker({
               variant="light"
               radius="sm"
               className="absolute right-1 top-1/2 -translate-y-1/2 z-10"
-              onPress={() => onChange('')}
+              onPress={() => {
+                onChange('');
+                setIsOpen(false);
+              }}
               aria-label="Limpar mês selecionado"
             >
               <XIcon className="h-4 w-4" />
@@ -130,43 +139,65 @@ export function MonthYearPicker({
         </div>
         <PopoverContent className="w-[320px] p-4">
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <Select
-                label="Mês"
-                selectedKeys={[String(selectedMonth)]}
-                onSelectionChange={(keys) => {
-                  const selected = Array.from(keys)[0] as string | undefined;
-                  if (!selected) return;
-                  const month = parseInt(selected, 10);
-                  if (!month) return;
-                  const monthValue = String(month).padStart(2, '0');
-                  onChange(`${selectedYear}-${monthValue}`);
-                }}
+            <div className="flex items-center justify-between gap-2">
+              <Button
+                isIconOnly
                 size="sm"
+                variant="light"
+                onPress={() => setViewYear((prev) => prev - 1)}
+                aria-label="Ano anterior"
               >
-                {monthNames.map((name, index) => (
-                  <SelectItem key={String(index + 1)}>{name}</SelectItem>
-                ))}
-              </Select>
-              <Select
-                label="Ano"
-                selectedKeys={[String(selectedYear)]}
-                onSelectionChange={(keys) => {
-                  const selected = Array.from(keys)[0] as string | undefined;
-                  if (!selected) return;
-                  const year = parseInt(selected, 10);
-                  if (!year) return;
-                  const monthValue = String(selectedMonth).padStart(2, '0');
-                  onChange(`${year}-${monthValue}`);
-                }}
+                <ChevronLeftIcon className="h-4 w-4" />
+              </Button>
+              <div className="text-sm font-semibold text-foreground">{viewYear}</div>
+              <Button
+                isIconOnly
                 size="sm"
+                variant="light"
+                onPress={() => setViewYear((prev) => prev + 1)}
+                aria-label="Próximo ano"
               >
-                {years.map((year) => (
-                  <SelectItem key={String(year)}>{year}</SelectItem>
-                ))}
-              </Select>
+                <ChevronRightIcon className="h-4 w-4" />
+              </Button>
             </div>
-            <div className="flex justify-end">
+            <div className="grid grid-cols-3 gap-2">
+              {monthOptions.map((monthOption) => {
+                const isSelected =
+                  monthOption.value === selectedMonth && viewYear === selectedYear && Boolean(value);
+                const isCurrentMonth =
+                  monthOption.value === now.getMonth() + 1 && viewYear === now.getFullYear();
+
+                return (
+                  <Button
+                    key={monthOption.value}
+                    size="sm"
+                    variant={isSelected ? 'solid' : 'bordered'}
+                    color={isSelected ? 'primary' : 'default'}
+                    className={
+                      !isSelected && isCurrentMonth
+                        ? 'border-primary/50 text-primary'
+                        : undefined
+                    }
+                    onPress={() => handleMonthSelect(monthOption.value)}
+                    aria-label={`Selecionar ${monthOption.fullLabel} de ${viewYear}`}
+                  >
+                    {monthOption.label}
+                  </Button>
+                );
+              })}
+            </div>
+            <div className="flex justify-between gap-2">
+              <Button
+                size="sm"
+                variant="flat"
+                onPress={() => {
+                  setViewYear(now.getFullYear());
+                  onChange(currentMonthValue);
+                  setIsOpen(false);
+                }}
+              >
+                Mês atual
+              </Button>
               <Button size="sm" variant="light" onPress={() => setIsOpen(false)}>
                 Fechar
               </Button>

@@ -141,27 +141,6 @@ export interface MonthlyFeeGenerateResponse {
   message: string;
 }
 
-export interface MonthlyFeePreviewClient {
-  client_id: string;
-  client_name: string;
-  client_cnpj?: string;
-  amount: number;
-  due_date?: string;
-  would_create_client_entry?: boolean;
-  would_create_office_entry?: boolean;
-}
-
-export interface MonthlyFeePreviewResponse {
-  total_clients: number;
-  would_generate_count: number;
-  would_generate_entries?: number;
-  total_amount: number;
-  reference_month: string;
-  due_date_strategy?: string;
-  clients: MonthlyFeePreviewClient[];
-  has_more: boolean;
-}
-
 // Financial KPIs
 export interface FinancialDashboardKPIs {
   // Revenue

@@ -1,7 +1,7 @@
 """
 Finance automation background tasks.
 
-- Generates monthly honorários (fees) on day 01
+- Generates missing monthly honorários up to the current month
 - Marks overdue receivables and keeps Client.status in sync
 """
 
@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 import re
-from calendar import monthrange
 from datetime import date
 from uuid import UUID
 
@@ -21,6 +20,7 @@ from app.core.database import db_manager
 from app.db.models.client import Client, ClientStatus
 from app.db.models.finance import FinancialTransaction, PaymentStatus, TransactionType
 from app.db.models.user import User, UserRole
+from app.services.finance.fee_generator_service import FeeGeneratorService
 
 logger = logging.getLogger(__name__)
 
@@ -28,20 +28,6 @@ _CLIENT_ID_IN_NOTES_RE = re.compile(
     r"Cliente:\s*([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})",
     re.IGNORECASE,
 )
-
-def _get_first_day_of_next_month(reference_date: date) -> date:
-    """Return the first day of the month after reference_date."""
-    if reference_date.month == 12:
-        return date(reference_date.year + 1, 1, 1)
-    return date(reference_date.year, reference_date.month + 1, 1)
-
-
-def _resolve_due_date_for_client(reference_month: date, due_day: int | None) -> date:
-    """Resolve due date in reference month from client due day with clamping."""
-    safe_due_day = due_day if isinstance(due_day, int) else 1
-    safe_due_day = max(1, min(31, safe_due_day))
-    last_day = monthrange(reference_month.year, reference_month.month)[1]
-    return reference_month.replace(day=min(safe_due_day, last_day))
 
 
 async def _resolve_system_user_id(session: AsyncSession) -> UUID:
@@ -75,130 +61,13 @@ async def generate_monthly_honorarios(
     created_by_id: UUID,
 ) -> dict:
     """
-    Generate honorários transactions for all eligible clients for a given month.
-
-    Creates:
-    - Client ledger: DESPESA (accounts payable) entry
-    - Office ledger (if configured): RECEITA (accounts receivable) entry
+    Generate missing honorários transactions through the given month.
     """
-    if reference_month.day != 1:
-        reference_month = reference_month.replace(day=1)
-
-    # Honorários use next-month reference, with due date based on each client profile.
-    reference_month = _get_first_day_of_next_month(reference_month)
-    office_client_id = settings.OFFICE_CLIENT_ID
-    reference_label = reference_month.strftime("%m/%Y")
-
-    stmt = (
-        select(Client)
-        .where(
-            Client.deleted_at.is_(None),
-            Client.status != ClientStatus.INATIVO,
-            Client.gerar_lancamentos_honorarios.is_(True),
-        )
-        .order_by(Client.razao_social)
+    service = FeeGeneratorService(session)
+    return await service.generate_missing_monthly_fees(
+        reference_month=reference_month,
+        generated_by_id=created_by_id,
     )
-    result = await session.execute(stmt)
-    clients = result.scalars().all()
-
-    total_clients = len(clients)
-    created_client_entries = 0
-    created_office_entries = 0
-    skipped = 0
-    errors = 0
-
-    for client in clients:
-        try:
-            if not client.honorarios_mensais or float(client.honorarios_mensais) <= 0:
-                skipped += 1
-                continue
-
-            due_date = _resolve_due_date_for_client(reference_month, client.dia_vencimento)
-
-            # Client: accounts payable (expense)
-            client_description = f"Honorários do escritório - {reference_label}"
-            existing_client_tx = await session.scalar(
-                select(FinancialTransaction.id)
-                .where(
-                    FinancialTransaction.client_id == client.id,
-                    FinancialTransaction.reference_month == reference_month,
-                    FinancialTransaction.transaction_type == TransactionType.DESPESA,
-                    FinancialTransaction.description == client_description,
-                    FinancialTransaction.deleted_at.is_(None),
-                )
-                .limit(1)
-            )
-            if not existing_client_tx:
-                session.add(
-                    FinancialTransaction(
-                        client_id=client.id,
-                        obligation_id=None,
-                        transaction_type=TransactionType.DESPESA,
-                        amount=client.honorarios_mensais,
-                        payment_method=None,
-                        payment_status=PaymentStatus.PENDENTE,
-                        due_date=due_date,
-                        paid_date=None,
-                        reference_month=reference_month,
-                        description=client_description,
-                        category=None,
-                        notes=f"Gerado automaticamente em {date.today().strftime('%d/%m/%Y')} (honorários recorrentes).",
-                        invoice_number=None,
-                        created_by_id=created_by_id,
-                    )
-                )
-                created_client_entries += 1
-
-            # Office: accounts receivable (revenue)
-            if office_client_id:
-                office_description = f"Honorários - {client.razao_social} ({client.cnpj}) - {reference_label}"
-                existing_office_tx = await session.scalar(
-                    select(FinancialTransaction.id)
-                    .where(
-                        FinancialTransaction.client_id == office_client_id,
-                        FinancialTransaction.reference_month == reference_month,
-                        FinancialTransaction.transaction_type == TransactionType.RECEITA,
-                        FinancialTransaction.description == office_description,
-                        FinancialTransaction.deleted_at.is_(None),
-                    )
-                    .limit(1)
-                )
-                if not existing_office_tx:
-                    session.add(
-                        FinancialTransaction(
-                            client_id=office_client_id,
-                            obligation_id=None,
-                            transaction_type=TransactionType.RECEITA,
-                            amount=client.honorarios_mensais,
-                            payment_method=None,
-                            payment_status=PaymentStatus.PENDENTE,
-                            due_date=due_date,
-                            paid_date=None,
-                            reference_month=reference_month,
-                            description=office_description,
-                            category=None,
-                            notes=(
-                                f"Gerado automaticamente em {date.today().strftime('%d/%m/%Y')} (honorários recorrentes). "
-                                f"Cliente: {client.id}"
-                            ),
-                            invoice_number=None,
-                            created_by_id=created_by_id,
-                        )
-                    )
-                    created_office_entries += 1
-        except Exception as e:
-            logger.error(f"Error generating honorários for client {client.id}: {e}", exc_info=True)
-            errors += 1
-
-    return {
-        "success": True,
-        "reference_month": reference_month.isoformat(),
-        "total_clients": total_clients,
-        "created_client_entries": created_client_entries,
-        "created_office_entries": created_office_entries,
-        "skipped": skipped,
-        "errors": errors,
-    }
 
 
 async def sync_clients_pending_status(session: AsyncSession, *, today: date | None = None) -> dict:
@@ -261,6 +130,7 @@ async def sync_clients_pending_status(session: AsyncSession, *, today: date | No
                 Client.deleted_at.is_(None),
                 Client.status != ClientStatus.INATIVO,
                 Client.gerar_lancamentos_honorarios.is_(True),
+                Client.honorarios_mensais > 0,
             )
             .values(status=ClientStatus.INADIMPLENTE)
         )
@@ -273,6 +143,7 @@ async def sync_clients_pending_status(session: AsyncSession, *, today: date | No
             Client.status == ClientStatus.INADIMPLENTE,
             Client.status != ClientStatus.INATIVO,
             Client.gerar_lancamentos_honorarios.is_(True),
+            Client.honorarios_mensais > 0,
             Client.id.notin_(overdue_client_ids) if overdue_client_ids else True,
         )
         .values(status=ClientStatus.ATIVO)
@@ -294,7 +165,7 @@ async def run_finance_daily_automation() -> dict:
     Runs daily:
     - Marks overdue receivables
     - Syncs Client.status (inadimplente/ativo)
-    - Generates next month's honorários on day 01
+    - Completes missing honorários up to the current month
     """
     today = date.today()
     reference_month = today.replace(day=1)
@@ -317,14 +188,12 @@ async def run_finance_daily_automation() -> dict:
         # 2) Sync client status based on overdue honorários
         sync_summary = await sync_clients_pending_status(session, today=today)
 
-        # 3) Generate next month's honorários only on day 01
-        generation_summary = None
-        if today.day == 1:
-            generation_summary = await generate_monthly_honorarios(
-                session,
-                reference_month=reference_month,
-                created_by_id=system_user_id,
-            )
+        # 3) Ensure current month honorários exist, backfilling missed months when needed
+        generation_summary = await generate_monthly_honorarios(
+            session,
+            reference_month=reference_month,
+            created_by_id=system_user_id,
+        )
 
         await session.commit()
 

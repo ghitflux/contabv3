@@ -1,15 +1,19 @@
 """Financial transactions API routes."""
 
-from datetime import date
+import os
+from datetime import date, datetime
+from pathlib import Path
 from typing import Annotated, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_active_user, get_db
-from app.db.models.finance import PaymentStatus
+from app.core.config import settings
 from app.db.models.audit import AuditLog
+from app.db.models.finance import PaymentStatus
 from app.db.models.user import User, UserRole
 from app.db.repositories.client import ClientRepository
 from app.db.repositories.transaction import TransactionRepository
@@ -23,10 +27,21 @@ from app.schemas.finance import (
     TransactionResponse,
     TransactionUpdate,
 )
-from fastapi.responses import Response
 from app.services.finance import FeeGeneratorService, FinancialReportService, InvoiceService, TransactionService
 
 router = APIRouter()
+FINANCE_UPLOAD_DIR = Path(settings.UPLOAD_DIR) / "finance"
+FINANCE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+ALLOWED_FINANCE_ATTACHMENT_EXTENSIONS = {
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".xls",
+    ".xlsx",
+    ".jpg",
+    ".jpeg",
+    ".png",
+}
 
 
 def _enum_value(value):
@@ -58,6 +73,7 @@ def _transaction_snapshot(transaction) -> dict:
         "category": transaction.category,
         "notes": transaction.notes,
         "invoice_number": transaction.invoice_number,
+        "receipt_url": transaction.receipt_url,
     }
 
 
@@ -69,6 +85,30 @@ def _build_transaction_payload(transaction, summary: str, extra: Optional[dict] 
     if extra:
         payload.update(extra)
     return payload
+
+
+async def _get_client_profile(db: AsyncSession, current_user: User):
+    client_repo = ClientRepository(db)
+    client = await client_repo.get_by_user_id(current_user.id, current_user.email)
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Client profile not found",
+        )
+    return client
+
+
+def _assert_client_can_manage_transaction(transaction, current_user: User) -> None:
+    if transaction.created_by_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Clients can only manage transactions they created",
+        )
+
+
+def _resolve_finance_attachment_path(receipt_url: str) -> Path:
+    normalized = receipt_url.replace("\\", "/").lstrip("/")
+    return FINANCE_UPLOAD_DIR / normalized
 
 
 @router.get("", response_model=TransactionListResponse)
@@ -95,13 +135,7 @@ async def list_transactions(
 
     # If user is client, override client_id filter
     if current_user.role == UserRole.CLIENTE:
-        client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
-        if not client:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Client profile not found",
-            )
+        client = await _get_client_profile(db, current_user)
         client_id = client.id
 
     if deleted_only:
@@ -173,9 +207,8 @@ async def get_transaction(
 
     # Check access: clients can only see their own
     if current_user.role == UserRole.CLIENTE:
-        client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
-        if not client or transaction.client_id != client.id:
+        client = await _get_client_profile(db, current_user)
+        if transaction.client_id != client.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to access this transaction",
@@ -266,12 +299,20 @@ async def update_transaction(
 
     # Check access: clients can only update their own transactions
     if current_user.role == UserRole.CLIENTE:
-        client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
-        if not client or before_transaction.client_id != client.id:
+        client = await _get_client_profile(db, current_user)
+        if before_transaction.client_id != client.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to update this transaction",
+            )
+        _assert_client_can_manage_transaction(before_transaction, current_user)
+        if any(
+            value is not None
+            for value in [data.payment_status, data.payment_method, data.paid_date]
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only admin/func can change payment status or baixa details",
             )
 
     try:
@@ -429,13 +470,13 @@ async def delete_transaction(
 
     # Check access: clients can only delete their own transactions
     if current_user.role == UserRole.CLIENTE:
-        client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
-        if not client or transaction.client_id != client.id:
+        client = await _get_client_profile(db, current_user)
+        if transaction.client_id != client.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to delete this transaction",
             )
+        _assert_client_can_manage_transaction(transaction, current_user)
 
     transaction_snapshot = _transaction_snapshot(transaction)
 
@@ -494,18 +535,13 @@ async def restore_transaction(
         )
 
     if current_user.role == UserRole.CLIENTE:
-        client_repo = ClientRepository(db)
-        client = await client_repo.get_by_user_id(current_user.id, current_user.email)
-        if not client:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Client profile not found",
-            )
+        client = await _get_client_profile(db, current_user)
         if deleted_transaction.client_id != client.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to restore this transaction",
             )
+        _assert_client_can_manage_transaction(deleted_transaction, current_user)
 
     restored = await service.restore_transaction(transaction_id)
 
@@ -541,6 +577,141 @@ async def restore_transaction(
     return transaction
 
 
+@router.post("/{transaction_id}/attachment", response_model=TransactionResponse)
+async def upload_transaction_attachment(
+    transaction_id: UUID,
+    request: Request,
+    file: Annotated[UploadFile, File(...)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Upload or replace the attachment for a transaction."""
+    repo = TransactionRepository(db)
+    transaction = await repo.get_by_id_with_relations(transaction_id, include_deleted=True)
+    if not transaction or transaction.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transaction not found",
+        )
+
+    if current_user.role == UserRole.CLIENTE:
+        client = await _get_client_profile(db, current_user)
+        if transaction.client_id != client.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to upload attachments for this transaction",
+            )
+        _assert_client_can_manage_transaction(transaction, current_user)
+    elif current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to upload attachments",
+        )
+
+    original_filename = file.filename or "anexo"
+    extension = Path(original_filename).suffix.lower()
+    if extension not in ALLOWED_FINANCE_ATTACHMENT_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "File type not allowed. Allowed: "
+                f"{', '.join(sorted(ALLOWED_FINANCE_ATTACHMENT_EXTENSIONS))}"
+            ),
+        )
+
+    contents = await file.read()
+    if len(contents) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File too large. Maximum size: {settings.MAX_UPLOAD_SIZE} bytes",
+        )
+
+    upload_dir = FINANCE_UPLOAD_DIR / str(transaction.id)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_base_name = Path(original_filename).name.replace(" ", "_")
+    filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid4())[:8]}_{safe_base_name}"
+    file_path = upload_dir / filename
+
+    if transaction.receipt_url:
+        previous_path = _resolve_finance_attachment_path(transaction.receipt_url)
+        if previous_path.exists() and previous_path.is_file():
+            previous_path.unlink()
+
+    with open(file_path, "wb") as buffer:
+        buffer.write(contents)
+
+    transaction.receipt_url = str(file_path.relative_to(FINANCE_UPLOAD_DIR)).replace("\\", "/")
+
+    audit_log = AuditLog(
+        user_id=current_user.id,
+        action="transaction.attachment_upload",
+        entity="financial_transaction",
+        entity_id=str(transaction.id),
+        payload=_build_transaction_payload(
+            transaction,
+            summary=f"Anexo enviado para lançamento: {transaction.description}",
+            extra={
+                "attachment_filename": original_filename,
+                "attachment_size": len(contents),
+            },
+        ),
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    db.add(audit_log)
+    await db.commit()
+    await db.refresh(transaction)
+    return transaction
+
+
+@router.get("/{transaction_id}/attachment")
+async def download_transaction_attachment(
+    transaction_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Download the attachment linked to a transaction."""
+    repo = TransactionRepository(db)
+    transaction = await repo.get_by_id_with_relations(transaction_id, include_deleted=True)
+    if not transaction or transaction.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transaction not found",
+        )
+    if not transaction.receipt_url:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attachment not found",
+        )
+
+    if current_user.role == UserRole.CLIENTE:
+        client = await _get_client_profile(db, current_user)
+        if transaction.client_id != client.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to access this attachment",
+            )
+    elif current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access attachments",
+        )
+
+    file_path = _resolve_finance_attachment_path(transaction.receipt_url)
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attachment file not found",
+        )
+
+    return FileResponse(
+        path=file_path,
+        media_type="application/octet-stream",
+        filename=os.path.basename(file_path),
+    )
+
+
 @router.post("/fees/generate", response_model=MonthlyFeeGenerateResponse)
 async def generate_monthly_fees(
     data: MonthlyFeeGenerateRequest,
@@ -567,41 +738,6 @@ async def generate_monthly_fees(
             client_id=data.client_id,
             client_ids=data.client_ids,
             generated_by_id=current_user.id,
-        )
-        return result
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
-
-
-@router.get("/fees/preview", response_model=dict)
-async def preview_monthly_fees(
-    db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    reference_month: date = Query(...),
-    client_id: Optional[UUID] = Query(None),
-    client_ids: Optional[list[UUID]] = Query(None),
-):
-    """
-    Preview monthly fees generation without creating them.
-
-    Admin/Func only.
-    """
-    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin/func can preview fees",
-        )
-
-    service = FeeGeneratorService(db)
-
-    try:
-        result = await service.get_generation_preview(
-            reference_month=reference_month,
-            client_id=client_id,
-            client_ids=client_ids,
         )
         return result
     except ValueError as e:

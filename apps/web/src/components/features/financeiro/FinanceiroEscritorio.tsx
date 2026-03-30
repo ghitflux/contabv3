@@ -44,8 +44,6 @@ import {
   PaymentMethod,
   PaymentStatus,
   TransactionType,
-  type MonthlyFeePreviewClient,
-  type MonthlyFeePreviewResponse,
   type Transaction,
   type TransactionUpdate,
   isDuePaymentStatus,
@@ -53,16 +51,22 @@ import {
   getPaymentMethodLabel,
 } from '@/types/finance';
 import { toast } from '@/lib/toast';
-import { formatISO, subMonths } from 'date-fns';
+import { formatISO } from 'date-fns';
 import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
 import { bankAccountsApi } from '@/lib/api/endpoints/bank-accounts';
-import { financeApi } from '@/lib/api/endpoints/finance';
 import type { BankAccount } from '@/types/bank-account';
 import { TransactionTrashModal } from './TransactionTrashModal';
 import { ConfirmBaixaLancamentoDialog } from './ConfirmBaixaLancamentoDialog';
 import { ConfirmDeleteLancamentoDialog } from './ConfirmDeleteLancamentoDialog';
 import { normalizeAmountForRequest } from '@/lib/finance/amount';
 import { formatLocalDate } from '@/lib/finance/date';
+import {
+  buildDateRangeForMonth,
+  getCurrentMonthFilterState,
+  getCurrentMonthValue,
+  getPreviousMonthFilterState,
+  normalizeMonthFilterFromRange,
+} from '@/lib/finance/month-filter';
 
 type DisplayTransactionType = 'Entrada' | 'Saída';
 
@@ -141,9 +145,10 @@ const formatMonthYear = (value: string) => {
 };
 
 export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => void }) {
-  const [monthFilter, setMonthFilter] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const initialMonthFilterState = getCurrentMonthFilterState();
+  const [monthFilter, setMonthFilter] = useState(initialMonthFilterState.monthFilter);
+  const [startDate, setStartDate] = useState(initialMonthFilterState.startDate);
+  const [endDate, setEndDate] = useState(initialMonthFilterState.endDate);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [isLoadingBanks, setIsLoadingBanks] = useState(false);
   const [standardHistories, setStandardHistories] = useState<StandardHistory[]>(initialHistories);
@@ -185,11 +190,6 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   const [isConfirmingBaixa, setIsConfirmingBaixa] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [transactionsPage, setTransactionsPage] = useState(1);
-  const [isGeneratingFees, setIsGeneratingFees] = useState(false);
-  const [feesPreview, setFeesPreview] = useState<MonthlyFeePreviewResponse | null>(null);
-  const [isLoadingFeesPreview, setIsLoadingFeesPreview] = useState(false);
-  const [isFeeGenerationModalOpen, setIsFeeGenerationModalOpen] = useState(false);
-  const [selectedFeeClientIds, setSelectedFeeClientIds] = useState<string[]>([]);
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([]);
   const [isBulkUpdatingTransactions, setIsBulkUpdatingTransactions] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -507,21 +507,6 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     [honorariosTransactions]
   );
 
-  const previewClients = feesPreview?.clients ?? [];
-  const selectedFeeClientSet = useMemo(() => new Set(selectedFeeClientIds), [selectedFeeClientIds]);
-  const selectedPreviewClients = useMemo(
-    () => previewClients.filter((client) => selectedFeeClientSet.has(client.client_id)),
-    [previewClients, selectedFeeClientSet]
-  );
-  const selectedPreviewTotal = useMemo(
-    () => selectedPreviewClients.reduce((sum, client) => sum + client.amount, 0),
-    [selectedPreviewClients]
-  );
-  const isAllPreviewClientsSelected = useMemo(
-    () => previewClients.length > 0 && selectedFeeClientIds.length === previewClients.length,
-    [previewClients.length, selectedFeeClientIds.length]
-  );
-
   const selectedTransactionSet = useMemo(
     () => new Set(selectedTransactionIds),
     [selectedTransactionIds]
@@ -534,60 +519,37 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   );
 
   const setRangeForMonth = (monthValue: string) => {
-    if (!monthValue) return;
-    const [year, month] = monthValue.split('-');
-    if (!year || !month) return;
-    const parsedYear = Number.parseInt(year, 10);
-    const parsedMonth = Number.parseInt(month, 10);
-    if (!parsedYear || !parsedMonth) return;
-    const monthLabel = String(parsedMonth).padStart(2, '0');
-    const lastDay = new Date(parsedYear, parsedMonth, 0).getDate();
-    setStartDate(`${parsedYear}-${monthLabel}-01`);
-    setEndDate(`${parsedYear}-${monthLabel}-${String(lastDay).padStart(2, '0')}`);
+    const { startDate: nextStartDate, endDate: nextEndDate } = buildDateRangeForMonth(monthValue);
+    setStartDate(nextStartDate);
+    setEndDate(nextEndDate);
   };
 
   const setCurrentMonthRange = () => {
-    const currentMonth = formatISO(new Date(), { representation: 'date' }).slice(0, 7);
-    setMonthFilter(currentMonth);
-    setRangeForMonth(currentMonth);
+    const currentMonthFilterState = getCurrentMonthFilterState();
+    setMonthFilter(currentMonthFilterState.monthFilter);
+    setStartDate(currentMonthFilterState.startDate);
+    setEndDate(currentMonthFilterState.endDate);
   };
 
   const setPreviousMonthRange = () => {
-    const previous = subMonths(new Date(), 1);
-    const previousMonth = formatISO(previous, { representation: 'date' }).slice(0, 7);
-    setMonthFilter(previousMonth);
-    setRangeForMonth(previousMonth);
+    const previousMonthFilterState = getPreviousMonthFilterState();
+    setMonthFilter(previousMonthFilterState.monthFilter);
+    setStartDate(previousMonthFilterState.startDate);
+    setEndDate(previousMonthFilterState.endDate);
   };
 
   const handleMonthChange = (value: string) => {
     setMonthFilter(value);
-    if (value) {
-      setRangeForMonth(value);
+    if (!value) {
+      setStartDate('');
+      setEndDate('');
+      return;
     }
-  };
-
-  const normalizeMonthFilter = (startValue: string, endValue: string) => {
-    const [startYear, startMonth, startDay] = startValue.split('-');
-    const [endYear, endMonth, endDay] = endValue.split('-');
-    if (!startYear || !startMonth || !startDay || !endYear || !endMonth || !endDay) {
-      return '';
-    }
-    if (startYear !== endYear || startMonth !== endMonth) {
-      return '';
-    }
-    if (startDay !== '01') {
-      return '';
-    }
-    const lastDay = new Date(Number(startYear), Number(startMonth), 0).getDate();
-    const expectedEndDay = String(lastDay).padStart(2, '0');
-    if (endDay !== expectedEndDay) {
-      return '';
-    }
-    return `${startYear}-${startMonth}`;
+    setRangeForMonth(value);
   };
 
   useEffect(() => {
-    const normalized = normalizeMonthFilter(startDate, endDate);
+    const normalized = normalizeMonthFilterFromRange(startDate, endDate);
     if (normalized && normalized !== monthFilter) {
       setMonthFilter(normalized);
     }
@@ -595,37 +557,6 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       setMonthFilter('');
     }
   }, [startDate, endDate, monthFilter]);
-
-  const selectedReferenceMonth = useMemo(() => {
-    if (monthFilter) {
-      return `${monthFilter}-01`;
-    }
-    const today = formatISO(new Date(), { representation: 'date' });
-    return `${today.slice(0, 7)}-01`;
-  }, [monthFilter]);
-
-  const loadFeesPreview = useCallback(async (referenceMonth: string) => {
-    setIsLoadingFeesPreview(true);
-    try {
-      const preview = await financeApi.previewMonthlyFees({ reference_month: referenceMonth });
-      setFeesPreview(preview);
-      setSelectedFeeClientIds(preview.clients.map((client) => client.client_id));
-    } catch (error) {
-      console.error('Erro ao carregar prévia de honorários', error);
-      setFeesPreview(null);
-      setSelectedFeeClientIds([]);
-    } finally {
-      setIsLoadingFeesPreview(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!OFFICE_CLIENT_ID) {
-      setFeesPreview(null);
-      return;
-    }
-    void loadFeesPreview(selectedReferenceMonth);
-  }, [loadFeesPreview, selectedReferenceMonth, OFFICE_CLIENT_ID]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -639,83 +570,6 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       window.removeEventListener('finance:transactions-updated', handleRefresh);
     };
   }, [refresh]);
-
-  const openFeesGenerationModal = async () => {
-    if (!OFFICE_CLIENT_ID) {
-      toast.error(
-        'Configure o ID do escritório (NEXT_PUBLIC_OFFICE_CLIENT_ID) para gerar honorários.'
-      );
-      return;
-    }
-
-    setIsFeeGenerationModalOpen(true);
-    await loadFeesPreview(selectedReferenceMonth);
-  };
-
-  const togglePreviewClientSelection = (clientId: string, checked: boolean) => {
-    setSelectedFeeClientIds((prev) => {
-      if (checked) {
-        if (prev.includes(clientId)) return prev;
-        return [...prev, clientId];
-      }
-      return prev.filter((id) => id !== clientId);
-    });
-  };
-
-  const toggleAllPreviewClients = (checked: boolean) => {
-    if (!checked) {
-      setSelectedFeeClientIds([]);
-      return;
-    }
-    setSelectedFeeClientIds(previewClients.map((client) => client.client_id));
-  };
-
-  const getPreviewEntryLabel = (client: MonthlyFeePreviewClient) => {
-    if (client.would_create_client_entry && client.would_create_office_entry) {
-      return 'Cliente + Escritório';
-    }
-    if (client.would_create_client_entry) return 'Cliente';
-    if (client.would_create_office_entry) return 'Escritório';
-    return '-';
-  };
-
-  const handleGenerateMissingFees = async () => {
-    if (!OFFICE_CLIENT_ID) {
-      toast.error(
-        'Configure o ID do escritório (NEXT_PUBLIC_OFFICE_CLIENT_ID) para gerar honorários.'
-      );
-      return;
-    }
-    if (!selectedFeeClientIds.length) {
-      toast.error('Selecione pelo menos um cliente na prévia para gerar os honorários.');
-      return;
-    }
-
-    try {
-      setIsGeneratingFees(true);
-      const result = await financeApi.generateMonthlyFees({
-        reference_month: selectedReferenceMonth,
-        client_ids: selectedFeeClientIds,
-      });
-      toast.success(result.message);
-      await refresh();
-      await loadFeesPreview(selectedReferenceMonth);
-      setIsFeeGenerationModalOpen(false);
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
-      }
-    } catch (error) {
-      console.error('Erro ao gerar honorários pendentes', error);
-      const errorDetail = (error as { data?: { detail?: string } })?.data?.detail;
-      const message =
-        typeof errorDetail === 'string'
-          ? errorDetail
-          : 'Não foi possível gerar os honorários pendentes.';
-      toast.error(message);
-    } finally {
-      setIsGeneratingFees(false);
-    }
-  };
 
   const toggleTransactionSelection = (transactionId: string, checked: boolean) => {
     setSelectedTransactionIds((prev) => {
@@ -1202,43 +1056,14 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
               lançamento(s)
             </p>
           </div>
-          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-            <Button
-              variant="bordered"
-              onPress={() => void loadFeesPreview(selectedReferenceMonth)}
-              isLoading={isLoadingFeesPreview}
-              isDisabled={!OFFICE_CLIENT_ID}
-              className="w-full sm:w-auto"
-            >
-              Atualizar prévia
-            </Button>
-            <Button
-              color="primary"
-              onPress={() => void openFeesGenerationModal()}
-              isDisabled={!OFFICE_CLIENT_ID}
-              className="w-full sm:w-auto"
-            >
-              Prévia para gerar
-            </Button>
-          </div>
         </CardHeader>
         <CardBody className="space-y-4">
           <div className="rounded-lg border border-default-200/60 bg-default-50/60 px-3 py-2 text-sm text-default-600">
             <p>
-              Referência da geração:{' '}
-              <strong>{formatMonthYear(feesPreview?.reference_month ?? selectedReferenceMonth)}</strong>
+              Competência automática: <strong>{formatMonthYear(`${monthFilter || getCurrentMonthValue()}-01`)}</strong>
             </p>
-            <p>Regra: honorários gerados no dia 01 e vencimento conforme cadastro do cliente.</p>
-            {isLoadingFeesPreview ? (
-              <p>Validando clientes sem honorários gerados...</p>
-            ) : feesPreview ? (
-              <p>
-                {feesPreview.would_generate_count} cliente(s) com pendência de honorários e{' '}
-                {feesPreview.would_generate_entries ?? 0} lançamento(s) a gerar.
-              </p>
-            ) : (
-              <p>Não foi possível carregar a prévia de geração.</p>
-            )}
+            <p>Regra: honorários são gerados automaticamente para o mês atual e ficam pendentes até baixa manual do admin.</p>
+            <p>A prévia foi removida; a automação diária completa competências em atraso sem avançar para o mês seguinte.</p>
           </div>
           <Accordion variant="splitted">
             <AccordionItem
@@ -1303,132 +1128,6 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
           </Accordion>
         </CardBody>
       </Card>
-
-      <Modal
-        isOpen={isFeeGenerationModalOpen}
-        onOpenChange={setIsFeeGenerationModalOpen}
-        size="5xl"
-        scrollBehavior="inside"
-      >
-        <ModalContent>
-          {(onClose) => (
-            <>
-              <ModalHeader>Prévia da geração de honorários</ModalHeader>
-              <ModalBody className="space-y-4">
-                <div className="rounded-lg border border-default-200/60 bg-default-50/60 px-3 py-2 text-sm text-default-600">
-                  <p>
-                    Competência alvo:{' '}
-                    <strong>
-                      {formatMonthYear(feesPreview?.reference_month ?? selectedReferenceMonth)}
-                    </strong>
-                  </p>
-                  <p>Vencimento aplicado: dia de vencimento definido no cadastro de cada cliente.</p>
-                  <p>
-                    Selecionados: <strong>{selectedFeeClientIds.length}</strong> cliente(s), total{' '}
-                    <strong>{formatCurrency(selectedPreviewTotal)}</strong>.
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    variant="bordered"
-                    onPress={() => toggleAllPreviewClients(true)}
-                    isDisabled={previewClients.length === 0}
-                  >
-                    Marcar todos
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="bordered"
-                    onPress={() => toggleAllPreviewClients(false)}
-                    isDisabled={selectedFeeClientIds.length === 0}
-                  >
-                    Desmarcar todos
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="light"
-                    onPress={() => void loadFeesPreview(selectedReferenceMonth)}
-                    isLoading={isLoadingFeesPreview}
-                  >
-                    Recarregar prévia
-                  </Button>
-                </div>
-
-                <div className="w-full overflow-x-auto">
-                  <Table
-                    aria-label="Prévia detalhada de honorários por cliente"
-                    removeWrapper
-                    className="min-w-[900px]"
-                  >
-                    <TableHeader>
-                      <TableColumn className="w-16">
-                        <Checkbox
-                          isSelected={isAllPreviewClientsSelected}
-                          onValueChange={toggleAllPreviewClients}
-                          aria-label="Selecionar todos os clientes da prévia"
-                          isDisabled={previewClients.length === 0}
-                        />
-                      </TableColumn>
-                      <TableColumn>Cliente</TableColumn>
-                      <TableColumn>CNPJ</TableColumn>
-                      <TableColumn>Vencimento</TableColumn>
-                      <TableColumn>Lançamentos</TableColumn>
-                      <TableColumn className="text-right">Valor</TableColumn>
-                    </TableHeader>
-                    <TableBody
-                      emptyContent={
-                        isLoadingFeesPreview
-                          ? 'Carregando prévia de geração...'
-                          : 'Nenhum cliente com honorários pendentes para esta competência.'
-                      }
-                    >
-                      {previewClients.map((client) => (
-                        <TableRow key={client.client_id}>
-                          <TableCell>
-                            <Checkbox
-                              isSelected={selectedFeeClientSet.has(client.client_id)}
-                              onValueChange={(checked) =>
-                                togglePreviewClientSelection(client.client_id, checked)
-                              }
-                              aria-label={`Selecionar ${client.client_name}`}
-                            />
-                          </TableCell>
-                          <TableCell>{client.client_name}</TableCell>
-                          <TableCell>{client.client_cnpj ?? '-'}</TableCell>
-                          <TableCell>
-                            {formatLocalDate(client.due_date ?? feesPreview?.reference_month ?? selectedReferenceMonth)}
-                          </TableCell>
-                          <TableCell>{getPreviewEntryLabel(client)}</TableCell>
-                          <TableCell className="text-right font-semibold">
-                            {formatCurrency(client.amount)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </ModalBody>
-              <ModalFooter>
-                <Button variant="light" onPress={onClose} isDisabled={isGeneratingFees}>
-                  Cancelar
-                </Button>
-                <Button
-                  color="primary"
-                  onPress={handleGenerateMissingFees}
-                  isLoading={isGeneratingFees}
-                  isDisabled={selectedFeeClientIds.length === 0 || isLoadingFeesPreview}
-                >
-                  {isGeneratingFees
-                    ? 'Gerando...'
-                    : `Gerar ${selectedFeeClientIds.length} selecionado(s)`}
-                </Button>
-              </ModalFooter>
-            </>
-          )}
-        </ModalContent>
-      </Modal>
 
       <Card className="border border-default-200/50 dark:border-default-100/20">
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

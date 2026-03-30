@@ -27,6 +27,7 @@ import {
 } from '@/heroui';
 import { Download, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { clientsApi } from '@/lib/api/endpoints/clients';
+import { financeApi } from '@/lib/api/endpoints/finance';
 import { useTransactions } from '@/hooks/useTransactions';
 import type { Client, ClientListItem } from '@/types/client';
 import {
@@ -41,7 +42,6 @@ import {
 import { toast } from '@/lib/toast';
 import { DatePickerField } from '@/components/ui/DatePickerField';
 import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
-import { formatISO, subMonths } from 'date-fns';
 import { useAuth } from '@/hooks/auth/AuthContext';
 import { NovoLancamentoModal, type NovoLancamentoData } from './NovoLancamentoModal';
 import { bankAccountsApi } from '@/lib/api/endpoints/bank-accounts';
@@ -49,8 +49,15 @@ import type { BankAccount } from '@/types/bank-account';
 import { TransactionTrashModal } from './TransactionTrashModal';
 import { ConfirmBaixaLancamentoDialog } from './ConfirmBaixaLancamentoDialog';
 import { ConfirmDeleteLancamentoDialog } from './ConfirmDeleteLancamentoDialog';
+import { ClienteLancamentoRapidoCard } from './ClienteLancamentoRapidoCard';
 import { normalizeAmountForRequest } from '@/lib/finance/amount';
 import { formatLocalDate } from '@/lib/finance/date';
+import {
+  buildDateRangeForMonth,
+  getCurrentMonthFilterState,
+  getPreviousMonthFilterState,
+  normalizeMonthFilterFromRange,
+} from '@/lib/finance/month-filter';
 
 interface ClientTransaction {
   id: string;
@@ -71,6 +78,7 @@ export function FinanceiroPorEmpresa({
   onExportLivro?: (client?: ClientListItem | null) => void;
   onClientChange?: (client: ClientListItem | null) => void;
 }) {
+  const initialMonthFilterState = getCurrentMonthFilterState();
   const { user } = useAuth();
   const { isOpen, onOpen, onOpenChange } = useDisclosure();
   const isAdminOrFunc = user?.role !== 'cliente';
@@ -79,9 +87,9 @@ export function FinanceiroPorEmpresa({
   const [selectedClient, setSelectedClient] = useState<string>('');
   const [clientDetails, setClientDetails] = useState<Client | null>(null);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
-  const [monthFilter, setMonthFilter] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [monthFilter, setMonthFilter] = useState(initialMonthFilterState.monthFilter);
+  const [startDate, setStartDate] = useState(initialMonthFilterState.startDate);
+  const [endDate, setEndDate] = useState(initialMonthFilterState.endDate);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [isLoadingBanks, setIsLoadingBanks] = useState(false);
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
@@ -172,60 +180,37 @@ export function FinanceiroPorEmpresa({
   }, [selectedClient, clients]);
 
   const setRangeForMonth = (monthValue: string) => {
-    if (!monthValue) return;
-    const [year, month] = monthValue.split('-');
-    if (!year || !month) return;
-    const parsedYear = Number.parseInt(year, 10);
-    const parsedMonth = Number.parseInt(month, 10);
-    if (!parsedYear || !parsedMonth) return;
-    const monthLabel = String(parsedMonth).padStart(2, '0');
-    const lastDay = new Date(parsedYear, parsedMonth, 0).getDate();
-    setStartDate(`${parsedYear}-${monthLabel}-01`);
-    setEndDate(`${parsedYear}-${monthLabel}-${String(lastDay).padStart(2, '0')}`);
+    const { startDate: nextStartDate, endDate: nextEndDate } = buildDateRangeForMonth(monthValue);
+    setStartDate(nextStartDate);
+    setEndDate(nextEndDate);
   };
 
   const handleMonthChange = (value: string) => {
     setMonthFilter(value);
-    if (value) {
-      setRangeForMonth(value);
+    if (!value) {
+      setStartDate('');
+      setEndDate('');
+      return;
     }
+    setRangeForMonth(value);
   };
 
   const setCurrentMonthRange = () => {
-    const currentMonth = formatISO(new Date(), { representation: 'date' }).slice(0, 7);
-    setMonthFilter(currentMonth);
-    setRangeForMonth(currentMonth);
+    const currentMonthFilterState = getCurrentMonthFilterState();
+    setMonthFilter(currentMonthFilterState.monthFilter);
+    setStartDate(currentMonthFilterState.startDate);
+    setEndDate(currentMonthFilterState.endDate);
   };
 
   const setPreviousMonthRange = () => {
-    const previous = subMonths(new Date(), 1);
-    const previousMonth = formatISO(previous, { representation: 'date' }).slice(0, 7);
-    setMonthFilter(previousMonth);
-    setRangeForMonth(previousMonth);
-  };
-
-  const normalizeMonthFilter = (startValue: string, endValue: string) => {
-    const [startYear, startMonth, startDay] = startValue.split('-');
-    const [endYear, endMonth, endDay] = endValue.split('-');
-    if (!startYear || !startMonth || !startDay || !endYear || !endMonth || !endDay) {
-      return '';
-    }
-    if (startYear !== endYear || startMonth !== endMonth) {
-      return '';
-    }
-    if (startDay !== '01') {
-      return '';
-    }
-    const lastDay = new Date(Number(startYear), Number(startMonth), 0).getDate();
-    const expectedEndDay = String(lastDay).padStart(2, '0');
-    if (endDay !== expectedEndDay) {
-      return '';
-    }
-    return `${startYear}-${startMonth}`;
+    const previousMonthFilterState = getPreviousMonthFilterState();
+    setMonthFilter(previousMonthFilterState.monthFilter);
+    setStartDate(previousMonthFilterState.startDate);
+    setEndDate(previousMonthFilterState.endDate);
   };
 
   useEffect(() => {
-    const normalized = normalizeMonthFilter(startDate, endDate);
+    const normalized = normalizeMonthFilterFromRange(startDate, endDate);
     if (normalized && normalized !== monthFilter) {
       setMonthFilter(normalized);
     }
@@ -588,6 +573,10 @@ export function FinanceiroPorEmpresa({
   };
 
   const openEditTransaction = (transaction: Transaction) => {
+    if (!isAdminOrFunc && transaction.created_by_id !== user?.id) {
+      toast.error('Você só pode editar lançamentos criados por você.');
+      return;
+    }
     setEditingTransaction(transaction);
     setEditForm({
       description: transaction.description ?? '',
@@ -690,12 +679,42 @@ export function FinanceiroPorEmpresa({
   };
 
   const requestDeleteTransaction = (transaction: Transaction) => {
+    if (!isAdminOrFunc && transaction.created_by_id !== user?.id) {
+      toast.error('Você só pode excluir lançamentos criados por você.');
+      return;
+    }
     setPendingDeleteTransaction(transaction);
   };
 
   const requestMarkAsPaid = (transaction: Transaction) => {
+    if (!isAdminOrFunc) {
+      toast.error('A baixa de lançamentos é feita somente pelo admin.');
+      return;
+    }
     setPendingBaixaTransaction(transaction);
   };
+
+  const canManageTransaction = useCallback(
+    (transaction: Transaction) => isAdminOrFunc || transaction.created_by_id === user?.id,
+    [isAdminOrFunc, user?.id]
+  );
+
+  const handleDownloadAttachment = useCallback(async (transaction: Transaction) => {
+    try {
+      const { blob, filename } = await financeApi.downloadTransactionAttachment(transaction.id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erro ao baixar anexo do lançamento', error);
+      toast.error('Não foi possível baixar o anexo.');
+    }
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -751,15 +770,17 @@ export function FinanceiroPorEmpresa({
               </Autocomplete>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-              <Button
-                color="primary"
-                variant="solid"
-                startContent={<Plus className="h-4 w-4" />}
-                onPress={onOpen}
-                isDisabled={!selectedClient || isLoadingClients}
-              >
-                Novo Lançamento
-              </Button>
+              {isAdminOrFunc && (
+                <Button
+                  color="primary"
+                  variant="solid"
+                  startContent={<Plus className="h-4 w-4" />}
+                  onPress={onOpen}
+                  isDisabled={!selectedClient || isLoadingClients}
+                >
+                  Novo Lançamento
+                </Button>
+              )}
               <Button
                 color="primary"
                 variant="flat"
@@ -925,7 +946,7 @@ export function FinanceiroPorEmpresa({
                   <TableColumn>Vencimento</TableColumn>
                   <TableColumn>Descrição</TableColumn>
                   <TableColumn className="text-right">Valor</TableColumn>
-                  <TableColumn className="text-right">Ação</TableColumn>
+                  {isAdminOrFunc && <TableColumn className="text-right">Ação</TableColumn>}
                 </TableHeader>
                 <TableBody emptyContent="Nenhum lançamento pendente encontrado">
                   {panelTransactions.map((transaction) => (
@@ -937,16 +958,18 @@ export function FinanceiroPorEmpresa({
                       <TableCell className="text-right font-semibold">
                         {formatCurrency(transaction.amount)}
                       </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          color="primary"
-                          variant="flat"
-                          onPress={() => requestMarkAsPaid(transaction)}
-                        >
-                          Baixa
-                        </Button>
-                      </TableCell>
+                      {isAdminOrFunc && (
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            color="primary"
+                            variant="flat"
+                            onPress={() => requestMarkAsPaid(transaction)}
+                          >
+                            Baixa
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>
@@ -1064,6 +1087,16 @@ export function FinanceiroPorEmpresa({
         </CardBody>
       </Card>
 
+      {selectedClient && (
+        <ClienteLancamentoRapidoCard
+          clientId={selectedClient}
+          bankAccounts={bankAccounts}
+          transactions={transactions}
+          createTransaction={createTransaction}
+          onCreated={refresh}
+        />
+      )}
+
       <Card className="border border-default-200/50 dark:border-default-100/20">
         <CardBody className="space-y-4">
           <h3 className="text-lg font-semibold">Lançamentos</h3>
@@ -1096,7 +1129,18 @@ export function FinanceiroPorEmpresa({
                     </TableCell>
                     <TableCell>{transaction.payment}</TableCell>
                     <TableCell className="text-right space-x-1">
-                      {isDuePaymentStatus(transaction.raw.payment_status) && (
+                      {transaction.raw.receipt_url && (
+                        <Button
+                          size="sm"
+                          variant="light"
+                          isIconOnly
+                          aria-label="Baixar anexo"
+                          onPress={() => void handleDownloadAttachment(transaction.raw)}
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {isAdminOrFunc && isDuePaymentStatus(transaction.raw.payment_status) && (
                         <Button
                           size="sm"
                           variant="flat"
@@ -1106,25 +1150,29 @@ export function FinanceiroPorEmpresa({
                           Baixa
                         </Button>
                       )}
-                      <Button
-                        size="sm"
-                        variant="light"
-                        isIconOnly
-                        aria-label="Editar lançamento"
-                        onPress={() => openEditTransaction(transaction.raw)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="light"
-                        color="danger"
-                        isIconOnly
-                        aria-label="Excluir lançamento"
-                        onPress={() => requestDeleteTransaction(transaction.raw)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {canManageTransaction(transaction.raw) && (
+                        <Button
+                          size="sm"
+                          variant="light"
+                          isIconOnly
+                          aria-label="Editar lançamento"
+                          onPress={() => openEditTransaction(transaction.raw)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {canManageTransaction(transaction.raw) && (
+                        <Button
+                          size="sm"
+                          variant="light"
+                          color="danger"
+                          isIconOnly
+                          aria-label="Excluir lançamento"
+                          onPress={() => requestDeleteTransaction(transaction.raw)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

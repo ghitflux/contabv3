@@ -40,7 +40,6 @@ import {
 import type { ClientListItem } from '@/types/client';
 import { DatePickerField } from '@/components/ui/DatePickerField';
 import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
-import { endOfMonth, formatISO, startOfMonth, subMonths } from 'date-fns';
 import { resolveCategoriaLancamento } from '@/constants/planoDeContas';
 import { NovoLancamentoModal, type NovoLancamentoData } from './NovoLancamentoModal';
 import { clientsApi } from '@/lib/api/endpoints/clients';
@@ -50,6 +49,12 @@ import { ConfirmBaixaLancamentoDialog } from './ConfirmBaixaLancamentoDialog';
 import { ConfirmDeleteLancamentoDialog } from './ConfirmDeleteLancamentoDialog';
 import { PlanoDeContasAutocomplete } from '@/components/ui/PlanoDeContasAutocomplete';
 import { normalizeAmountForRequest } from '@/lib/finance/amount';
+import {
+  buildDateRangeForMonth,
+  getCurrentMonthFilterState,
+  getPreviousMonthFilterState,
+  normalizeMonthFilterFromRange,
+} from '@/lib/finance/month-filter';
 
 type LancamentoTipo = TransactionType;
 type LancamentoStatus = PaymentStatus;
@@ -72,13 +77,14 @@ const LANCAMENTOS_PER_PAGE = 20;
 const MAX_CUSTOM_CATEGORY_LENGTH = 20;
 
 export function FinanceiroLancamentos() {
+  const initialMonthFilterState = getCurrentMonthFilterState();
   const { isOpen, onOpen, onOpenChange } = useDisclosure();
   const [busca, setBusca] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<string>('todos');
   const [filtroStatus, setFiltroStatus] = useState<string>('todos');
-  const [monthFilter, setMonthFilter] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [monthFilter, setMonthFilter] = useState(initialMonthFilterState.monthFilter);
+  const [startDate, setStartDate] = useState(initialMonthFilterState.startDate);
+  const [endDate, setEndDate] = useState(initialMonthFilterState.endDate);
   const [clients, setClients] = useState<ClientListItem[]>([]);
   const [activePendingPanel, setActivePendingPanel] = useState<'all' | 'receber' | 'pagar'>('all');
   const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
@@ -105,13 +111,6 @@ export function FinanceiroLancamentos() {
     invoice_number: '',
   });
 
-  useEffect(() => {
-    const now = new Date();
-    setMonthFilter(formatISO(now, { representation: 'date' }).slice(0, 7));
-    setStartDate(formatISO(startOfMonth(now), { representation: 'date' }));
-    setEndDate(formatISO(endOfMonth(now), { representation: 'date' }));
-  }, []);
-
   const transactionFilters = useMemo(
     () => ({
       due_date_from: startDate,
@@ -123,60 +122,37 @@ export function FinanceiroLancamentos() {
   );
 
   const setRangeForMonth = (monthValue: string) => {
-    if (!monthValue) return;
-    const [year, month] = monthValue.split('-');
-    if (!year || !month) return;
-    const parsedYear = Number.parseInt(year, 10);
-    const parsedMonth = Number.parseInt(month, 10);
-    if (!parsedYear || !parsedMonth) return;
-    const monthLabel = String(parsedMonth).padStart(2, '0');
-    const lastDay = new Date(parsedYear, parsedMonth, 0).getDate();
-    setStartDate(`${parsedYear}-${monthLabel}-01`);
-    setEndDate(`${parsedYear}-${monthLabel}-${String(lastDay).padStart(2, '0')}`);
+    const { startDate: nextStartDate, endDate: nextEndDate } = buildDateRangeForMonth(monthValue);
+    setStartDate(nextStartDate);
+    setEndDate(nextEndDate);
   };
 
   const handleMonthChange = (value: string) => {
     setMonthFilter(value);
-    if (value) {
-      setRangeForMonth(value);
+    if (!value) {
+      setStartDate('');
+      setEndDate('');
+      return;
     }
+    setRangeForMonth(value);
   };
 
   const setCurrentMonthRange = () => {
-    const currentMonth = formatISO(new Date(), { representation: 'date' }).slice(0, 7);
-    setMonthFilter(currentMonth);
-    setRangeForMonth(currentMonth);
+    const currentMonthFilterState = getCurrentMonthFilterState();
+    setMonthFilter(currentMonthFilterState.monthFilter);
+    setStartDate(currentMonthFilterState.startDate);
+    setEndDate(currentMonthFilterState.endDate);
   };
 
   const setPreviousMonthRange = () => {
-    const previous = subMonths(new Date(), 1);
-    const previousMonth = formatISO(previous, { representation: 'date' }).slice(0, 7);
-    setMonthFilter(previousMonth);
-    setRangeForMonth(previousMonth);
-  };
-
-  const normalizeMonthFilter = (startValue: string, endValue: string) => {
-    const [startYear, startMonth, startDay] = startValue.split('-');
-    const [endYear, endMonth, endDay] = endValue.split('-');
-    if (!startYear || !startMonth || !startDay || !endYear || !endMonth || !endDay) {
-      return '';
-    }
-    if (startYear !== endYear || startMonth !== endMonth) {
-      return '';
-    }
-    if (startDay !== '01') {
-      return '';
-    }
-    const lastDay = new Date(Number(startYear), Number(startMonth), 0).getDate();
-    const expectedEndDay = String(lastDay).padStart(2, '0');
-    if (endDay !== expectedEndDay) {
-      return '';
-    }
-    return `${startYear}-${startMonth}`;
+    const previousMonthFilterState = getPreviousMonthFilterState();
+    setMonthFilter(previousMonthFilterState.monthFilter);
+    setStartDate(previousMonthFilterState.startDate);
+    setEndDate(previousMonthFilterState.endDate);
   };
 
   useEffect(() => {
-    const normalized = normalizeMonthFilter(startDate, endDate);
+    const normalized = normalizeMonthFilterFromRange(startDate, endDate);
     if (normalized && normalized !== monthFilter) {
       setMonthFilter(normalized);
     }
