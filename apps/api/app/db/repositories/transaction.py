@@ -64,28 +64,9 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
             conditions.append(FinancialTransaction.payment_status == status)
 
         if reference_month:
-            conditions.append(
-                or_(
-                    # Non-paid: filter by billing month (competência)
-                    and_(
-                        FinancialTransaction.payment_status != PaymentStatus.PAGO,
-                        FinancialTransaction.reference_month == reference_month,
-                    ),
-                    # Paid with paid_date: filter by payment month (caixa)
-                    and_(
-                        FinancialTransaction.payment_status == PaymentStatus.PAGO,
-                        FinancialTransaction.paid_date.is_not(None),
-                        func.extract('year', FinancialTransaction.paid_date) == reference_month.year,
-                        func.extract('month', FinancialTransaction.paid_date) == reference_month.month,
-                    ),
-                    # Paid without paid_date: fallback to billing month
-                    and_(
-                        FinancialTransaction.payment_status == PaymentStatus.PAGO,
-                        FinancialTransaction.paid_date.is_(None),
-                        FinancialTransaction.reference_month == reference_month,
-                    ),
-                )
-            )
+            # Finance filters labeled as "Mês de referência" must stay on competence basis,
+            # even after a transaction is marked as paid.
+            conditions.append(FinancialTransaction.reference_month == reference_month)
 
         if due_date_from:
             conditions.append(FinancialTransaction.due_date >= due_date_from)
@@ -146,28 +127,9 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
             conditions.append(FinancialTransaction.payment_status == status)
 
         if reference_month:
-            conditions.append(
-                or_(
-                    # Non-paid: filter by billing month (competência)
-                    and_(
-                        FinancialTransaction.payment_status != PaymentStatus.PAGO,
-                        FinancialTransaction.reference_month == reference_month,
-                    ),
-                    # Paid with paid_date: filter by payment month (caixa)
-                    and_(
-                        FinancialTransaction.payment_status == PaymentStatus.PAGO,
-                        FinancialTransaction.paid_date.is_not(None),
-                        func.extract('year', FinancialTransaction.paid_date) == reference_month.year,
-                        func.extract('month', FinancialTransaction.paid_date) == reference_month.month,
-                    ),
-                    # Paid without paid_date: fallback to billing month
-                    and_(
-                        FinancialTransaction.payment_status == PaymentStatus.PAGO,
-                        FinancialTransaction.paid_date.is_(None),
-                        FinancialTransaction.reference_month == reference_month,
-                    ),
-                )
-            )
+            # Finance filters labeled as "Mês de referência" must stay on competence basis,
+            # even after a transaction is marked as paid.
+            conditions.append(FinancialTransaction.reference_month == reference_month)
 
         if due_date_from:
             conditions.append(FinancialTransaction.due_date >= due_date_from)
