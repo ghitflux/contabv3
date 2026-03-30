@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.database import db_manager
+from app.core.dev_bootstrap import bootstrap_development_admin_access
 
 # Configure logging
 logging.basicConfig(
@@ -176,6 +177,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             break
     except Exception as e:
         logger.error(f"✗ Database connection failed: {e}")
+
+    try:
+        await bootstrap_development_admin_access()
+        if settings.ENVIRONMENT.lower() == "development":
+            logger.info("✓ Development admin bootstrap completed")
+    except Exception as e:
+        logger.error(f"✗ Failed to bootstrap development admin access: {e}", exc_info=True)
 
     # Start background task for license expiration checks
     try:

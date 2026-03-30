@@ -15,7 +15,7 @@ async def test_login_success():
     async with AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
             "/api/v1/auth/login",
-            json={"email": "admin@contabil.com", "password": "Admin123!"}
+            json={"email": "admin@contabil.com", "password": "admin123"}
         )
 
     assert response.status_code == 200
@@ -38,7 +38,7 @@ async def test_login_incorrect_email():
     async with AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
             "/api/v1/auth/login",
-            json={"email": "wrong@example.com", "password": "Admin123!"}
+            json={"email": "wrong@example.com", "password": "admin123"}
         )
 
     assert response.status_code == 401
@@ -65,7 +65,7 @@ async def test_get_current_user():
     async with AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         login_response = await client.post(
             "/api/v1/auth/login",
-            json={"email": "admin@contabil.com", "password": "Admin123!"}
+            json={"email": "admin@contabil.com", "password": "admin123"}
         )
         access_token = login_response.json()["access_token"]
 
@@ -112,7 +112,7 @@ async def test_refresh_token():
     async with AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         login_response = await client.post(
             "/api/v1/auth/login",
-            json={"email": "admin@contabil.com", "password": "Admin123!"}
+            json={"email": "admin@contabil.com", "password": "admin123"}
         )
         refresh_token = login_response.json()["refresh_token"]
 
@@ -150,7 +150,7 @@ async def test_refresh_token_with_access_token():
     async with AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         login_response = await client.post(
             "/api/v1/auth/login",
-            json={"email": "admin@contabil.com", "password": "Admin123!"}
+            json={"email": "admin@contabil.com", "password": "admin123"}
         )
         access_token = login_response.json()["access_token"]
 
@@ -171,7 +171,7 @@ async def test_logout():
     async with AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         login_response = await client.post(
             "/api/v1/auth/login",
-            json={"email": "admin@contabil.com", "password": "Admin123!"}
+            json={"email": "admin@contabil.com", "password": "admin123"}
         )
         access_token = login_response.json()["access_token"]
 

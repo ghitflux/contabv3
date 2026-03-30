@@ -33,8 +33,12 @@ class UserRepository(BaseRepository[User]):
         Returns:
             User or None if not found
         """
+        normalized_email = email.strip().lower()
+        if not normalized_email:
+            return None
+
         result = await self.session.execute(
-            select(User).where(User.email == email)
+            select(User).where(func.lower(User.email) == normalized_email)
         )
         return result.scalar_one_or_none()
 

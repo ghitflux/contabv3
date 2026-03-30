@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    ENABLE_DEV_ADMIN_BOOTSTRAP: bool = True
+    DEV_ADMIN_EMAIL: str = "admin@contabil.com"
+    DEV_ADMIN_PASSWORD: str = "admin123"
+    DEV_ADMIN_NAME: str = "Administrador Local"
 
     # CORS
     CORS_ORIGINS: str | list[str] = (

@@ -27,6 +27,23 @@ export interface ApiError extends Error {
   data?: any;
 }
 
+async function buildApiError(response: Response, fallbackMessage: string): Promise<ApiError> {
+  const error: ApiError = new Error(fallbackMessage);
+  error.status = response.status;
+
+  try {
+    error.data = await response.json();
+    const detail = error.data?.detail;
+    if (typeof detail === 'string' && detail.length > 0) {
+      error.message = detail;
+    }
+  } catch {
+    // Response is not JSON
+  }
+
+  return error;
+}
+
 function getCookie(name: string): string | null {
   if (typeof document === 'undefined') return null;
   const cookies = document.cookie ? document.cookie.split('; ') : [];
@@ -188,6 +205,11 @@ export class ApiClient {
 
   async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${resolveApiBaseUrl()}${endpoint}`;
+    const isAuthRequest =
+      endpoint === '/auth/login' ||
+      endpoint === '/auth/login/form' ||
+      endpoint === '/auth/refresh' ||
+      endpoint.startsWith('/auth/password-reset');
 
     // Add Authorization header if token is available
     const headers = new Headers(options.headers);
@@ -215,6 +237,10 @@ export class ApiClient {
 
     // Handle 401 - Try to refresh token
     if (response.status === 401) {
+      if (isAuthRequest) {
+        throw await buildApiError(response, 'API Error: Unauthorized');
+      }
+
       // Lazy load refresh token if missing
       if (!this.refreshToken && typeof window !== 'undefined') {
         this.refreshToken =
@@ -223,9 +249,7 @@ export class ApiClient {
       }
 
       if (!this.refreshToken) {
-        const error: ApiError = new Error('API Error: Unauthorized');
-        error.status = 401;
-        throw error;
+        throw await buildApiError(response, 'API Error: Unauthorized');
       }
 
       if (isRefreshing) {
@@ -271,14 +295,7 @@ export class ApiClient {
 
     // Handle non-OK responses
     if (!response.ok) {
-      const error: ApiError = new Error(`API Error: ${response.statusText}`);
-      error.status = response.status;
-      try {
-        error.data = await response.json();
-      } catch {
-        // Response is not JSON
-      }
-      throw error;
+      throw await buildApiError(response, `API Error: ${response.statusText}`);
     }
 
     // Return JSON response

@@ -23,7 +23,7 @@ export default function LoginPage() {
     setLoginError(null);
 
     try {
-      await login(email, password);
+      await login(email.trim(), password);
     } catch (err) {
       setLoginError('Email ou senha incorretos');
       console.error('Login error:', err);
