@@ -266,3 +266,30 @@ async def test_generate_missing_monthly_fees_generates_backfill_sequence(
     assert result["created_client_entries"] == 2
     assert result["created_office_entries"] == 2
     assert result["errors"] == 0
+
+
+@pytest.mark.asyncio
+async def test_preview_monthly_fees_marks_blocked_clients(monkeypatch: pytest.MonkeyPatch):
+    office_client_id = uuid4()
+    monkeypatch.setattr(settings, "OFFICE_CLIENT_ID", office_client_id, raising=False)
+
+    client = _build_client()
+    db = AsyncMock()
+    db.execute = AsyncMock(
+        return_value=SimpleNamespace(
+            scalars=lambda: SimpleNamespace(all=lambda: [client])
+        )
+    )
+
+    service = FeeGeneratorService(db)
+    service._get_fee_block = AsyncMock(return_value=SimpleNamespace(reason="Bloqueado manualmente"))
+    service._has_existing_honorarios_entry = AsyncMock(side_effect=[False, False])
+
+    result = await service.preview_monthly_fees(reference_month=date(2026, 4, 1))
+
+    assert result["total_clients"] == 1
+    assert result["blocked_count"] == 1
+    assert result["would_generate_count"] == 0
+    assert result["would_generate_entries"] == 0
+    assert result["clients"][0]["blocked"] is True
+    assert result["clients"][0]["blocked_reason"] == "Bloqueado manualmente"

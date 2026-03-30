@@ -21,6 +21,7 @@ from app.db.models.client import Client, ClientStatus
 from app.db.models.finance import FinancialTransaction, PaymentStatus, TransactionType
 from app.db.models.user import User, UserRole
 from app.services.finance.fee_generator_service import FeeGeneratorService
+from app.services.finance.transaction_service import TransactionService
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +167,7 @@ async def run_finance_daily_automation() -> dict:
     - Marks overdue receivables
     - Syncs Client.status (inadimplente/ativo)
     - Completes missing honorários up to the current month
+    - Generates missing occurrences for common monthly recurring launches
     """
     today = date.today()
     reference_month = today.replace(day=1)
@@ -195,6 +197,12 @@ async def run_finance_daily_automation() -> dict:
             created_by_id=system_user_id,
         )
 
+        # 4) Generate missing occurrences for common recurring launches
+        recurring_summary = await TransactionService(session).generate_missing_recurring_transactions(
+            until_month=reference_month,
+            fallback_created_by_id=system_user_id,
+        )
+
         await session.commit()
 
     return {
@@ -203,6 +211,7 @@ async def run_finance_daily_automation() -> dict:
         "overdue_transactions_updated": overdue_updated,
         "client_status_sync": sync_summary,
         "monthly_generation": generation_summary,
+        "recurring_generation": recurring_summary,
     }
 
 

@@ -56,6 +56,8 @@ class TransactionCreate(BaseModel):
     category: Optional[str] = Field(None, max_length=20, description="Chart of accounts code (Plano de Contas) - ex: 1.1.01, 2.1.05")
     notes: Optional[str] = Field(None, max_length=2000, description="Additional notes")
     invoice_number: Optional[str] = Field(None, max_length=100, description="Invoice/receipt number")
+    is_recurring: bool = Field(False, description="Whether this launch creates a monthly recurring series")
+    recurring_day: Optional[int] = Field(None, ge=1, le=31, description="Day of month for recurring launches")
 
     @field_validator("reference_month")
     def validate_reference_month(cls, v: date) -> date:
@@ -63,6 +65,13 @@ class TransactionCreate(BaseModel):
         if v.day != 1:
             return v.replace(day=1)
         return v
+
+    @field_validator("recurring_day")
+    def validate_recurring_day(cls, v: Optional[int]) -> Optional[int]:
+        """Normalize recurring day when provided."""
+        if v is None:
+            return None
+        return max(1, min(31, v))
 
     class Config:
         json_schema_extra = {
@@ -78,7 +87,9 @@ class TransactionCreate(BaseModel):
                 "reference_month": "2025-11-01",
                 "description": "Honorários mensais - Novembro/2025",
                 "notes": "Pagamento via PIX",
-                "invoice_number": "NF-2025-001"
+                "invoice_number": "NF-2025-001",
+                "is_recurring": False,
+                "recurring_day": None,
             }
         }
 
@@ -158,6 +169,8 @@ class TransactionResponse(BaseModel):
     notes: Optional[str]
     invoice_number: Optional[str]
     receipt_url: Optional[str]
+    recurring_template_id: Optional[UUID] = None
+    restore_blocked_reason: Optional[str] = None
     created_by_id: UUID
     created_at: datetime
     updated_at: datetime
@@ -230,6 +243,135 @@ class MonthlyFeeGenerateResponse(BaseModel):
     skipped: Optional[int] = None
     errors: int
     message: str
+
+
+class MonthlyFeePreviewClient(BaseModel):
+    """Preview details for one client's honorários competence."""
+
+    client_id: UUID
+    client_name: str
+    client_cnpj: Optional[str] = None
+    amount: Decimal
+    due_date: Optional[date] = None
+    would_create_client_entry: bool
+    would_create_office_entry: bool
+    existing_client_entry: bool = False
+    existing_office_entry: bool = False
+    blocked: bool = False
+    blocked_reason: Optional[str] = None
+
+
+class MonthlyFeePreviewResponse(BaseModel):
+    """Preview response for monthly honorários generation."""
+
+    total_clients: int
+    would_generate_count: int
+    would_generate_entries: int
+    total_amount: Decimal
+    reference_month: date
+    blocked_count: int = 0
+    has_more: bool = False
+    clients: list[MonthlyFeePreviewClient]
+
+
+class TransactionBulkIdsRequest(BaseModel):
+    """Base request for bulk transaction operations."""
+
+    transaction_ids: list[UUID] = Field(..., min_length=1, description="Transactions to process")
+
+    @field_validator("transaction_ids")
+    def validate_transaction_ids(cls, v: list[UUID]) -> list[UUID]:
+        """Remove duplicates while preserving order."""
+        seen: set[UUID] = set()
+        deduped: list[UUID] = []
+        for item in v:
+            if item in seen:
+                continue
+            seen.add(item)
+            deduped.append(item)
+        return deduped
+
+
+class TransactionBulkPayRequest(TransactionBulkIdsRequest):
+    """Bulk baixa payload."""
+
+    paid_date: Optional[datetime] = Field(None, description="Baixa date/time, defaults to now")
+    payment_method: PaymentMethod = Field(
+        PaymentMethod.TRANSFERENCIA,
+        description="Payment method used for baixa",
+    )
+    notes: Optional[str] = Field(None, max_length=2000, description="Optional baixa notes")
+
+
+class TransactionBulkOperationItem(BaseModel):
+    """Per-item bulk operation outcome."""
+
+    transaction_id: UUID
+    success: bool
+    detail: Optional[str] = None
+
+
+class TransactionBulkOperationResponse(BaseModel):
+    """Summary for bulk transaction operations."""
+
+    success: bool
+    action: str
+    requested: int
+    processed: int
+    succeeded: int
+    failed: int
+    items: list[TransactionBulkOperationItem]
+
+
+class MonthlyFeeBulkDeleteRequest(BaseModel):
+    """Bulk delete honorários payload."""
+
+    office_transaction_ids: list[UUID] = Field(
+        ...,
+        min_length=1,
+        description="Office honorários revenue transactions to delete in pair",
+    )
+    reason: Optional[str] = Field(
+        None,
+        max_length=500,
+        description="Reason stored in block metadata",
+    )
+
+    @field_validator("office_transaction_ids")
+    def validate_office_transaction_ids(cls, v: list[UUID]) -> list[UUID]:
+        """Remove duplicates while preserving order."""
+        seen: set[UUID] = set()
+        deduped: list[UUID] = []
+        for item in v:
+            if item in seen:
+                continue
+            seen.add(item)
+            deduped.append(item)
+        return deduped
+
+
+class MonthlyFeeBulkDeleteItem(BaseModel):
+    """Per-item result for honorários pair delete."""
+
+    office_transaction_id: UUID
+    client_id: Optional[UUID] = None
+    reference_month: Optional[date] = None
+    success: bool
+    deleted_office_entry: bool = False
+    deleted_client_entry: bool = False
+    blocked: bool = False
+    detail: Optional[str] = None
+
+
+class MonthlyFeeBulkDeleteResponse(BaseModel):
+    """Summary for honorários pair delete."""
+
+    success: bool
+    requested: int
+    succeeded: int
+    failed: int
+    blocked_competences: int
+    items: list[MonthlyFeeBulkDeleteItem]
 
 
 # Financial KPI schemas

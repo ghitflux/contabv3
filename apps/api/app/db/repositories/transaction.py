@@ -35,6 +35,7 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
                 selectinload(FinancialTransaction.client),
                 selectinload(FinancialTransaction.obligation),
                 selectinload(FinancialTransaction.created_by),
+                selectinload(FinancialTransaction.recurring_template),
             )
         )
         result = await self.db.execute(stmt)
@@ -86,7 +87,10 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
         stmt = (
             select(FinancialTransaction)
             .where(and_(*conditions))
-            .options(selectinload(FinancialTransaction.client))
+            .options(
+                selectinload(FinancialTransaction.client),
+                selectinload(FinancialTransaction.recurring_template),
+            )
             .order_by(
                 FinancialTransaction.due_date.desc(),
                 FinancialTransaction.created_at.desc(),
@@ -149,7 +153,10 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
         stmt = (
             select(FinancialTransaction)
             .where(and_(*conditions))
-            .options(selectinload(FinancialTransaction.client))
+            .options(
+                selectinload(FinancialTransaction.client),
+                selectinload(FinancialTransaction.recurring_template),
+            )
             .order_by(
                 FinancialTransaction.due_date.desc(),
                 FinancialTransaction.created_at.desc(),
@@ -256,8 +263,37 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
         stmt = (
             select(FinancialTransaction)
             .where(and_(*conditions))
-            .options(selectinload(FinancialTransaction.client))
+            .options(
+                selectinload(FinancialTransaction.client),
+                selectinload(FinancialTransaction.recurring_template),
+            )
             .order_by(FinancialTransaction.due_date)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().all()
+
+    async def list_by_ids_with_relations(
+        self,
+        transaction_ids: list[UUID],
+        include_deleted: bool = False,
+    ) -> Sequence[FinancialTransaction]:
+        """Load multiple transactions with relations, preserving no specific order."""
+        if not transaction_ids:
+            return []
+
+        conditions = [FinancialTransaction.id.in_(transaction_ids)]
+        if not include_deleted:
+            conditions.append(FinancialTransaction.deleted_at.is_(None))
+
+        stmt = (
+            select(FinancialTransaction)
+            .where(and_(*conditions))
+            .options(
+                selectinload(FinancialTransaction.client),
+                selectinload(FinancialTransaction.obligation),
+                selectinload(FinancialTransaction.created_by),
+                selectinload(FinancialTransaction.recurring_template),
+            )
         )
         result = await self.db.execute(stmt)
         return result.scalars().all()

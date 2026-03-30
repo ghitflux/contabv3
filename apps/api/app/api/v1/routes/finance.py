@@ -18,8 +18,14 @@ from app.db.models.user import User, UserRole
 from app.db.repositories.client import ClientRepository
 from app.db.repositories.transaction import TransactionRepository
 from app.schemas.finance import (
+    MonthlyFeeBulkDeleteRequest,
+    MonthlyFeeBulkDeleteResponse,
     MonthlyFeeGenerateRequest,
     MonthlyFeeGenerateResponse,
+    MonthlyFeePreviewResponse,
+    TransactionBulkIdsRequest,
+    TransactionBulkOperationResponse,
+    TransactionBulkPayRequest,
     TransactionCancel,
     TransactionCreate,
     TransactionListResponse,
@@ -74,6 +80,10 @@ def _transaction_snapshot(transaction) -> dict:
         "notes": transaction.notes,
         "invoice_number": transaction.invoice_number,
         "receipt_url": transaction.receipt_url,
+        "recurring_template_id": str(transaction.recurring_template_id)
+        if getattr(transaction, "recurring_template_id", None)
+        else None,
+        "restore_blocked_reason": getattr(transaction, "restore_blocked_reason", None),
     }
 
 
@@ -174,6 +184,8 @@ async def list_transactions(
             "notes": transaction.notes,
             "invoice_number": transaction.invoice_number,
             "receipt_url": transaction.receipt_url,
+            "recurring_template_id": transaction.recurring_template_id,
+            "restore_blocked_reason": transaction.restore_blocked_reason,
             "created_by_id": transaction.created_by_id,
             "created_at": transaction.created_at,
             "updated_at": transaction.updated_at,
@@ -306,10 +318,7 @@ async def update_transaction(
                 detail="Not authorized to update this transaction",
             )
         _assert_client_can_manage_transaction(before_transaction, current_user)
-        if any(
-            value is not None
-            for value in [data.payment_status, data.payment_method, data.paid_date]
-        ):
+        if any(field in data.model_fields_set for field in ["payment_status", "payment_method", "paid_date"]):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only admin/func can change payment status or baixa details",
@@ -480,7 +489,13 @@ async def delete_transaction(
 
     transaction_snapshot = _transaction_snapshot(transaction)
 
-    deleted = await service.delete_transaction(transaction_id)
+    try:
+        deleted = await service.delete_transaction(transaction_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
 
     if not deleted:
         raise HTTPException(
@@ -542,8 +557,19 @@ async def restore_transaction(
                 detail="Not authorized to restore this transaction",
             )
         _assert_client_can_manage_transaction(deleted_transaction, current_user)
+    if deleted_transaction.restore_blocked_reason:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=deleted_transaction.restore_blocked_reason,
+        )
 
-    restored = await service.restore_transaction(transaction_id)
+    try:
+        restored = await service.restore_transaction(transaction_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
 
     if not restored:
         raise HTTPException(
@@ -575,6 +601,247 @@ async def restore_transaction(
 
     await db.commit()
     return transaction
+
+
+@router.post("/bulk/pay", response_model=TransactionBulkOperationResponse)
+async def bulk_pay_transactions(
+    data: TransactionBulkPayRequest,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Bulk baixa for receitas and despesas."""
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/func can perform bulk baixa",
+        )
+
+    repo = TransactionRepository(db)
+    before_transactions = await repo.list_by_ids_with_relations(
+        data.transaction_ids,
+        include_deleted=True,
+    )
+    before_map = {transaction.id: _transaction_snapshot(transaction) for transaction in before_transactions}
+
+    service = TransactionService(db)
+    result = await service.bulk_mark_as_paid(
+        data.transaction_ids,
+        paid_date=data.paid_date or datetime.utcnow(),
+        payment_method=data.payment_method,
+        notes=data.notes,
+    )
+
+    for transaction in result["transactions"]:
+        db.add(
+            AuditLog(
+                user_id=current_user.id,
+                action="transaction.bulk_mark_paid_item",
+                entity="financial_transaction",
+                entity_id=str(transaction.id),
+                payload=_build_transaction_payload(
+                    transaction,
+                    summary=f"Baixa em massa: {transaction.description} - R$ {_format_amount(transaction.amount)}",
+                    extra={
+                        "bulk_action": "pay",
+                        "before": before_map.get(transaction.id),
+                        "after": _transaction_snapshot(transaction),
+                    },
+                ),
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+            )
+        )
+
+    db.add(
+        AuditLog(
+            user_id=current_user.id,
+            action="transaction.bulk_mark_paid",
+            entity="financial_transaction",
+            entity_id=None,
+            payload={
+                "summary": (
+                    f"Baixa em massa executada: {result['succeeded']} sucesso(s), "
+                    f"{result['failed']} falha(s)."
+                ),
+                "transaction_ids": [str(item) for item in data.transaction_ids],
+                "requested": result["requested"],
+                "processed": result["processed"],
+                "succeeded": result["succeeded"],
+                "failed": result["failed"],
+            },
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    )
+    await db.commit()
+
+    return {
+        "success": result["failed"] == 0,
+        "action": result["action"],
+        "requested": result["requested"],
+        "processed": result["processed"],
+        "succeeded": result["succeeded"],
+        "failed": result["failed"],
+        "items": result["items"],
+    }
+
+
+@router.post("/bulk/reopen", response_model=TransactionBulkOperationResponse)
+async def bulk_reopen_transactions(
+    data: TransactionBulkIdsRequest,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Bulk reopen transactions back to pending."""
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/func can reopen transactions in bulk",
+        )
+
+    repo = TransactionRepository(db)
+    before_transactions = await repo.list_by_ids_with_relations(
+        data.transaction_ids,
+        include_deleted=True,
+    )
+    before_map = {transaction.id: _transaction_snapshot(transaction) for transaction in before_transactions}
+
+    service = TransactionService(db)
+    result = await service.bulk_reopen_transactions(data.transaction_ids)
+
+    for transaction in result["transactions"]:
+        db.add(
+            AuditLog(
+                user_id=current_user.id,
+                action="transaction.bulk_reopen_item",
+                entity="financial_transaction",
+                entity_id=str(transaction.id),
+                payload=_build_transaction_payload(
+                    transaction,
+                    summary=f"Reabertura em massa: {transaction.description} - R$ {_format_amount(transaction.amount)}",
+                    extra={
+                        "bulk_action": "reopen",
+                        "before": before_map.get(transaction.id),
+                        "after": _transaction_snapshot(transaction),
+                    },
+                ),
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+            )
+        )
+
+    db.add(
+        AuditLog(
+            user_id=current_user.id,
+            action="transaction.bulk_reopen",
+            entity="financial_transaction",
+            entity_id=None,
+            payload={
+                "summary": (
+                    f"Reabertura em massa executada: {result['succeeded']} sucesso(s), "
+                    f"{result['failed']} falha(s)."
+                ),
+                "transaction_ids": [str(item) for item in data.transaction_ids],
+                "requested": result["requested"],
+                "processed": result["processed"],
+                "succeeded": result["succeeded"],
+                "failed": result["failed"],
+            },
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    )
+    await db.commit()
+
+    return {
+        "success": result["failed"] == 0,
+        "action": result["action"],
+        "requested": result["requested"],
+        "processed": result["processed"],
+        "succeeded": result["succeeded"],
+        "failed": result["failed"],
+        "items": result["items"],
+    }
+
+
+@router.post("/bulk/delete", response_model=TransactionBulkOperationResponse)
+async def bulk_delete_transactions(
+    data: TransactionBulkIdsRequest,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Bulk soft delete for common launches."""
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/func can delete transactions in bulk",
+        )
+
+    repo = TransactionRepository(db)
+    before_transactions = await repo.list_by_ids_with_relations(
+        data.transaction_ids,
+        include_deleted=True,
+    )
+    before_map = {transaction.id: _transaction_snapshot(transaction) for transaction in before_transactions}
+
+    service = TransactionService(db)
+    result = await service.bulk_delete_transactions(data.transaction_ids)
+
+    for transaction in result["transactions"]:
+        db.add(
+            AuditLog(
+                user_id=current_user.id,
+                action="transaction.bulk_delete_item",
+                entity="financial_transaction",
+                entity_id=str(transaction.id),
+                payload={
+                    "summary": (
+                        f"Exclusão em massa: {transaction.description} - R$ {_format_amount(transaction.amount)}"
+                    ),
+                    "bulk_action": "delete",
+                    "before": before_map.get(transaction.id),
+                    "after": _transaction_snapshot(transaction),
+                },
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+            )
+        )
+
+    db.add(
+        AuditLog(
+            user_id=current_user.id,
+            action="transaction.bulk_delete",
+            entity="financial_transaction",
+            entity_id=None,
+            payload={
+                "summary": (
+                    f"Exclusão em massa executada: {result['succeeded']} sucesso(s), "
+                    f"{result['failed']} falha(s)."
+                ),
+                "transaction_ids": [str(item) for item in data.transaction_ids],
+                "requested": result["requested"],
+                "processed": result["processed"],
+                "succeeded": result["succeeded"],
+                "failed": result["failed"],
+            },
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    )
+    await db.commit()
+
+    return {
+        "success": result["failed"] == 0,
+        "action": result["action"],
+        "requested": result["requested"],
+        "processed": result["processed"],
+        "succeeded": result["succeeded"],
+        "failed": result["failed"],
+        "items": result["items"],
+    }
 
 
 @router.post("/{transaction_id}/attachment", response_model=TransactionResponse)
@@ -712,6 +979,33 @@ async def download_transaction_attachment(
     )
 
 
+@router.post("/fees/preview", response_model=MonthlyFeePreviewResponse)
+async def preview_monthly_fees(
+    data: MonthlyFeeGenerateRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Preview honorários generation for a competence without creating data."""
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/func can preview fees",
+        )
+
+    service = FeeGeneratorService(db)
+    try:
+        return await service.preview_monthly_fees(
+            reference_month=data.reference_month,
+            client_id=data.client_id,
+            client_ids=data.client_ids,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
 @router.post("/fees/generate", response_model=MonthlyFeeGenerateResponse)
 async def generate_monthly_fees(
     data: MonthlyFeeGenerateRequest,
@@ -745,6 +1039,86 @@ async def generate_monthly_fees(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
+
+
+@router.post("/fees/bulk-delete", response_model=MonthlyFeeBulkDeleteResponse)
+async def bulk_delete_monthly_fees(
+    data: MonthlyFeeBulkDeleteRequest,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Delete honorários in pair and block regeneration for the competence."""
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/func can delete fees in bulk",
+        )
+
+    service = FeeGeneratorService(db)
+    result = await service.bulk_delete_monthly_fees(
+        office_transaction_ids=data.office_transaction_ids,
+        deleted_by_id=current_user.id,
+        reason=data.reason,
+    )
+
+    for item in result["items"]:
+        if not item["success"]:
+            continue
+        db.add(
+            AuditLog(
+                user_id=current_user.id,
+                action="transaction.monthly_fee_bulk_delete_item",
+                entity="financial_transaction",
+                entity_id=str(item["office_transaction_id"]),
+                payload={
+                    "summary": "Honorário excluído em par com bloqueio de competência.",
+                    "office_transaction_id": str(item["office_transaction_id"]),
+                    "client_id": str(item["client_id"]) if item.get("client_id") else None,
+                    "reference_month": item["reference_month"].isoformat()
+                    if item.get("reference_month")
+                    else None,
+                    "success": item["success"],
+                    "deleted_office_entry": item["deleted_office_entry"],
+                    "deleted_client_entry": item["deleted_client_entry"],
+                    "blocked": item["blocked"],
+                    "detail": item["detail"],
+                },
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+            )
+        )
+
+    db.add(
+        AuditLog(
+            user_id=current_user.id,
+            action="transaction.monthly_fee_bulk_delete",
+            entity="financial_transaction",
+            entity_id=None,
+            payload={
+                "summary": (
+                    f"Exclusão em massa de honorários: {result['succeeded']} sucesso(s), "
+                    f"{result['failed']} falha(s), {result['blocked_competences']} competência(s) bloqueada(s)."
+                ),
+                "office_transaction_ids": [str(item) for item in data.office_transaction_ids],
+                "requested": result["requested"],
+                "succeeded": result["succeeded"],
+                "failed": result["failed"],
+                "blocked_competences": result["blocked_competences"],
+            },
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    )
+    await db.commit()
+    return {
+        "success": result["failed"] == 0,
+        "requested": result["requested"],
+        "succeeded": result["succeeded"],
+        "failed": result["failed"],
+        "blocked_competences": result["blocked_competences"],
+        "items": result["items"],
+    }
 
 
 # Reports endpoints

@@ -130,17 +130,21 @@ export function ClienteLancamentoRapidoCard({
         transaction_type:
           form.movement === 'Entrada' ? TransactionType.RECEITA : TransactionType.DESPESA,
         amount,
-        payment_method: bankName
-          ? bankName.toLowerCase().includes('pix')
-            ? PaymentMethod.PIX
-            : PaymentMethod.TRANSFERENCIA
-          : undefined,
-        payment_status: PaymentStatus.PAGO,
+        payment_method: form.isRecurring
+          ? undefined
+          : bankName
+            ? bankName.toLowerCase().includes('pix')
+              ? PaymentMethod.PIX
+              : PaymentMethod.TRANSFERENCIA
+            : undefined,
+        payment_status: form.isRecurring ? PaymentStatus.PENDENTE : PaymentStatus.PAGO,
         due_date: form.date,
-        paid_date: paidDate,
+        paid_date: form.isRecurring ? null : paidDate,
         reference_month: referenceMonth,
         description: form.entryType.trim(),
         notes,
+        is_recurring: form.isRecurring,
+        recurring_day: form.isRecurring ? form.recurringDay : null,
       });
 
       if (attachment) {
@@ -171,7 +175,11 @@ export function ClienteLancamentoRapidoCard({
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
-      toast.success('Lançamento registrado com sucesso.');
+      toast.success(
+        form.isRecurring
+          ? 'Série recorrente criada; competência atual lançada como pendente.'
+          : 'Lançamento registrado com sucesso.'
+      );
     } catch (error) {
       console.error('Erro ao salvar lançamento rápido do cliente:', error);
       const errorDetail = (error as { data?: { detail?: string } })?.data?.detail;
@@ -193,7 +201,8 @@ export function ClienteLancamentoRapidoCard({
             Novo lançamento
           </h3>
           <p className="text-sm text-default-500">
-            Registre rapidamente uma entrada ou saída já liquidada neste livro-caixa.
+            Registre rapidamente uma entrada ou saída. Se marcar recorrente, a competência atual
+            nasce pendente para baixa manual.
           </p>
         </div>
       </CardHeader>

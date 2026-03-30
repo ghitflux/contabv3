@@ -70,6 +70,7 @@ interface ClientTransaction {
 }
 
 const LANCAMENTOS_PER_PAGE = 20;
+type ActiveTransactionPanel = 'all' | 'receber' | 'pagar' | 'receita' | 'despesa';
 
 export function FinanceiroPorEmpresa({
   onExportLivro,
@@ -103,7 +104,7 @@ export function FinanceiroPorEmpresa({
   const [isConfirmingBaixa, setIsConfirmingBaixa] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [transactionsPage, setTransactionsPage] = useState(1);
-  const [activePendingPanel, setActivePendingPanel] = useState<'all' | 'receber' | 'pagar'>('all');
+  const [activePendingPanel, setActivePendingPanel] = useState<ActiveTransactionPanel>('all');
   const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [bankForm, setBankForm] = useState({
@@ -493,19 +494,27 @@ export function FinanceiroPorEmpresa({
     });
   }, [clients, clientSearch]);
 
+  const paidDisplayTransactions = useMemo(
+    () =>
+      displayTransactions.filter(
+        (transaction) => transaction.raw.payment_status === PaymentStatus.PAGO
+      ),
+    [displayTransactions]
+  );
+
   const receita = useMemo(
     () =>
-      displayTransactions
+      paidDisplayTransactions
         .filter((t) => t.type === TransactionType.RECEITA)
         .reduce((sum, t) => sum + t.value, 0),
-    [displayTransactions]
+    [paidDisplayTransactions]
   );
   const despesa = useMemo(
     () =>
-      displayTransactions
+      paidDisplayTransactions
         .filter((t) => t.type === TransactionType.DESPESA)
         .reduce((sum, t) => sum + t.value, 0),
-    [displayTransactions]
+    [paidDisplayTransactions]
   );
   const lucro = receita - despesa;
 
@@ -538,8 +547,22 @@ export function FinanceiroPorEmpresa({
   const panelTransactions = useMemo(() => {
     if (activePendingPanel === 'receber') return receivableTransactions;
     if (activePendingPanel === 'pagar') return payableTransactions;
+    if (activePendingPanel === 'receita') {
+      return transactions.filter(
+        (transaction) =>
+          transaction.transaction_type === TransactionType.RECEITA &&
+          transaction.payment_status === PaymentStatus.PAGO
+      );
+    }
+    if (activePendingPanel === 'despesa') {
+      return transactions.filter(
+        (transaction) =>
+          transaction.transaction_type === TransactionType.DESPESA &&
+          transaction.payment_status === PaymentStatus.PAGO
+      );
+    }
     return [];
-  }, [activePendingPanel, payableTransactions, receivableTransactions]);
+  }, [activePendingPanel, payableTransactions, receivableTransactions, transactions]);
 
   const selectedClientListItem = clients.find((client) => client.id === selectedClient) ?? null;
   const selectedClientData = clientDetails ?? selectedClientListItem;
@@ -858,7 +881,15 @@ export function FinanceiroPorEmpresa({
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900">
+        <Card
+          isPressable
+          onPress={() => setActivePendingPanel((prev) => (prev === 'receita' ? 'all' : 'receita'))}
+          className={`border ${
+            activePendingPanel === 'receita'
+              ? 'border-green-400 bg-green-50 dark:bg-green-900/20'
+              : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900'
+          }`}
+        >
           <CardBody>
             <p className="text-sm text-green-700 dark:text-green-400 font-medium mb-1">RECEITA</p>
             <p className="text-2xl font-bold text-green-700 dark:text-green-400">
@@ -866,7 +897,15 @@ export function FinanceiroPorEmpresa({
             </p>
           </CardBody>
         </Card>
-        <Card className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900">
+        <Card
+          isPressable
+          onPress={() => setActivePendingPanel((prev) => (prev === 'despesa' ? 'all' : 'despesa'))}
+          className={`border ${
+            activePendingPanel === 'despesa'
+              ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20'
+              : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-900'
+          }`}
+        >
           <CardBody>
             <p className="text-sm text-amber-700 dark:text-amber-400 font-medium mb-1">DESPESA</p>
             <p className="text-2xl font-bold text-amber-700 dark:text-amber-400">
@@ -928,7 +967,11 @@ export function FinanceiroPorEmpresa({
             <h3 className="text-lg font-semibold">
               {activePendingPanel === 'receber'
                 ? 'Lançamentos de Contas a Receber'
-                : 'Lançamentos de Contas a Pagar'}
+                : activePendingPanel === 'pagar'
+                  ? 'Lançamentos de Contas a Pagar'
+                  : activePendingPanel === 'receita'
+                    ? 'Lançamentos que compõem a Receita do Período'
+                    : 'Lançamentos que compõem as Despesas do Período'}
             </h3>
             <Button
               variant="light"
@@ -948,7 +991,13 @@ export function FinanceiroPorEmpresa({
                   <TableColumn className="text-right">Valor</TableColumn>
                   <TableColumn className={isAdminOrFunc ? 'text-right' : 'hidden w-0 p-0'}>{isAdminOrFunc ? 'Ação' : ''}</TableColumn>
                 </TableHeader>
-                <TableBody emptyContent="Nenhum lançamento pendente encontrado">
+                <TableBody
+                  emptyContent={
+                    activePendingPanel === 'receber' || activePendingPanel === 'pagar'
+                      ? 'Nenhum lançamento pendente encontrado'
+                      : 'Nenhum lançamento encontrado para este indicador'
+                  }
+                >
                   {panelTransactions.map((transaction) => (
                     <TableRow key={transaction.id}>
                       <TableCell>
@@ -959,7 +1008,7 @@ export function FinanceiroPorEmpresa({
                         {formatCurrency(transaction.amount)}
                       </TableCell>
                       <TableCell className={isAdminOrFunc ? 'text-right' : 'hidden w-0 p-0'}>
-                        {isAdminOrFunc && (
+                        {isAdminOrFunc && isDuePaymentStatus(transaction.payment_status) && (
                           <Button
                             size="sm"
                             color="primary"

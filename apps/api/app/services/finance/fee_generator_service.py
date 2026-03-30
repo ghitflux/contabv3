@@ -1,8 +1,10 @@
 """Fee Generator Service - Generates monthly fees for clients."""
 
 import logging
+import re
 from calendar import monthrange
-from datetime import date
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
@@ -11,10 +13,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.models.client import Client, ClientStatus
-from app.db.models.finance import FinancialTransaction, PaymentStatus, TransactionType
+from app.db.models.finance import (
+    FinancialTransaction,
+    MonthlyFeeBlock,
+    PaymentStatus,
+    TransactionType,
+)
 from app.db.repositories.client import ClientRepository
 
 logger = logging.getLogger(__name__)
+
+_CLIENT_ID_IN_NOTES_RE = re.compile(
+    r"Cliente:\s*([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})",
+    re.IGNORECASE,
+)
+_OFFICE_HONORARIOS_DESCRIPTION_PATTERN = re.compile(
+    r"^Honorários - (.+?) \(([^)]+)\) - (\d{2}\/\d{4})$"
+)
 
 
 class FeeGeneratorService:
@@ -113,6 +128,330 @@ class FeeGeneratorService:
             .limit(1)
         )
         return existing_id is not None
+
+    async def _get_fee_block(
+        self,
+        *,
+        client_id: UUID,
+        reference_month: date,
+    ) -> MonthlyFeeBlock | None:
+        return await self.db.scalar(
+            select(MonthlyFeeBlock)
+            .where(
+                MonthlyFeeBlock.client_id == client_id,
+                MonthlyFeeBlock.reference_month == reference_month,
+            )
+            .limit(1)
+        )
+
+    async def _ensure_fee_block(
+        self,
+        *,
+        client_id: UUID,
+        reference_month: date,
+        created_by_id: UUID,
+        reason: str | None = None,
+    ) -> MonthlyFeeBlock:
+        normalized_reference_month = self._normalize_reference_month(reference_month)
+        existing_block = await self._get_fee_block(
+            client_id=client_id,
+            reference_month=normalized_reference_month,
+        )
+        if existing_block:
+            if reason and existing_block.reason != reason:
+                existing_block.reason = reason
+            await self.db.flush()
+            return existing_block
+
+        block = MonthlyFeeBlock(
+            client_id=client_id,
+            created_by_id=created_by_id,
+            reference_month=normalized_reference_month,
+            reason=reason,
+        )
+        self.db.add(block)
+        await self.db.flush()
+        await self.db.refresh(block)
+        return block
+
+    async def _collect_generation_state(self, client: Client, reference_month: date) -> dict:
+        normalized_reference_month = self._normalize_reference_month(reference_month)
+        reference_label = self._format_reference_label(normalized_reference_month)
+        client_description = self._build_client_description(reference_label)
+        office_description = self._build_office_description(client, reference_label)
+        fee_block = await self._get_fee_block(
+            client_id=client.id,
+            reference_month=normalized_reference_month,
+        )
+        has_client_entry = await self._has_existing_honorarios_entry(
+            client_id=client.id,
+            reference_month=normalized_reference_month,
+            transaction_type=TransactionType.DESPESA,
+            description=client_description,
+        )
+        has_office_entry = False
+        if settings.OFFICE_CLIENT_ID:
+            has_office_entry = await self._has_existing_honorarios_entry(
+                client_id=settings.OFFICE_CLIENT_ID,
+                reference_month=normalized_reference_month,
+                transaction_type=TransactionType.RECEITA,
+                description=office_description,
+            )
+
+        blocked = fee_block is not None
+        would_create_client_entry = not blocked and not has_client_entry
+        would_create_office_entry = bool(
+            settings.OFFICE_CLIENT_ID and not blocked and not has_office_entry
+        )
+
+        return {
+            "reference_month": normalized_reference_month,
+            "reference_label": reference_label,
+            "client_description": client_description,
+            "office_description": office_description,
+            "due_date": self._resolve_due_date_for_client(normalized_reference_month, client.dia_vencimento),
+            "blocked": blocked,
+            "block_reason": fee_block.reason if fee_block else None,
+            "has_client_entry": has_client_entry,
+            "has_office_entry": has_office_entry,
+            "would_create_client_entry": would_create_client_entry,
+            "would_create_office_entry": would_create_office_entry,
+        }
+
+    @staticmethod
+    def _extract_client_id_from_notes(notes: str | None) -> UUID | None:
+        if not notes:
+            return None
+        match = _CLIENT_ID_IN_NOTES_RE.search(notes)
+        if not match:
+            return None
+        try:
+            return UUID(match.group(1))
+        except ValueError:
+            return None
+
+    async def _resolve_client_for_office_transaction(
+        self,
+        transaction: FinancialTransaction,
+    ) -> Client | None:
+        client_id = self._extract_client_id_from_notes(transaction.notes)
+        if client_id:
+            return await self.client_repo.get(client_id)
+
+        match = _OFFICE_HONORARIOS_DESCRIPTION_PATTERN.match(transaction.description or "")
+        if not match:
+            return None
+
+        cnpj = match.group(2)
+        return await self.db.scalar(
+            select(Client).where(Client.cnpj == cnpj, Client.deleted_at.is_(None)).limit(1)
+        )
+
+    async def preview_monthly_fees(
+        self,
+        *,
+        reference_month: date,
+        client_id: Optional[UUID] = None,
+        client_ids: Optional[list[UUID]] = None,
+    ) -> dict:
+        """Preview honorários generation for the exact competence without creating data."""
+        normalized_reference_month = self._normalize_reference_month(reference_month)
+        selected_client_ids = self._normalize_client_ids(
+            client_id=client_id,
+            client_ids=client_ids,
+        )
+
+        if selected_client_ids:
+            clients: list[Client] = []
+            for selected_client_id in selected_client_ids:
+                client = await self.client_repo.get(selected_client_id)
+                if not client:
+                    raise ValueError(f"Client with ID {selected_client_id} not found")
+                if self._is_client_eligible(client):
+                    clients.append(client)
+        else:
+            clients = (
+                (
+                    await self.db.execute(
+                        select(Client)
+                        .where(
+                            Client.deleted_at.is_(None),
+                            Client.status != ClientStatus.INATIVO,
+                            Client.gerar_lancamentos_honorarios.is_(True),
+                            Client.honorarios_mensais > 0,
+                        )
+                        .order_by(Client.razao_social)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+
+        preview_clients: list[dict] = []
+        total_amount = Decimal("0.00")
+        blocked_count = 0
+        would_generate_count = 0
+        would_generate_entries = 0
+
+        for client in clients:
+            state = await self._collect_generation_state(client, normalized_reference_month)
+            would_generate_this_client = int(state["would_create_client_entry"]) + int(
+                state["would_create_office_entry"]
+            )
+            if state["blocked"]:
+                blocked_count += 1
+            if would_generate_this_client > 0:
+                would_generate_count += 1
+                would_generate_entries += would_generate_this_client
+                total_amount += Decimal(str(client.honorarios_mensais))
+
+            preview_clients.append(
+                {
+                    "client_id": client.id,
+                    "client_name": client.razao_social,
+                    "client_cnpj": client.cnpj,
+                    "amount": client.honorarios_mensais,
+                    "due_date": state["due_date"],
+                    "would_create_client_entry": state["would_create_client_entry"],
+                    "would_create_office_entry": state["would_create_office_entry"],
+                    "existing_client_entry": state["has_client_entry"],
+                    "existing_office_entry": state["has_office_entry"],
+                    "blocked": state["blocked"],
+                    "blocked_reason": state["block_reason"],
+                }
+            )
+
+        return {
+            "total_clients": len(clients),
+            "would_generate_count": would_generate_count,
+            "would_generate_entries": would_generate_entries,
+            "total_amount": total_amount,
+            "reference_month": normalized_reference_month,
+            "blocked_count": blocked_count,
+            "has_more": False,
+            "clients": preview_clients,
+        }
+
+    async def bulk_delete_monthly_fees(
+        self,
+        *,
+        office_transaction_ids: list[UUID],
+        deleted_by_id: UUID,
+        reason: str | None = None,
+    ) -> dict:
+        """Delete office/client honorários pairs and block regeneration for the competence."""
+        normalized_reason = reason or "Competência bloqueada após exclusão manual de honorários."
+        transactions = (
+            (
+                await self.db.execute(
+                    select(FinancialTransaction).where(
+                        FinancialTransaction.id.in_(office_transaction_ids),
+                        FinancialTransaction.deleted_at.is_(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        transactions_by_id = {transaction.id: transaction for transaction in transactions}
+
+        items: list[dict] = []
+        blocked_pairs: set[tuple[UUID, date]] = set()
+        now = datetime.utcnow()
+
+        for office_transaction_id in office_transaction_ids:
+            office_transaction = transactions_by_id.get(office_transaction_id)
+            if office_transaction is None:
+                items.append(
+                    {
+                        "office_transaction_id": office_transaction_id,
+                        "success": False,
+                        "detail": "Honorários do escritório não encontrado",
+                    }
+                )
+                continue
+
+            if not (
+                settings.OFFICE_CLIENT_ID
+                and office_transaction.client_id == settings.OFFICE_CLIENT_ID
+                and office_transaction.transaction_type == TransactionType.RECEITA
+                and office_transaction.description.startswith("Honorários -")
+            ):
+                items.append(
+                    {
+                        "office_transaction_id": office_transaction_id,
+                        "success": False,
+                        "detail": "O lançamento informado não é um honorário do escritório",
+                    }
+                )
+                continue
+
+            client = await self._resolve_client_for_office_transaction(office_transaction)
+            if client is None:
+                items.append(
+                    {
+                        "office_transaction_id": office_transaction_id,
+                        "success": False,
+                        "detail": "Não foi possível resolver o cliente espelho do honorário",
+                    }
+                )
+                continue
+
+            reference_month = self._normalize_reference_month(office_transaction.reference_month)
+            reference_label = self._format_reference_label(reference_month)
+            client_transaction = await self.db.scalar(
+                select(FinancialTransaction)
+                .where(
+                    FinancialTransaction.client_id == client.id,
+                    FinancialTransaction.reference_month == reference_month,
+                    FinancialTransaction.transaction_type == TransactionType.DESPESA,
+                    FinancialTransaction.description == self._build_client_description(reference_label),
+                    FinancialTransaction.deleted_at.is_(None),
+                )
+                .limit(1)
+            )
+
+            await self._ensure_fee_block(
+                client_id=client.id,
+                reference_month=reference_month,
+                created_by_id=deleted_by_id,
+                reason=normalized_reason,
+            )
+            blocked_pairs.add((client.id, reference_month))
+
+            office_transaction.deleted_at = now
+            office_transaction.restore_blocked_reason = normalized_reason
+            deleted_client_entry = False
+            if client_transaction is not None:
+                client_transaction.deleted_at = now
+                client_transaction.restore_blocked_reason = normalized_reason
+                deleted_client_entry = True
+
+            items.append(
+                {
+                    "office_transaction_id": office_transaction_id,
+                    "client_id": client.id,
+                    "reference_month": reference_month,
+                    "success": True,
+                    "deleted_office_entry": True,
+                    "deleted_client_entry": deleted_client_entry,
+                    "blocked": True,
+                    "detail": None,
+                }
+            )
+
+        if items:
+            await self.db.flush()
+
+        succeeded = sum(1 for item in items if item["success"])
+        return {
+            "success": True,
+            "requested": len(office_transaction_ids),
+            "succeeded": succeeded,
+            "failed": len(items) - succeeded,
+            "blocked_competences": len(blocked_pairs),
+            "items": items,
+        }
 
     async def _get_last_generated_reference_month(self, client: Client) -> Optional[date]:
         client_month = await self.db.scalar(
@@ -416,9 +755,12 @@ class FeeGeneratorService:
         if not self._is_client_eligible(client):
             return []
 
-        reference_month = self._normalize_reference_month(reference_month)
-        reference_label = self._format_reference_label(reference_month)
-        due_date = self._resolve_due_date_for_client(reference_month, client.dia_vencimento)
+        state = await self._collect_generation_state(client, reference_month)
+        if state["blocked"]:
+            return []
+
+        reference_month = state["reference_month"]
+        due_date = state["due_date"]
         creator_id = generated_by_id or client.user_id
         if not creator_id:
             raise ValueError(
@@ -427,14 +769,7 @@ class FeeGeneratorService:
 
         created_transactions: list[FinancialTransaction] = []
 
-        client_description = self._build_client_description(reference_label)
-        has_client_entry = await self._has_existing_honorarios_entry(
-            client_id=client.id,
-            reference_month=reference_month,
-            transaction_type=TransactionType.DESPESA,
-            description=client_description,
-        )
-        if not has_client_entry:
+        if state["would_create_client_entry"]:
             created_transactions.append(
                 FinancialTransaction(
                     client_id=client.id,
@@ -446,7 +781,7 @@ class FeeGeneratorService:
                     due_date=due_date,
                     paid_date=None,
                     reference_month=reference_month,
-                    description=client_description,
+                    description=state["client_description"],
                     category=None,
                     notes=(
                         f"Gerado automaticamente em {date.today().strftime('%d/%m/%Y')} "
@@ -458,14 +793,7 @@ class FeeGeneratorService:
             )
 
         if settings.OFFICE_CLIENT_ID:
-            office_description = self._build_office_description(client, reference_label)
-            has_office_entry = await self._has_existing_honorarios_entry(
-                client_id=settings.OFFICE_CLIENT_ID,
-                reference_month=reference_month,
-                transaction_type=TransactionType.RECEITA,
-                description=office_description,
-            )
-            if not has_office_entry:
+            if state["would_create_office_entry"]:
                 created_transactions.append(
                     FinancialTransaction(
                         client_id=settings.OFFICE_CLIENT_ID,
@@ -477,7 +805,7 @@ class FeeGeneratorService:
                         due_date=due_date,
                         paid_date=None,
                         reference_month=reference_month,
-                        description=office_description,
+                        description=state["office_description"],
                         category=None,
                         notes=(
                             f"Gerado automaticamente em {date.today().strftime('%d/%m/%Y')} "

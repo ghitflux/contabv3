@@ -41,6 +41,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FinanceiroKPIs, type FinanceiroKpi } from './FinanceiroKPIs';
 import { useTransactions } from '@/hooks/useTransactions';
 import {
+  type MonthlyFeePreviewResponse,
   PaymentMethod,
   PaymentStatus,
   TransactionType,
@@ -54,6 +55,7 @@ import { toast } from '@/lib/toast';
 import { formatISO } from 'date-fns';
 import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
 import { bankAccountsApi } from '@/lib/api/endpoints/bank-accounts';
+import { financeApi } from '@/lib/api/endpoints/finance';
 import type { BankAccount } from '@/types/bank-account';
 import { TransactionTrashModal } from './TransactionTrashModal';
 import { ConfirmBaixaLancamentoDialog } from './ConfirmBaixaLancamentoDialog';
@@ -144,6 +146,8 @@ const formatMonthYear = (value: string) => {
   return `${String(parsed.getMonth() + 1).padStart(2, '0')}/${parsed.getFullYear()}`;
 };
 
+type ActiveTransactionPanel = 'all' | 'receber' | 'pagar' | 'receita' | 'despesa';
+
 export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => void }) {
   const initialMonthFilterState = getCurrentMonthFilterState();
   const [monthFilter, setMonthFilter] = useState(initialMonthFilterState.monthFilter);
@@ -179,7 +183,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   const [newTransaction, setNewTransaction] = useState<NewTransactionState>(() =>
     buildDefaultTransaction()
   );
-  const [activePendingPanel, setActivePendingPanel] = useState<'all' | 'receber' | 'pagar'>('all');
+  const [activePendingPanel, setActivePendingPanel] = useState<ActiveTransactionPanel>('all');
   const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -192,6 +196,10 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   const [transactionsPage, setTransactionsPage] = useState(1);
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([]);
   const [isBulkUpdatingTransactions, setIsBulkUpdatingTransactions] = useState(false);
+  const [selectedHonorariosIds, setSelectedHonorariosIds] = useState<string[]>([]);
+  const [isDeletingHonorarios, setIsDeletingHonorarios] = useState(false);
+  const [feePreview, setFeePreview] = useState<MonthlyFeePreviewResponse | null>(null);
+  const [isLoadingFeePreview, setIsLoadingFeePreview] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [editForm, setEditForm] = useState({
     description: '',
@@ -357,7 +365,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       value: transaction.amount,
       status: transaction.payment_status,
       raw: transaction,
-      isRecurring: false,
+      isRecurring: Boolean(transaction.recurring_template_id),
     }));
   }, [transactions]);
 
@@ -412,20 +420,24 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     return `Mostrando ${startIndex}-${endIndex} de ${filteredDisplayTransactions.length}`;
   }, [filteredDisplayTransactions.length, transactionsPage]);
 
-  // Calcula receita e despesa com TODAS as transações (não apenas pagas)
+  const paidTransactions = useMemo(
+    () => transactions.filter((transaction) => transaction.payment_status === PaymentStatus.PAGO),
+    [transactions]
+  );
+
   const receita = useMemo(
     () =>
-      transactions
+      paidTransactions
         .filter((transaction) => transaction.transaction_type === TransactionType.RECEITA)
         .reduce((sum, transaction) => sum + transaction.amount, 0),
-    [transactions]
+    [paidTransactions]
   );
   const despesa = useMemo(
     () =>
-      transactions
+      paidTransactions
         .filter((transaction) => transaction.transaction_type === TransactionType.DESPESA)
         .reduce((sum, transaction) => sum + transaction.amount, 0),
-    [transactions]
+    [paidTransactions]
   );
   const lucro = receita - despesa;
   const receivableTransactions = useMemo(
@@ -470,6 +482,20 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
           isDuePaymentStatus(transaction.status)
       );
     }
+    if (activePendingPanel === 'receita') {
+      return filteredDisplayTransactions.filter(
+        (transaction) =>
+          transaction.raw.transaction_type === TransactionType.RECEITA &&
+          transaction.status === PaymentStatus.PAGO
+      );
+    }
+    if (activePendingPanel === 'despesa') {
+      return filteredDisplayTransactions.filter(
+        (transaction) =>
+          transaction.raw.transaction_type === TransactionType.DESPESA &&
+          transaction.status === PaymentStatus.PAGO
+      );
+    }
     return [];
   }, [activePendingPanel, filteredDisplayTransactions]);
 
@@ -507,15 +533,36 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     [honorariosTransactions]
   );
 
+  useEffect(() => {
+    const validHonorariosIds = new Set(honorariosTransactions.map((transaction) => transaction.id));
+    setSelectedHonorariosIds((prev) => prev.filter((id) => validHonorariosIds.has(id)));
+  }, [honorariosTransactions]);
+
   const selectedTransactionSet = useMemo(
     () => new Set(selectedTransactionIds),
     [selectedTransactionIds]
+  );
+  const selectedHonorariosSet = useMemo(
+    () => new Set(selectedHonorariosIds),
+    [selectedHonorariosIds]
+  );
+  const isAllHonorariosSelected = useMemo(
+    () =>
+      honorariosTransactions.length > 0 &&
+      honorariosTransactions.every((transaction) => selectedHonorariosSet.has(transaction.id)),
+    [honorariosTransactions, selectedHonorariosSet]
   );
   const isAllTransactionsOnPageSelected = useMemo(
     () =>
       paginatedDisplayTransactions.length > 0 &&
       paginatedDisplayTransactions.every((transaction) => selectedTransactionSet.has(transaction.id)),
     [paginatedDisplayTransactions, selectedTransactionSet]
+  );
+  const isAllPanelTransactionsSelected = useMemo(
+    () =>
+      panelTransactions.length > 0 &&
+      panelTransactions.every((transaction) => selectedTransactionSet.has(transaction.id)),
+    [panelTransactions, selectedTransactionSet]
   );
 
   const setRangeForMonth = (monthValue: string) => {
@@ -571,6 +618,34 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     };
   }, [refresh]);
 
+  useEffect(() => {
+    const referenceMonth = `${monthFilter || getCurrentMonthValue()}-01`;
+    let active = true;
+
+    (async () => {
+      try {
+        setIsLoadingFeePreview(true);
+        const preview = await financeApi.previewMonthlyFees({ reference_month: referenceMonth });
+        if (active) {
+          setFeePreview(preview);
+        }
+      } catch (error) {
+        console.error('Erro ao carregar prévia de honorários', error);
+        if (active) {
+          setFeePreview(null);
+        }
+      } finally {
+        if (active) {
+          setIsLoadingFeePreview(false);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [monthFilter, transactions.length]);
+
   const toggleTransactionSelection = (transactionId: string, checked: boolean) => {
     setSelectedTransactionIds((prev) => {
       if (checked) {
@@ -595,60 +670,39 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     });
   };
 
+  const toggleAllPanelTransactions = (checked: boolean) => {
+    if (!checked) {
+      const panelIds = new Set(panelTransactions.map((transaction) => transaction.id));
+      setSelectedTransactionIds((prev) => prev.filter((id) => !panelIds.has(id)));
+      return;
+    }
+
+    setSelectedTransactionIds((prev) => {
+      const next = new Set(prev);
+      panelTransactions.forEach((transaction) => next.add(transaction.id));
+      return Array.from(next);
+    });
+  };
+
   const handleBulkUpdateTransactions = async (targetStatus: PaymentStatus) => {
     if (!selectedTransactionIds.length) {
       toast.error('Selecione pelo menos um lançamento.');
       return;
     }
 
-    const selectedTransactions = displayTransactions
-      .filter((transaction) => selectedTransactionSet.has(transaction.id))
-      .map((transaction) => transaction.raw);
-
-    const transactionsToUpdate = selectedTransactions.filter((transaction) => {
-      if (targetStatus === PaymentStatus.PAGO) {
-        return transaction.payment_status !== PaymentStatus.PAGO;
-      }
-      return (
-        transaction.payment_status !== PaymentStatus.PENDENTE ||
-        Boolean(transaction.paid_date)
-      );
-    });
-
-    if (!transactionsToUpdate.length) {
-      toast.error(
-        targetStatus === PaymentStatus.PAGO
-          ? 'Os lançamentos selecionados já estão baixados.'
-          : 'Os lançamentos selecionados já estão pendentes.'
-      );
-      return;
-    }
-
     setIsBulkUpdatingTransactions(true);
-    let updatedCount = 0;
-    let failedCount = 0;
 
     try {
-      for (const transaction of transactionsToUpdate) {
-        try {
-          const payload: TransactionUpdate =
-            targetStatus === PaymentStatus.PAGO
-              ? {
-                  payment_status: PaymentStatus.PAGO,
-                  payment_method: transaction.payment_method ?? PaymentMethod.TRANSFERENCIA,
-                  paid_date: new Date().toISOString(),
-                }
-              : {
-                  payment_status: PaymentStatus.PENDENTE,
-                  paid_date: null,
-                };
-          await updateTransaction(transaction.id, payload);
-          updatedCount += 1;
-        } catch (error) {
-          console.error('Erro ao atualizar lançamento em lote', error);
-          failedCount += 1;
-        }
-      }
+      const response =
+        targetStatus === PaymentStatus.PAGO
+          ? await financeApi.bulkPayTransactions({
+              transaction_ids: selectedTransactionIds,
+              paid_date: new Date().toISOString(),
+              payment_method: PaymentMethod.TRANSFERENCIA,
+            })
+          : await financeApi.bulkReopenTransactions({
+              transaction_ids: selectedTransactionIds,
+            });
 
       await refresh();
       if (typeof window !== 'undefined') {
@@ -657,20 +711,140 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
 
       setSelectedTransactionIds([]);
 
-      if (failedCount > 0) {
+      if (response.failed > 0) {
         toast.error(
-          `${updatedCount} lançamento(s) atualizado(s) e ${failedCount} com falha na operação em lote.`
+          `${response.succeeded} lançamento(s) atualizado(s) e ${response.failed} com falha na operação em lote.`
         );
       } else {
-        toast.success(`${updatedCount} lançamento(s) atualizado(s) em lote.`);
+        toast.success(`${response.succeeded} lançamento(s) atualizado(s) em lote.`);
       }
+    } catch (error) {
+      console.error('Erro ao atualizar lançamentos em lote', error);
+      toast.error('Não foi possível concluir a operação em lote.');
     } finally {
       setIsBulkUpdatingTransactions(false);
     }
   };
 
+  const handleBulkDeleteTransactions = async () => {
+    if (!selectedTransactionIds.length) {
+      toast.error('Selecione pelo menos um lançamento.');
+      return;
+    }
+
+    setIsBulkUpdatingTransactions(true);
+    try {
+      const response = await financeApi.bulkDeleteTransactions({
+        transaction_ids: selectedTransactionIds,
+      });
+      await refresh();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
+      }
+      setSelectedTransactionIds([]);
+
+      if (response.failed > 0) {
+        toast.error(
+          `${response.succeeded} lançamento(s) excluído(s) e ${response.failed} falharam.`
+        );
+      } else {
+        toast.success(`${response.succeeded} lançamento(s) excluído(s) em lote.`);
+      }
+    } catch (error) {
+      console.error('Erro ao excluir lançamentos em lote', error);
+      toast.error('Não foi possível excluir os lançamentos selecionados.');
+    } finally {
+      setIsBulkUpdatingTransactions(false);
+    }
+  };
+
+  const toggleHonorariosSelection = (transactionId: string, checked: boolean) => {
+    setSelectedHonorariosIds((prev) => {
+      if (checked) {
+        if (prev.includes(transactionId)) return prev;
+        return [...prev, transactionId];
+      }
+      return prev.filter((id) => id !== transactionId);
+    });
+  };
+
+  const toggleAllHonorariosSelection = (checked: boolean) => {
+    if (!checked) {
+      setSelectedHonorariosIds([]);
+      return;
+    }
+    setSelectedHonorariosIds(honorariosTransactions.map((transaction) => transaction.id));
+  };
+
+  const refreshFeePreview = async () => {
+    const referenceMonth = `${monthFilter || getCurrentMonthValue()}-01`;
+    try {
+      setIsLoadingFeePreview(true);
+      const preview = await financeApi.previewMonthlyFees({ reference_month: referenceMonth });
+      setFeePreview(preview);
+    } catch (error) {
+      console.error('Erro ao atualizar prévia de honorários', error);
+      setFeePreview(null);
+      throw error;
+    } finally {
+      setIsLoadingFeePreview(false);
+    }
+  };
+
+  const handleGenerateFees = async () => {
+    try {
+      const referenceMonth = `${monthFilter || getCurrentMonthValue()}-01`;
+      const response = await financeApi.generateMonthlyFees({ reference_month: referenceMonth });
+      await refresh();
+      await refreshFeePreview();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
+      }
+      toast.success(response.message || 'Honorários gerados com sucesso.');
+    } catch (error) {
+      console.error('Erro ao gerar honorários', error);
+      toast.error('Não foi possível gerar os honorários.');
+    }
+  };
+
+  const handleBulkDeleteHonorarios = async () => {
+    if (!selectedHonorariosIds.length) {
+      toast.error('Selecione pelo menos um honorário.');
+      return;
+    }
+
+    setIsDeletingHonorarios(true);
+    try {
+      const response = await financeApi.bulkDeleteMonthlyFees({
+        office_transaction_ids: selectedHonorariosIds,
+      });
+      await refresh();
+      await refreshFeePreview();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
+      }
+      setSelectedHonorariosIds([]);
+
+      if (response.failed > 0) {
+        toast.error(
+          `${response.succeeded} honorário(s) excluído(s) e ${response.failed} falharam.`
+        );
+      } else {
+        toast.success(
+          `${response.succeeded} honorário(s) excluído(s) com bloqueio da competência.`
+        );
+      }
+    } catch (error) {
+      console.error('Erro ao excluir honorários em lote', error);
+      toast.error('Não foi possível excluir os honorários selecionados.');
+    } finally {
+      setIsDeletingHonorarios(false);
+    }
+  };
+
   const kpis: FinanceiroKpi[] = [
     {
+      id: 'receita',
       title: 'Receita do Período',
       value: formatCurrency(receita),
       change: '+4,2% vs mês anterior',
@@ -678,8 +852,12 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       icon: DollarSign,
       colorClass: 'text-green-600',
       backgroundClass: 'bg-green-50 dark:bg-green-900/20',
+      isPressable: true,
+      onPress: () =>
+        setActivePendingPanel((prev) => (prev === 'receita' ? 'all' : 'receita')),
     },
     {
+      id: 'despesa',
       title: 'Despesas',
       value: formatCurrency(despesa),
       change: '+1,8% vs mês anterior',
@@ -687,8 +865,12 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       icon: TrendingDown,
       colorClass: 'text-amber-600',
       backgroundClass: 'bg-amber-50 dark:bg-amber-900/20',
+      isPressable: true,
+      onPress: () =>
+        setActivePendingPanel((prev) => (prev === 'despesa' ? 'all' : 'despesa')),
     },
     {
+      id: 'lucro',
       title: 'Lucro',
       value: formatCurrency(lucro),
       change: '+6,5% vs mês anterior',
@@ -731,24 +913,32 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         transaction_type:
           newTransaction.type === 'Entrada' ? TransactionType.RECEITA : TransactionType.DESPESA,
         amount,
-        payment_method: bankName
-          ? bankName.toLowerCase().includes('pix')
-            ? PaymentMethod.PIX
-            : PaymentMethod.TRANSFERENCIA
-          : undefined,
-        payment_status: PaymentStatus.PAGO,
+        payment_method: newTransaction.isRecurring
+          ? undefined
+          : bankName
+            ? bankName.toLowerCase().includes('pix')
+              ? PaymentMethod.PIX
+              : PaymentMethod.TRANSFERENCIA
+            : undefined,
+        payment_status: newTransaction.isRecurring ? PaymentStatus.PENDENTE : PaymentStatus.PAGO,
         due_date: newTransaction.date,
-        paid_date: paidDate,
+        paid_date: newTransaction.isRecurring ? null : paidDate,
         reference_month: referenceMonth,
         description: newTransaction.history,
         notes,
+        is_recurring: newTransaction.isRecurring,
+        recurring_day: newTransaction.isRecurring ? newTransaction.recurringDay : null,
       });
       await refresh();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
       }
       setNewTransaction(buildDefaultTransaction());
-      toast.success('Lançamento registrado com sucesso.');
+      toast.success(
+        newTransaction.isRecurring
+          ? 'Série recorrente criada; competência atual lançada como pendente.'
+          : 'Lançamento registrado com sucesso.'
+      );
     } catch (error) {
       console.error(error);
       toast.error('Não foi possível registrar o lançamento.');
@@ -996,7 +1186,11 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
             <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
               {activePendingPanel === 'receber'
                 ? 'Lançamentos de Contas a Receber'
-                : 'Lançamentos de Contas a Pagar'}
+                : activePendingPanel === 'pagar'
+                  ? 'Lançamentos de Contas a Pagar'
+                  : activePendingPanel === 'receita'
+                    ? 'Lançamentos que compõem a Receita do Período'
+                    : 'Lançamentos que compõem as Despesas do Período'}
             </h3>
             <Button
               variant="light"
@@ -1011,14 +1205,37 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
             <div className="w-full overflow-x-auto">
               <Table aria-label="Tabela de baixa rápida" removeWrapper className="min-w-[680px]">
                 <TableHeader>
+                  <TableColumn className="w-16">
+                    <Checkbox
+                      isSelected={isAllPanelTransactionsSelected}
+                      onValueChange={toggleAllPanelTransactions}
+                      aria-label="Selecionar lançamentos do painel"
+                      isDisabled={panelTransactions.length === 0}
+                    />
+                  </TableColumn>
                   <TableColumn>Vencimento</TableColumn>
                   <TableColumn>Descrição</TableColumn>
                   <TableColumn className="text-right">Valor</TableColumn>
                   <TableColumn className="text-right">Ação</TableColumn>
                 </TableHeader>
-                <TableBody emptyContent="Nenhum lançamento pendente encontrado">
+                <TableBody
+                  emptyContent={
+                    activePendingPanel === 'receber' || activePendingPanel === 'pagar'
+                      ? 'Nenhum lançamento pendente encontrado'
+                      : 'Nenhum lançamento encontrado para este indicador'
+                  }
+                >
                   {panelTransactions.map((transaction) => (
                     <TableRow key={transaction.id}>
+                      <TableCell>
+                        <Checkbox
+                          isSelected={selectedTransactionSet.has(transaction.id)}
+                          onValueChange={(checked) =>
+                            toggleTransactionSelection(transaction.id, checked)
+                          }
+                          aria-label={`Selecionar lançamento ${transaction.history}`}
+                        />
+                      </TableCell>
                       <TableCell>
                         {formatLocalDate(transaction.raw.due_date)}
                       </TableCell>
@@ -1027,14 +1244,20 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                         {formatCurrency(transaction.value)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          color="primary"
-                          variant="flat"
-                          onPress={() => setPendingBaixaTransaction(transaction.raw)}
-                        >
-                          Baixa
-                        </Button>
+                        {isDuePaymentStatus(transaction.status) ? (
+                          <Button
+                            size="sm"
+                            color="primary"
+                            variant="flat"
+                            onPress={() => setPendingBaixaTransaction(transaction.raw)}
+                          >
+                            Baixa
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-default-500">
+                            {getPaymentStatusLabel(transaction.status)}
+                          </span>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1056,14 +1279,71 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
               lançamento(s)
             </p>
           </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="bordered"
+              onPress={() =>
+                refreshFeePreview().catch(() => {
+                  toast.error('Não foi possível atualizar a prévia.');
+                })
+              }
+              isLoading={isLoadingFeePreview}
+            >
+              Atualizar prévia
+            </Button>
+            <Button color="primary" variant="flat" onPress={handleGenerateFees}>
+              Gerar honorários
+            </Button>
+          </div>
         </CardHeader>
         <CardBody className="space-y-4">
-          <div className="rounded-lg border border-default-200/60 bg-default-50/60 px-3 py-2 text-sm text-default-600">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+            <div className="rounded-lg border border-default-200/60 bg-default-50/60 px-3 py-2">
+              <p className="text-xs uppercase tracking-wide text-default-500">Competência</p>
+              <p className="text-lg font-semibold text-default-800">
+                {formatMonthYear(`${monthFilter || getCurrentMonthValue()}-01`)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-default-200/60 bg-default-50/60 px-3 py-2">
+              <p className="text-xs uppercase tracking-wide text-default-500">Prévia</p>
+              <p className="text-lg font-semibold text-default-800">
+                {feePreview ? feePreview.would_generate_count : 0} cliente(s)
+              </p>
+            </div>
+            <div className="rounded-lg border border-default-200/60 bg-default-50/60 px-3 py-2">
+              <p className="text-xs uppercase tracking-wide text-default-500">Entradas faltantes</p>
+              <p className="text-lg font-semibold text-default-800">
+                {feePreview ? feePreview.would_generate_entries : 0}
+              </p>
+            </div>
+            <div className="rounded-lg border border-default-200/60 bg-default-50/60 px-3 py-2">
+              <p className="text-xs uppercase tracking-wide text-default-500">Bloqueados</p>
+              <p className="text-lg font-semibold text-default-800">
+                {feePreview ? feePreview.blocked_count : 0}
+              </p>
+            </div>
+          </div>
+          <div className="rounded-lg border border-default-200/60 bg-default-50/60 px-3 py-3 text-sm text-default-600">
             <p>
-              Competência automática: <strong>{formatMonthYear(`${monthFilter || getCurrentMonthValue()}-01`)}</strong>
+              Competência automática:{' '}
+              <strong>{formatMonthYear(`${monthFilter || getCurrentMonthValue()}-01`)}</strong>
             </p>
-            <p>Regra: honorários são gerados automaticamente para o mês atual e ficam pendentes até baixa manual do admin.</p>
-            <p>A prévia foi removida; a automação diária completa competências em atraso sem avançar para o mês seguinte.</p>
+            {isLoadingFeePreview ? (
+              <p>Carregando prévia corrigida dos honorários...</p>
+            ) : feePreview ? (
+              <>
+                <p>
+                  A prévia aponta <strong>{feePreview.would_generate_entries}</strong> entrada(s)
+                  faltante(s) para <strong>{feePreview.would_generate_count}</strong> cliente(s),
+                  somando <strong>{formatCurrency(feePreview.total_amount)}</strong>.
+                </p>
+                <p>
+                  Clientes com competência bloqueada nesta data: <strong>{feePreview.blocked_count}</strong>.
+                </p>
+              </>
+            ) : (
+              <p>Não foi possível carregar a prévia dos honorários.</p>
+            )}
           </div>
           <Accordion variant="splitted">
             <AccordionItem
@@ -1080,13 +1360,54 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                 </div>
               }
             >
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-default-600">
+                  Selecionados: <strong>{selectedHonorariosIds.length}</strong> honorário(s)
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="bordered"
+                    onPress={() => toggleAllHonorariosSelection(!isAllHonorariosSelected)}
+                    isDisabled={honorariosTransactions.length === 0 || isDeletingHonorarios}
+                  >
+                    {isAllHonorariosSelected ? 'Desmarcar todos' : 'Marcar todos'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    color="danger"
+                    variant="flat"
+                    onPress={handleBulkDeleteHonorarios}
+                    isDisabled={selectedHonorariosIds.length === 0 || isDeletingHonorarios}
+                    isLoading={isDeletingHonorarios}
+                  >
+                    Excluir selecionados
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="light"
+                    onPress={() => setSelectedHonorariosIds([])}
+                    isDisabled={selectedHonorariosIds.length === 0 || isDeletingHonorarios}
+                  >
+                    Limpar seleção
+                  </Button>
+                </div>
+              </div>
               <div className="w-full overflow-x-auto">
                 <Table
                   aria-label="Tabela detalhada de honorários do escritório"
                   removeWrapper
-                  className="min-w-[1100px]"
+                  className="min-w-[1160px]"
                 >
                   <TableHeader>
+                    <TableColumn className="w-16">
+                      <Checkbox
+                        isSelected={isAllHonorariosSelected}
+                        onValueChange={toggleAllHonorariosSelection}
+                        aria-label="Selecionar todos os honorários"
+                        isDisabled={honorariosTransactions.length === 0}
+                      />
+                    </TableColumn>
                     <TableColumn>Competência</TableColumn>
                     <TableColumn>Cliente</TableColumn>
                     <TableColumn>CNPJ</TableColumn>
@@ -1099,6 +1420,15 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                   <TableBody emptyContent="Nenhum honorário encontrado para o período selecionado">
                     {honorariosTransactions.map((transaction) => (
                       <TableRow key={transaction.id}>
+                        <TableCell>
+                          <Checkbox
+                            isSelected={selectedHonorariosSet.has(transaction.id)}
+                            onValueChange={(checked) =>
+                              toggleHonorariosSelection(transaction.id, checked)
+                            }
+                            aria-label={`Selecionar honorário ${transaction.cliente}`}
+                          />
+                        </TableCell>
                         <TableCell>{transaction.competenciaLabel}</TableCell>
                         <TableCell>{transaction.cliente}</TableCell>
                         <TableCell>{transaction.cnpj}</TableCell>
@@ -1370,6 +1700,16 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
               </Button>
               <Button
                 size="sm"
+                color="danger"
+                variant="flat"
+                onPress={handleBulkDeleteTransactions}
+                isDisabled={selectedTransactionIds.length === 0 || isBulkUpdatingTransactions}
+                isLoading={isBulkUpdatingTransactions}
+              >
+                Excluir em massa
+              </Button>
+              <Button
+                size="sm"
                 variant="light"
                 onPress={() => setSelectedTransactionIds([])}
                 isDisabled={selectedTransactionIds.length === 0 || isBulkUpdatingTransactions}
@@ -1460,6 +1800,10 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                         variant="light"
                         isIconOnly
                         aria-label="Excluir lançamento"
+                        isDisabled={
+                          transaction.raw.client_id === OFFICE_CLIENT_ID &&
+                          transaction.raw.description.startsWith('Honorários -')
+                        }
                         onPress={() => setPendingDeleteTransaction(transaction.raw)}
                       >
                         <Trash2 className="h-4 w-4" />

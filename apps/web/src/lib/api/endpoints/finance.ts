@@ -13,6 +13,12 @@ import type {
   TransactionCancel,
   MonthlyFeeGenerateRequest,
   MonthlyFeeGenerateResponse,
+  MonthlyFeePreviewResponse,
+  MonthlyFeeBulkDeleteRequest,
+  MonthlyFeeBulkDeleteResponse,
+  TransactionBulkIdsRequest,
+  TransactionBulkOperationResponse,
+  TransactionBulkPayRequest,
   FinancialDashboardKPIs,
   ReceivablesAgingReport,
   RevenueByPeriodReport,
@@ -128,6 +134,42 @@ export const financeApi = {
 
   async generateMonthlyFees(data: MonthlyFeeGenerateRequest): Promise<MonthlyFeeGenerateResponse> {
     return apiClient.post<MonthlyFeeGenerateResponse>('/finance/fees/generate', data);
+  },
+
+  async previewMonthlyFees(data: MonthlyFeeGenerateRequest): Promise<MonthlyFeePreviewResponse> {
+    const response = await apiClient.post<MonthlyFeePreviewResponse>('/finance/fees/preview', data);
+    return {
+      ...response,
+      total_amount: normalizeCurrencyNumber(Number(response.total_amount ?? 0)),
+      clients: response.clients.map((client) => ({
+        ...client,
+        amount: normalizeCurrencyNumber(Number(client.amount ?? 0)),
+      })),
+    };
+  },
+
+  async bulkPayTransactions(
+    data: TransactionBulkPayRequest
+  ): Promise<TransactionBulkOperationResponse> {
+    return apiClient.post<TransactionBulkOperationResponse>('/finance/bulk/pay', data);
+  },
+
+  async bulkReopenTransactions(
+    data: TransactionBulkIdsRequest
+  ): Promise<TransactionBulkOperationResponse> {
+    return apiClient.post<TransactionBulkOperationResponse>('/finance/bulk/reopen', data);
+  },
+
+  async bulkDeleteTransactions(
+    data: TransactionBulkIdsRequest
+  ): Promise<TransactionBulkOperationResponse> {
+    return apiClient.post<TransactionBulkOperationResponse>('/finance/bulk/delete', data);
+  },
+
+  async bulkDeleteMonthlyFees(
+    data: MonthlyFeeBulkDeleteRequest
+  ): Promise<MonthlyFeeBulkDeleteResponse> {
+    return apiClient.post<MonthlyFeeBulkDeleteResponse>('/finance/fees/bulk-delete', data);
   },
 
   async uploadTransactionAttachment(transactionId: string, file: File): Promise<Transaction> {

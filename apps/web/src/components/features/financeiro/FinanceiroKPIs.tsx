@@ -14,6 +14,7 @@ import {
 export type FinanceiroKpiTrend = 'up' | 'down' | 'neutral';
 
 export interface FinanceiroKpi {
+  id?: string;
   title: string;
   value: string;
   change: string;
@@ -21,6 +22,8 @@ export interface FinanceiroKpi {
   icon: LucideIcon;
   colorClass: string;
   backgroundClass: string;
+  isPressable?: boolean;
+  onPress?: () => void;
 }
 
 const defaultKpis: FinanceiroKpi[] = [
@@ -109,9 +112,17 @@ export function FinanceiroKPIs({ kpis = defaultKpis }: FinanceiroKPIsProps) {
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {kpis.map((kpi) => {
         const Icon = kpi.icon;
+        const isPressable = Boolean(kpi.isPressable && kpi.onPress);
 
         return (
-          <Card key={kpi.title} className="border border-default-200/50 dark:border-default-100/20">
+          <Card
+            key={kpi.id ?? kpi.title}
+            isPressable={isPressable}
+            onPress={kpi.onPress}
+            className={`border border-default-200/50 dark:border-default-100/20 ${
+              isPressable ? 'cursor-pointer transition-transform hover:-translate-y-0.5' : ''
+            }`}
+          >
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <p className="text-sm font-medium text-slate-600 dark:text-slate-400">{kpi.title}</p>
               <div className={`p-2 rounded-lg ${kpi.backgroundClass}`}>

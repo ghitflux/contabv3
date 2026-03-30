@@ -55,6 +55,8 @@ export interface Transaction {
   notes?: string | null;
   invoice_number?: string | null;
   receipt_url?: string | null;
+  recurring_template_id?: string | null;
+  restore_blocked_reason?: string | null;
   created_by_id: string;
   created_at: string; // ISO datetime string
   updated_at: string; // ISO datetime string
@@ -76,6 +78,8 @@ export interface TransactionCreate {
   category?: string | null; // Código do plano de contas
   notes?: string | null;
   invoice_number?: string | null;
+  is_recurring?: boolean;
+  recurring_day?: number | null;
 }
 
 export interface TransactionUpdate {
@@ -139,6 +143,82 @@ export interface MonthlyFeeGenerateResponse {
   skipped?: number | null;
   errors: number;
   message: string;
+}
+
+export interface MonthlyFeePreviewClient {
+  client_id: string;
+  client_name: string;
+  client_cnpj?: string | null;
+  amount: number;
+  due_date?: string | null;
+  would_create_client_entry: boolean;
+  would_create_office_entry: boolean;
+  existing_client_entry: boolean;
+  existing_office_entry: boolean;
+  blocked: boolean;
+  blocked_reason?: string | null;
+}
+
+export interface MonthlyFeePreviewResponse {
+  total_clients: number;
+  would_generate_count: number;
+  would_generate_entries: number;
+  total_amount: number;
+  reference_month: string;
+  blocked_count: number;
+  has_more: boolean;
+  clients: MonthlyFeePreviewClient[];
+}
+
+export interface TransactionBulkIdsRequest {
+  transaction_ids: string[];
+}
+
+export interface TransactionBulkPayRequest extends TransactionBulkIdsRequest {
+  paid_date?: string | null;
+  payment_method?: PaymentMethod;
+  notes?: string | null;
+}
+
+export interface TransactionBulkOperationItem {
+  transaction_id: string;
+  success: boolean;
+  detail?: string | null;
+}
+
+export interface TransactionBulkOperationResponse {
+  success: boolean;
+  action: string;
+  requested: number;
+  processed: number;
+  succeeded: number;
+  failed: number;
+  items: TransactionBulkOperationItem[];
+}
+
+export interface MonthlyFeeBulkDeleteRequest {
+  office_transaction_ids: string[];
+  reason?: string | null;
+}
+
+export interface MonthlyFeeBulkDeleteItem {
+  office_transaction_id: string;
+  client_id?: string | null;
+  reference_month?: string | null;
+  success: boolean;
+  deleted_office_entry: boolean;
+  deleted_client_entry: boolean;
+  blocked: boolean;
+  detail?: string | null;
+}
+
+export interface MonthlyFeeBulkDeleteResponse {
+  success: boolean;
+  requested: number;
+  succeeded: number;
+  failed: number;
+  blocked_competences: number;
+  items: MonthlyFeeBulkDeleteItem[];
 }
 
 // Financial KPIs
