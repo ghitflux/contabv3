@@ -2,6 +2,28 @@
 
 Data: `2026-03-30`
 
+## Histórico de execução
+
+| Data       | Commit  | Resultado                                            |
+|------------|---------|------------------------------------------------------|
+| 2026-03-30 | 4c728e6 | Executado com sucesso, migration aplicada, sem erros |
+
+### O que foi entregue
+
+- Recorrência mensal real para lançamentos rápidos do escritório e do cliente
+- KPIs `Receita do Período` e `Despesas` em base caixa com drilldown clicável
+- Operações em massa: marcar pagos, desmarcar baixa, excluir em lote
+- Prévia de honorários com competência correta
+- Exclusão em massa de honorários com bloqueio de recriação por competência
+- Migration `20260330_fin_recurring`: tabelas `financial_recurring_templates` e `monthly_fee_blocks`, colunas `recurring_template_id` e `restore_blocked_reason` em `financial_transactions`
+
+### Problemas encontrados durante o deploy
+
+1. **Encoding Windows no build ao vivo**: a saída do Docker durante o rebuild gerou caracteres UTF-8 que o codec cp1252 (padrão Windows) não consegue representar, causando `UnicodeEncodeError`. O build completou normalmente no servidor, mas o monitoramento local caiu.
+   - **Regra para próximos deploys**: sempre usar `sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')` no início de scripts paramiko que capturem saída de Docker.
+
+---
+
 Escopo desta atualização:
 - recorrência mensal real para lançamentos rápidos do escritório e do cliente
 - KPIs de `Receita do Período` e `Despesas` em base caixa, com drilldown clicável
