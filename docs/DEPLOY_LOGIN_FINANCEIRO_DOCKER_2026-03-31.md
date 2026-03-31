@@ -4,6 +4,88 @@ Data base: `2026-03-31`
 
 Documento para a proxima atualizacao do servidor com todas as alteracoes aplicadas localmente nas entregas de login, financeiro e infraestrutura Docker.
 
+## Historico de execucao
+
+| Data       | Commit  | Resultado                                                        |
+|------------|---------|------------------------------------------------------------------|
+| 2026-03-31 | 06c466c | Executado com sucesso apos hotfix de NEXT_PUBLIC_API_URL         |
+
+### O que foi entregue
+
+- Login auth-aware: sem sessao vai para `/login`, admin/func vai para `/clientes`, cliente vai para `/financeiro`
+- Redirecionamento pos-login centralizado em `default-route.ts`
+- Honorarios automaticos: pay/edit/delete na aba Escritorio
+- Despesas nao pagas nascem em Contas a Pagar (PENDENTE, sem paid_date)
+- KPI dinamico Lucro Liquido / Prejuizo no escritorio
+- Docker local sobe postgres + api + web via `docker-compose.yml`
+- Correcao do proxy de login: `INTERNAL_API_URL=http://api:8000/api/v1` no container web
+
+### Problemas encontrados durante o deploy
+
+#### Problema 1 — NEXT_PUBLIC_API_URL com /v1 quebra o nginx (CRITICO)
+
+**Causa raiz**: o nginx roteia `/api/` para o FastAPI adicionando o prefixo `/v1/` automaticamente:
+
+```nginx
+location /api/ {
+    proxy_pass http://api_backend/api/v1/;
+}
+```
+
+Se `NEXT_PUBLIC_API_URL=https://cicgestao.com/api/v1`, o browser chama `/api/v1/auth/login`.
+O nginx bate no bloco mais especifico `/api/v1/auth/login` com `proxy_pass http://api_backend/api/v1/`
+e o caminho fica `/api/v1/` (raiz da API) — o login retorna erro silencioso.
+Para todas as outras rotas (`/api/v1/users/me`, etc.), o nginx duplica o prefixo:
+`/api/` strip → `v1/users/me` → proxy para `/api/v1/v1/users/me` — 404.
+
+**Sintoma**: usuario nao consegue logar mesmo com credenciais corretas. Sem mensagem clara de erro.
+A API responde 200 em testes diretos (porta 8000 ou 3000), mas nao via browser (nginx).
+
+**Correcao aplicada no servidor**:
+
+```bash
+sed -i 's|NEXT_PUBLIC_API_URL=https://cicgestao.com/api/v1|NEXT_PUBLIC_API_URL=https://cicgestao.com/api|g' \
+  /home/deploy/apps/contabil/.env.prod
+```
+
+Seguido de rebuild e restart do container `web`.
+
+**Regra permanente para proximos deploys**:
+
+> `NEXT_PUBLIC_API_URL` deve ser sempre `https://cicgestao.com/api` (SEM `/v1`).
+> O nginx adiciona `/v1` automaticamente. Nunca inclua `/v1` nessa variavel.
+
+Verificar antes de todo rebuild:
+
+```bash
+grep 'NEXT_PUBLIC_API_URL' /home/deploy/apps/contabil/.env.prod
+# Esperado: NEXT_PUBLIC_API_URL=https://cicgestao.com/api
+# ERRADO:   NEXT_PUBLIC_API_URL=https://cicgestao.com/api/v1
+```
+
+#### Problema 2 — Senha do admin nao pode ser resetada durante o deploy
+
+Durante o diagnostico, a senha do admin foi temporariamente alterada.
+A senha original foi restaurada a partir do backup (`backup_20260331_173805_*.sql`).
+
+**Regra**: nunca resetar senhas de usuarios durante deploys.
+Se precisar diagnosticar login, usar o backup para extrair o hash e restaurar.
+
+#### Problema 3 — INTERNAL_API_URL nao estava no .env.prod
+
+A variavel `INTERNAL_API_URL=http://api:8000/api/v1` nao existia no `.env.prod` do servidor.
+Foi adicionada via `sed` antes do rebuild. Sem ela, o proxy interno do container `web`
+tentava resolver `localhost:8000` (o proprio container) e retornava `ECONNREFUSED` no login.
+
+Adicionar ao `.env.prod` caso nao exista:
+
+```bash
+grep -q 'INTERNAL_API_URL' /home/deploy/apps/contabil/.env.prod || \
+  echo 'INTERNAL_API_URL=http://api:8000/api/v1' >> /home/deploy/apps/contabil/.env.prod
+```
+
+---
+
 ## Resumo executivo
 
 Escopo desta atualizacao:
