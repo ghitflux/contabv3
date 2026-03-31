@@ -42,11 +42,13 @@ import { FinanceiroKPIs, type FinanceiroKpi } from './FinanceiroKPIs';
 import { useTransactions } from '@/hooks/useTransactions';
 import {
   type MonthlyFeePreviewResponse,
+  type MonthlyFeePairUpdate,
   PaymentMethod,
   PaymentStatus,
   TransactionType,
   type Transaction,
   type TransactionUpdate,
+  isAutomaticOfficeMonthlyFeeTransaction,
   isDuePaymentStatus,
   getPaymentStatusLabel,
   getPaymentMethodLabel,
@@ -100,6 +102,7 @@ type NewTransactionState = {
   history: string;
   observation: string;
   value: string;
+  isSettled: boolean;
   isRecurring: boolean;
   recurringDay: number;
 };
@@ -111,13 +114,17 @@ const initialHistories: StandardHistory[] = [
   { id: '4', description: 'Internet', accountingAccount: '2.1.1.02', type: 'expense' },
 ];
 
-const buildDefaultTransaction = (baseDate: Date = new Date()): NewTransactionState => ({
+const buildDefaultTransaction = (
+  baseDate: Date = new Date(),
+  type: DisplayTransactionType = 'Entrada'
+): NewTransactionState => ({
   date: formatISO(baseDate, { representation: 'date' }),
-  type: 'Entrada',
+  type,
   bank: '1',
   history: '',
   observation: '',
   value: '',
+  isSettled: type === 'Entrada',
   isRecurring: false,
   recurringDay: 1,
 });
@@ -216,6 +223,15 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   // OFFICE_CLIENT_ID is used for transactions (still required)
   // Bank accounts use office_only flag instead
   const OFFICE_CLIENT_ID = process.env.NEXT_PUBLIC_OFFICE_CLIENT_ID ?? '';
+  const isAutomaticOfficeFee = useCallback(
+    (transaction: Transaction) =>
+      isAutomaticOfficeMonthlyFeeTransaction(transaction, OFFICE_CLIENT_ID || undefined),
+    [OFFICE_CLIENT_ID]
+  );
+  const isEditingAutomaticOfficeFee = useMemo(
+    () => (editingTransaction ? isAutomaticOfficeFee(editingTransaction) : false),
+    [editingTransaction, isAutomaticOfficeFee]
+  );
 
   // Funções para gerenciar bancos do escritório
   const resetBankForm = useCallback(() => {
@@ -440,6 +456,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     [paidTransactions]
   );
   const lucro = receita - despesa;
+  const isNegativeProfit = lucro < 0;
   const receivableTransactions = useMemo(
     () =>
       transactions.filter(
@@ -502,10 +519,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   const honorariosTransactions = useMemo(() => {
     return transactions
       .filter(
-        (transaction) =>
-          transaction.client_id === OFFICE_CLIENT_ID &&
-          transaction.transaction_type === TransactionType.RECEITA &&
-          transaction.description.startsWith('Honorários -')
+        (transaction) => isAutomaticOfficeFee(transaction)
       )
       .map((transaction) => {
         const descriptionMatch = transaction.description.match(HONORARIOS_DESCRIPTION_PATTERN);
@@ -524,9 +538,10 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
           amount: transaction.amount,
           paymentStatus: transaction.payment_status,
           paymentMethod: transaction.payment_method ?? null,
+          raw: transaction,
         };
       });
-  }, [transactions, OFFICE_CLIENT_ID]);
+  }, [transactions, isAutomaticOfficeFee]);
 
   const totalHonorarios = useMemo(
     () => honorariosTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
@@ -871,13 +886,15 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     },
     {
       id: 'lucro',
-      title: 'Lucro',
+      title: isNegativeProfit ? 'Prejuízo' : 'Lucro Líquido',
       value: formatCurrency(lucro),
-      change: '+6,5% vs mês anterior',
-      trend: 'up',
-      icon: TrendingUp,
-      colorClass: 'text-teal-600',
-      backgroundClass: 'bg-teal-50 dark:bg-teal-900/20',
+      change: isNegativeProfit ? 'Resultado negativo no período' : 'Resultado positivo no período',
+      trend: isNegativeProfit ? 'down' : 'up',
+      icon: isNegativeProfit ? TrendingDown : TrendingUp,
+      colorClass: isNegativeProfit ? 'text-red-600' : 'text-teal-600',
+      backgroundClass: isNegativeProfit
+        ? 'bg-red-50 dark:bg-red-900/20'
+        : 'bg-teal-50 dark:bg-teal-900/20',
     },
   ];
 
@@ -906,6 +923,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     const notes = notesParts.length ? notesParts.join(' | ') : undefined;
     const paidDate = new Date(`${newTransaction.date}T12:00:00`).toISOString();
     const referenceMonth = `${newTransaction.date.slice(0, 7)}-01`;
+    const isSettled = !newTransaction.isRecurring && newTransaction.isSettled;
 
     try {
       await createTransaction({
@@ -913,16 +931,18 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         transaction_type:
           newTransaction.type === 'Entrada' ? TransactionType.RECEITA : TransactionType.DESPESA,
         amount,
-        payment_method: newTransaction.isRecurring
+        payment_method: !isSettled
+          ? undefined
+          : newTransaction.isRecurring
           ? undefined
           : bankName
             ? bankName.toLowerCase().includes('pix')
               ? PaymentMethod.PIX
               : PaymentMethod.TRANSFERENCIA
             : undefined,
-        payment_status: newTransaction.isRecurring ? PaymentStatus.PENDENTE : PaymentStatus.PAGO,
+        payment_status: isSettled ? PaymentStatus.PAGO : PaymentStatus.PENDENTE,
         due_date: newTransaction.date,
-        paid_date: newTransaction.isRecurring ? null : paidDate,
+        paid_date: isSettled ? paidDate : null,
         reference_month: referenceMonth,
         description: newTransaction.history,
         notes,
@@ -949,8 +969,20 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     if (!pendingDeleteTransaction) return;
     try {
       setIsConfirmingDelete(true);
-      await deleteTransaction(pendingDeleteTransaction.id);
-      toast.success('Lançamento removido.');
+      const isAutomaticFee = isAutomaticOfficeFee(pendingDeleteTransaction);
+      if (isAutomaticFee) {
+        await financeApi.deleteMonthlyFee(pendingDeleteTransaction.id);
+      } else {
+        await deleteTransaction(pendingDeleteTransaction.id);
+      }
+      if (isAutomaticFee) {
+        await refreshFeePreview();
+      }
+      toast.success(
+        isAutomaticFee
+          ? 'Honorário automático removido com bloqueio da competência.'
+          : 'Lançamento removido.'
+      );
       await refresh();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
@@ -969,11 +1001,17 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     try {
       setIsConfirmingBaixa(true);
       const paymentMethod = pendingBaixaTransaction.payment_method ?? PaymentMethod.TRANSFERENCIA;
-      await updateTransaction(pendingBaixaTransaction.id, {
-        payment_status: PaymentStatus.PAGO,
-        payment_method: paymentMethod,
-        paid_date: new Date().toISOString(),
-      });
+      if (isAutomaticOfficeFee(pendingBaixaTransaction)) {
+        await financeApi.markMonthlyFeeAsPaid(pendingBaixaTransaction.id, {
+          paid_date: new Date().toISOString(),
+          payment_method: paymentMethod,
+        });
+      } else {
+        await financeApi.markAsPaid(pendingBaixaTransaction.id, {
+          paid_date: new Date().toISOString(),
+          payment_method: paymentMethod,
+        });
+      }
       toast.success('Lançamento baixado com sucesso.');
       await refresh();
       if (typeof window !== 'undefined') {
@@ -1012,12 +1050,42 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       toast.error('Informe um valor válido.');
       return;
     }
-    if (!editForm.description.trim()) {
+    if (!isAutomaticOfficeFee(editingTransaction) && !editForm.description.trim()) {
       toast.error('Informe a descrição.');
       return;
     }
     if (!editForm.due_date) {
       toast.error('Informe a data de vencimento.');
+      return;
+    }
+
+    if (isAutomaticOfficeFee(editingTransaction)) {
+      const payload: MonthlyFeePairUpdate = {
+        amount: amountValue,
+        due_date: editForm.due_date,
+        notes: editForm.notes.trim() || null,
+        invoice_number: editForm.invoice_number.trim() || null,
+      };
+
+      if (editingTransaction.payment_status === PaymentStatus.PAGO) {
+        payload.payment_method = editForm.payment_method ? editForm.payment_method : null;
+        payload.paid_date = editForm.paid_date || null;
+      }
+
+      try {
+        await financeApi.updateMonthlyFee(editingTransaction.id, payload);
+        toast.success('Honorário automático atualizado com sucesso.');
+        setIsEditModalOpen(false);
+        setEditingTransaction(null);
+        await refresh();
+        await refreshFeePreview();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
+        }
+      } catch (error) {
+        console.error('Erro ao atualizar honorário automático', error);
+        toast.error('Não foi possível atualizar o honorário automático.');
+      }
       return;
     }
 
@@ -1050,6 +1118,8 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       toast.error('Não foi possível atualizar o lançamento.');
     }
   };
+
+  const settlementLabel = newTransaction.type === 'Entrada' ? 'Já recebido' : 'Já pago';
 
   const handleAddHistory = () => {
     if (!newHistory.description) return;
@@ -1416,6 +1486,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                     <TableColumn>Status</TableColumn>
                     <TableColumn>Pagamento</TableColumn>
                     <TableColumn>Data Baixa</TableColumn>
+                    <TableColumn className="text-right">Ações</TableColumn>
                   </TableHeader>
                   <TableBody emptyContent="Nenhum honorário encontrado para o período selecionado">
                     {honorariosTransactions.map((transaction) => (
@@ -1448,6 +1519,37 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                           {transaction.paidDate
                             ? formatLocalDate(transaction.paidDate)
                             : '-'}
+                        </TableCell>
+                        <TableCell className="text-right space-x-1">
+                          {isDuePaymentStatus(transaction.paymentStatus) && (
+                            <Button
+                              size="sm"
+                              variant="flat"
+                              color="primary"
+                              onPress={() => setPendingBaixaTransaction(transaction.raw)}
+                            >
+                              Baixa
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="light"
+                            isIconOnly
+                            aria-label="Editar honorário"
+                            onPress={() => openEditTransaction(transaction.raw)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="light"
+                            color="danger"
+                            isIconOnly
+                            aria-label="Excluir honorário"
+                            onPress={() => setPendingDeleteTransaction(transaction.raw)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1548,7 +1650,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
           </Button>
         </CardHeader>
         <CardBody className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
             <DatePickerField
               label="Data"
               value={newTransaction.date}
@@ -1560,7 +1662,12 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
               onSelectionChange={(keys) => {
                 const value = Array.from(keys)[0] as DisplayTransactionType | undefined;
                 if (value) {
-                  setNewTransaction((prev) => ({ ...prev, type: value, history: '' }));
+                  setNewTransaction((prev) => ({
+                    ...prev,
+                    type: value,
+                    history: '',
+                    isSettled: prev.isRecurring ? false : value === 'Entrada',
+                  }));
                 }
               }}
             >
@@ -1615,11 +1722,23 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
             />
             <div className="flex flex-col justify-center">
               <Checkbox
+                isSelected={newTransaction.isSettled}
+                onValueChange={(checked) =>
+                  setNewTransaction((prev) => ({ ...prev, isSettled: checked }))
+                }
+                isDisabled={newTransaction.isRecurring}
+              >
+                {settlementLabel}
+              </Checkbox>
+            </div>
+            <div className="flex flex-col justify-center">
+              <Checkbox
                 isSelected={newTransaction.isRecurring}
                 onValueChange={(checked) =>
                   setNewTransaction((prev) => ({
                     ...prev,
                     isRecurring: checked,
+                    isSettled: checked ? false : prev.type === 'Entrada',
                     recurringDay: checked ? prev.recurringDay : 1,
                   }))
                 }
@@ -1800,10 +1919,6 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                         variant="light"
                         isIconOnly
                         aria-label="Excluir lançamento"
-                        isDisabled={
-                          transaction.raw.client_id === OFFICE_CLIENT_ID &&
-                          transaction.raw.description.startsWith('Honorários -')
-                        }
                         onPress={() => setPendingDeleteTransaction(transaction.raw)}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -1989,18 +2104,43 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         }}
       >
         <ModalContent>
-          {(onClose) => (
-            <>
-              <ModalHeader>Editar Lançamento</ModalHeader>
+            {(onClose) => (
+              <>
+              <ModalHeader>
+                {isEditingAutomaticOfficeFee
+                  ? 'Editar Honorário Automático'
+                  : 'Editar Lançamento'}
+              </ModalHeader>
               <ModalBody className="space-y-3">
-                <Input
-                  label="Descrição"
-                  placeholder="Ex: Honorários do mês"
-                  value={editForm.description}
-                  onValueChange={(value) =>
-                    setEditForm((prev) => ({ ...prev, description: value }))
-                  }
-                />
+                {isEditingAutomaticOfficeFee ? (
+                  <>
+                    <Input
+                      label="Descrição"
+                      value={editForm.description}
+                      isReadOnly
+                      isDisabled
+                    />
+                    <Input
+                      label="Competência"
+                      value={
+                        editingTransaction
+                          ? formatMonthYear(editingTransaction.reference_month)
+                          : '-'
+                      }
+                      isReadOnly
+                      isDisabled
+                    />
+                  </>
+                ) : (
+                  <Input
+                    label="Descrição"
+                    placeholder="Ex: Honorários do mês"
+                    value={editForm.description}
+                    onValueChange={(value) =>
+                      setEditForm((prev) => ({ ...prev, description: value }))
+                    }
+                  />
+                )}
                 <Input
                   label="Valor (R$)"
                   type="number"
@@ -2020,38 +2160,46 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                     aria-label="Data de vencimento"
                   />
                 </div>
-                <Select
-                  label="Status do Pagamento"
-                  selectedKeys={[editForm.payment_status]}
-                  onSelectionChange={(keys) => {
-                    const value = Array.from(keys)[0] as PaymentStatus | undefined;
-                    if (!value) return;
-                    setEditForm((prev) => ({ ...prev, payment_status: value }));
-                  }}
-                >
-                  <SelectItem key={PaymentStatus.PENDENTE}>Pendente</SelectItem>
-                  <SelectItem key={PaymentStatus.PAGO}>Pago</SelectItem>
-                  <SelectItem key={PaymentStatus.PARCIAL}>Parcial</SelectItem>
-                  <SelectItem key={PaymentStatus.ATRASADO}>Atrasado</SelectItem>
-                  <SelectItem key={PaymentStatus.CANCELADO}>Cancelado</SelectItem>
-                </Select>
-                <Select
-                  label="Método de Pagamento"
-                  selectedKeys={editForm.payment_method ? [editForm.payment_method] : []}
-                  onSelectionChange={(keys) => {
-                    const value = Array.from(keys)[0] as PaymentMethod | undefined;
-                    setEditForm((prev) => ({ ...prev, payment_method: value ?? '' }));
-                  }}
-                >
-                  <SelectItem key={PaymentMethod.PIX}>PIX</SelectItem>
-                  <SelectItem key={PaymentMethod.BOLETO}>Boleto</SelectItem>
-                  <SelectItem key={PaymentMethod.TRANSFERENCIA}>Transferência</SelectItem>
-                  <SelectItem key={PaymentMethod.DINHEIRO}>Dinheiro</SelectItem>
-                  <SelectItem key={PaymentMethod.CARTAO_CREDITO}>Cartão de Crédito</SelectItem>
-                  <SelectItem key={PaymentMethod.CARTAO_DEBITO}>Cartão de Débito</SelectItem>
-                  <SelectItem key={PaymentMethod.CHEQUE}>Cheque</SelectItem>
-                </Select>
-                {editForm.payment_status === PaymentStatus.PAGO && (
+                {!isEditingAutomaticOfficeFee && (
+                  <Select
+                    label="Status do Pagamento"
+                    selectedKeys={[editForm.payment_status]}
+                    onSelectionChange={(keys) => {
+                      const value = Array.from(keys)[0] as PaymentStatus | undefined;
+                      if (!value) return;
+                      setEditForm((prev) => ({ ...prev, payment_status: value }));
+                    }}
+                  >
+                    <SelectItem key={PaymentStatus.PENDENTE}>Pendente</SelectItem>
+                    <SelectItem key={PaymentStatus.PAGO}>Pago</SelectItem>
+                    <SelectItem key={PaymentStatus.PARCIAL}>Parcial</SelectItem>
+                    <SelectItem key={PaymentStatus.ATRASADO}>Atrasado</SelectItem>
+                    <SelectItem key={PaymentStatus.CANCELADO}>Cancelado</SelectItem>
+                  </Select>
+                )}
+                {(!isEditingAutomaticOfficeFee ||
+                  editingTransaction?.payment_status === PaymentStatus.PAGO) && (
+                  <Select
+                    label="Método de Pagamento"
+                    selectedKeys={editForm.payment_method ? [editForm.payment_method] : []}
+                    onSelectionChange={(keys) => {
+                      const value = Array.from(keys)[0] as PaymentMethod | undefined;
+                      setEditForm((prev) => ({ ...prev, payment_method: value ?? '' }));
+                    }}
+                  >
+                    <SelectItem key={PaymentMethod.PIX}>PIX</SelectItem>
+                    <SelectItem key={PaymentMethod.BOLETO}>Boleto</SelectItem>
+                    <SelectItem key={PaymentMethod.TRANSFERENCIA}>Transferência</SelectItem>
+                    <SelectItem key={PaymentMethod.DINHEIRO}>Dinheiro</SelectItem>
+                    <SelectItem key={PaymentMethod.CARTAO_CREDITO}>Cartão de Crédito</SelectItem>
+                    <SelectItem key={PaymentMethod.CARTAO_DEBITO}>Cartão de Débito</SelectItem>
+                    <SelectItem key={PaymentMethod.CHEQUE}>Cheque</SelectItem>
+                  </Select>
+                )}
+                {((isEditingAutomaticOfficeFee &&
+                  editingTransaction?.payment_status === PaymentStatus.PAGO) ||
+                  (!isEditingAutomaticOfficeFee &&
+                    editForm.payment_status === PaymentStatus.PAGO)) && (
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-600 dark:text-slate-400">
                       Data de Pagamento
@@ -2063,12 +2211,22 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                     />
                   </div>
                 )}
-                <Input
-                  label="Categoria"
-                  placeholder="Ex: 1.1.01"
-                  value={editForm.category}
-                  onValueChange={(value) => setEditForm((prev) => ({ ...prev, category: value }))}
-                />
+                {isEditingAutomaticOfficeFee ? (
+                  <p className="text-xs text-default-500">
+                    Descrição, competência e status são controlados pelo fluxo automático de
+                    honorários. Para registrar pagamento, use a baixa quando o lançamento estiver
+                    pendente.
+                  </p>
+                ) : (
+                  <Input
+                    label="Categoria"
+                    placeholder="Ex: 1.1.01"
+                    value={editForm.category}
+                    onValueChange={(value) =>
+                      setEditForm((prev) => ({ ...prev, category: value }))
+                    }
+                  />
+                )}
                 <Input
                   label="Número da Nota"
                   placeholder="Ex: NF-001/2024"

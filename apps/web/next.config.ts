@@ -1,11 +1,14 @@
 import type { NextConfig } from 'next';
 
 const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-const normalizedApiUrl = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
-const apiTarget = normalizedApiUrl.startsWith('http')
-  ? normalizedApiUrl.endsWith('/api/v1')
-    ? normalizedApiUrl
-    : `${normalizedApiUrl}/api/v1`
+const rawInternalApiUrl = process.env.INTERNAL_API_URL || rawApiUrl;
+const normalizedInternalApiUrl = rawInternalApiUrl.endsWith('/')
+  ? rawInternalApiUrl.slice(0, -1)
+  : rawInternalApiUrl;
+const apiTarget = normalizedInternalApiUrl.startsWith('http')
+  ? normalizedInternalApiUrl.endsWith('/api/v1')
+    ? normalizedInternalApiUrl
+    : `${normalizedInternalApiUrl}/api/v1`
   : null;
 
 const nextConfig: NextConfig = {

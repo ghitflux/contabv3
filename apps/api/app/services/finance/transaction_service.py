@@ -22,6 +22,7 @@ from app.db.models.finance import (
 from app.db.repositories.client import ClientRepository
 from app.db.repositories.transaction import TransactionRepository
 from app.schemas.finance import TransactionCreate, TransactionUpdate
+from app.services.finance.honorarios_utils import is_auto_fee_transaction
 
 
 class TransactionService:
@@ -83,18 +84,8 @@ class TransactionService:
 
     @staticmethod
     def _is_honorarios_transaction(transaction: FinancialTransaction) -> bool:
-        """Honorários automatic entries use their own delete flow."""
-        if (
-            settings.OFFICE_CLIENT_ID
-            and transaction.client_id == settings.OFFICE_CLIENT_ID
-            and transaction.transaction_type == TransactionType.RECEITA
-            and transaction.description.startswith("Honorários -")
-        ):
-            return True
-        return (
-            transaction.transaction_type == TransactionType.DESPESA
-            and transaction.description.startswith("Honorários do escritório -")
-        )
+        """Automatic honorários entries use their own paired flow."""
+        return is_auto_fee_transaction(transaction, settings.OFFICE_CLIENT_ID)
 
     async def _create_missing_occurrence_from_template(
         self,
@@ -264,6 +255,10 @@ class TransactionService:
             raise ValueError(f"Transaction with ID {transaction_id} not found")
         if transaction.deleted_at is not None:
             raise ValueError(f"Transaction with ID {transaction_id} was deleted")
+        if self._is_honorarios_transaction(transaction):
+            raise ValueError(
+                "Honorários automáticos devem ser editados pelo fluxo próprio de honorários."
+            )
 
         fields_set = data.model_fields_set
 
@@ -303,6 +298,10 @@ class TransactionService:
             raise ValueError(f"Transaction with ID {transaction_id} not found")
         if transaction.deleted_at is not None:
             raise ValueError(f"Transaction with ID {transaction_id} was deleted")
+        if self._is_honorarios_transaction(transaction):
+            raise ValueError(
+                "Honorários automáticos devem ser baixados pelo fluxo próprio de honorários."
+            )
         if transaction.payment_status == PaymentStatus.PAGO:
             raise ValueError(f"Transaction {transaction_id} is already marked as paid")
 
@@ -419,6 +418,16 @@ class TransactionService:
                         "transaction_id": transaction_id,
                         "success": False,
                         "detail": "Transaction is already marked as paid",
+                    }
+                )
+                continue
+
+            if self._is_honorarios_transaction(transaction):
+                items.append(
+                    {
+                        "transaction_id": transaction_id,
+                        "success": False,
+                        "detail": "Use a baixa própria de honorários para este lançamento",
                     }
                 )
                 continue

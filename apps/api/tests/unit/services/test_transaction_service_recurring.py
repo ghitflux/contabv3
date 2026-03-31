@@ -1,6 +1,6 @@
 """Unit tests for recurring financial transaction flows."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.config import settings
 from app.db.models.client import Client, ClientStatus, RegimeTributario, TipoEmpresa
 from app.db.models.finance import PaymentStatus, TransactionType
 from app.schemas.finance import TransactionCreate
@@ -120,3 +121,42 @@ async def test_generate_missing_recurring_transactions_backfills_missing_months(
         == date(2026, 3, 1)
     )
     assert result["total_transactions"] == 2
+
+
+@pytest.mark.asyncio
+async def test_bulk_mark_as_paid_allows_manual_honorarios_lookalike(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    office_client_id = uuid4()
+    monkeypatch.setattr(settings, "OFFICE_CLIENT_ID", office_client_id, raising=False)
+
+    transaction_id = uuid4()
+    manual_honorario = SimpleNamespace(
+        id=transaction_id,
+        client_id=office_client_id,
+        transaction_type=TransactionType.RECEITA,
+        description="Honorários - Empresa Teste (12.345.678/0001-90) - 03/2026",
+        notes="Lançamento manual avulso",
+        payment_status=PaymentStatus.PENDENTE,
+        paid_date=None,
+        payment_method=None,
+    )
+
+    db = AsyncMock()
+    db.flush = AsyncMock()
+
+    service = TransactionService(db)
+    service.transaction_repo = SimpleNamespace(
+        list_by_ids_with_relations=AsyncMock(return_value=[manual_honorario])
+    )
+
+    result = await service.bulk_mark_as_paid(
+        [transaction_id],
+        paid_date=datetime(2026, 3, 31, 12, 0, 0),
+        payment_method="pix",
+    )
+
+    assert manual_honorario.payment_status == PaymentStatus.PAGO
+    assert manual_honorario.payment_method == "pix"
+    assert result["succeeded"] == 1
+    assert result["failed"] == 0

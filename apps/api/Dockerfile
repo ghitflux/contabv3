@@ -15,6 +15,9 @@ COPY apps/api/pyproject.toml ./
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -e .
 
+# Create uploads directory used by docker compose mounts
+RUN mkdir -p /var/uploads
+
 # Development stage
 FROM base as development
 

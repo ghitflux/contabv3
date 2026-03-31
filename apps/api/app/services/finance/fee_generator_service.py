@@ -3,7 +3,7 @@
 import logging
 import re
 from calendar import monthrange
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -20,13 +20,17 @@ from app.db.models.finance import (
     TransactionType,
 )
 from app.db.repositories.client import ClientRepository
+from app.schemas.finance import MonthlyFeePairUpdate
+from app.services.finance.honorarios_utils import (
+    build_client_auto_fee_metadata,
+    build_office_auto_fee_metadata,
+    compose_auto_fee_notes,
+    extract_related_client_id,
+    is_office_auto_fee_transaction,
+    split_auto_fee_notes,
+)
 
 logger = logging.getLogger(__name__)
-
-_CLIENT_ID_IN_NOTES_RE = re.compile(
-    r"Cliente:\s*([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})",
-    re.IGNORECASE,
-)
 _OFFICE_HONORARIOS_DESCRIPTION_PATTERN = re.compile(
     r"^Honorários - (.+?) \(([^)]+)\) - (\d{2}\/\d{4})$"
 )
@@ -56,6 +60,15 @@ class FeeGeneratorService:
         if reference_month.day == 1:
             return reference_month
         return reference_month.replace(day=1)
+
+    @staticmethod
+    def _to_naive_utc(value: datetime | None) -> datetime | None:
+        """Normalize datetime values to timezone-naive UTC."""
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
 
     @staticmethod
     def _get_first_day_of_next_month(reference_date: date) -> date:
@@ -220,15 +233,7 @@ class FeeGeneratorService:
 
     @staticmethod
     def _extract_client_id_from_notes(notes: str | None) -> UUID | None:
-        if not notes:
-            return None
-        match = _CLIENT_ID_IN_NOTES_RE.search(notes)
-        if not match:
-            return None
-        try:
-            return UUID(match.group(1))
-        except ValueError:
-            return None
+        return extract_related_client_id(notes)
 
     async def _resolve_client_for_office_transaction(
         self,
@@ -246,6 +251,78 @@ class FeeGeneratorService:
         return await self.db.scalar(
             select(Client).where(Client.cnpj == cnpj, Client.deleted_at.is_(None)).limit(1)
         )
+
+    async def _load_auto_fee_pair(
+        self,
+        office_transaction_id: UUID,
+        *,
+        include_deleted: bool = False,
+        require_client_pair: bool = True,
+    ) -> tuple[FinancialTransaction, Client, FinancialTransaction | None, date]:
+        transaction_conditions = [FinancialTransaction.id == office_transaction_id]
+        if not include_deleted:
+            transaction_conditions.append(FinancialTransaction.deleted_at.is_(None))
+
+        office_transaction = await self.db.scalar(
+            select(FinancialTransaction).where(*transaction_conditions).limit(1)
+        )
+        if office_transaction is None:
+            raise ValueError("Honorário do escritório não encontrado")
+        if not is_office_auto_fee_transaction(office_transaction, settings.OFFICE_CLIENT_ID):
+            raise ValueError("O lançamento informado não é um honorário automático do escritório")
+
+        client = await self._resolve_client_for_office_transaction(office_transaction)
+        if client is None:
+            raise ValueError("Não foi possível resolver o cliente espelho do honorário")
+
+        reference_month = self._normalize_reference_month(office_transaction.reference_month)
+        reference_label = self._format_reference_label(reference_month)
+
+        client_conditions = [
+            FinancialTransaction.client_id == client.id,
+            FinancialTransaction.reference_month == reference_month,
+            FinancialTransaction.transaction_type == TransactionType.DESPESA,
+            FinancialTransaction.description == self._build_client_description(reference_label),
+        ]
+        if not include_deleted:
+            client_conditions.append(FinancialTransaction.deleted_at.is_(None))
+
+        client_transaction = await self.db.scalar(
+            select(FinancialTransaction).where(*client_conditions).limit(1)
+        )
+        if require_client_pair and client_transaction is None:
+            raise ValueError("Não foi possível localizar o lançamento espelho do cliente")
+
+        return office_transaction, client, client_transaction, reference_month
+
+    @staticmethod
+    def _append_notes(existing_notes: str | None, new_notes: str | None) -> str | None:
+        normalized_notes = (new_notes or "").strip()
+        if not normalized_notes:
+            return existing_notes
+        if not existing_notes:
+            return normalized_notes
+        return f"{existing_notes}\n\n{normalized_notes}"
+
+    def _sync_auto_fee_notes(
+        self,
+        *,
+        office_transaction: FinancialTransaction,
+        client_transaction: FinancialTransaction,
+        client_id: UUID,
+        user_notes: str | None,
+    ) -> None:
+        office_metadata, _ = split_auto_fee_notes(office_transaction.notes)
+        client_metadata, _ = split_auto_fee_notes(client_transaction.notes)
+
+        office_base = office_metadata or build_office_auto_fee_metadata(
+            office_transaction.created_at,
+            client_id,
+        )
+        client_base = client_metadata or build_client_auto_fee_metadata(client_transaction.created_at)
+
+        office_transaction.notes = compose_auto_fee_notes(office_base, user_notes)
+        client_transaction.notes = compose_auto_fee_notes(client_base, user_notes)
 
     async def preview_monthly_fees(
         self,
@@ -371,17 +448,12 @@ class FeeGeneratorService:
                 )
                 continue
 
-            if not (
-                settings.OFFICE_CLIENT_ID
-                and office_transaction.client_id == settings.OFFICE_CLIENT_ID
-                and office_transaction.transaction_type == TransactionType.RECEITA
-                and office_transaction.description.startswith("Honorários -")
-            ):
+            if not is_office_auto_fee_transaction(office_transaction, settings.OFFICE_CLIENT_ID):
                 items.append(
                     {
                         "office_transaction_id": office_transaction_id,
                         "success": False,
-                        "detail": "O lançamento informado não é um honorário do escritório",
+                        "detail": "O lançamento informado não é um honorário automático do escritório",
                     }
                 )
                 continue
@@ -451,6 +523,151 @@ class FeeGeneratorService:
             "failed": len(items) - succeeded,
             "blocked_competences": len(blocked_pairs),
             "items": items,
+        }
+
+    async def mark_monthly_fee_as_paid(
+        self,
+        *,
+        office_transaction_id: UUID,
+        paid_date: datetime,
+        payment_method,
+        notes: str | None = None,
+    ) -> dict:
+        """Mark both sides of an automatic honorários pair as paid."""
+        office_transaction, client, client_transaction, _ = await self._load_auto_fee_pair(
+            office_transaction_id,
+            require_client_pair=True,
+        )
+        assert client_transaction is not None
+
+        if (
+            office_transaction.payment_status == PaymentStatus.PAGO
+            and client_transaction.payment_status == PaymentStatus.PAGO
+        ):
+            raise ValueError("Honorário já está baixado")
+
+        normalized_paid_date = self._to_naive_utc(paid_date)
+        office_transaction.payment_status = PaymentStatus.PAGO
+        office_transaction.paid_date = normalized_paid_date
+        office_transaction.payment_method = payment_method
+        office_transaction.notes = self._append_notes(office_transaction.notes, notes)
+
+        client_transaction.payment_status = PaymentStatus.PAGO
+        client_transaction.paid_date = normalized_paid_date
+        client_transaction.payment_method = payment_method
+        client_transaction.notes = self._append_notes(client_transaction.notes, notes)
+
+        await self.db.flush()
+        await self.db.refresh(office_transaction)
+        await self.db.refresh(client_transaction)
+
+        return {
+            "success": True,
+            "client_id": client.id,
+            "reference_month": self._normalize_reference_month(office_transaction.reference_month),
+            "office_transaction": office_transaction,
+            "client_transaction": client_transaction,
+            "blocked_competence": False,
+            "detail": None,
+        }
+
+    async def update_monthly_fee_pair(
+        self,
+        *,
+        office_transaction_id: UUID,
+        data: MonthlyFeePairUpdate,
+    ) -> dict:
+        """Update editable fields on both sides of an automatic honorários pair."""
+        office_transaction, client, client_transaction, _ = await self._load_auto_fee_pair(
+            office_transaction_id,
+            require_client_pair=True,
+        )
+        assert client_transaction is not None
+
+        fields_set = data.model_fields_set
+        if "amount" in fields_set and data.amount is not None:
+            normalized_amount = Decimal(str(data.amount)).quantize(Decimal("0.01"))
+            office_transaction.amount = normalized_amount
+            client_transaction.amount = normalized_amount
+        if "due_date" in fields_set and data.due_date is not None:
+            office_transaction.due_date = data.due_date
+            client_transaction.due_date = data.due_date
+        if "notes" in fields_set:
+            self._sync_auto_fee_notes(
+                office_transaction=office_transaction,
+                client_transaction=client_transaction,
+                client_id=client.id,
+                user_notes=data.notes,
+            )
+        if "invoice_number" in fields_set:
+            office_transaction.invoice_number = data.invoice_number
+            client_transaction.invoice_number = data.invoice_number
+        if "payment_method" in fields_set:
+            office_transaction.payment_method = data.payment_method
+            client_transaction.payment_method = data.payment_method
+        if "paid_date" in fields_set:
+            normalized_paid_date = self._to_naive_utc(data.paid_date)
+            office_transaction.paid_date = normalized_paid_date
+            client_transaction.paid_date = normalized_paid_date
+            next_status = (
+                PaymentStatus.PAGO if normalized_paid_date is not None else PaymentStatus.PENDENTE
+            )
+            office_transaction.payment_status = next_status
+            client_transaction.payment_status = next_status
+            if normalized_paid_date is None and "payment_method" not in fields_set:
+                office_transaction.payment_method = None
+                client_transaction.payment_method = None
+
+        await self.db.flush()
+        await self.db.refresh(office_transaction)
+        await self.db.refresh(client_transaction)
+
+        return {
+            "success": True,
+            "client_id": client.id,
+            "reference_month": self._normalize_reference_month(office_transaction.reference_month),
+            "office_transaction": office_transaction,
+            "client_transaction": client_transaction,
+            "blocked_competence": False,
+            "detail": None,
+        }
+
+    async def delete_monthly_fee_pair(
+        self,
+        *,
+        office_transaction_id: UUID,
+        deleted_by_id: UUID,
+        reason: str | None = None,
+    ) -> dict:
+        """Delete one automatic honorários pair and block the competence."""
+        office_transaction, client, _, reference_month = await self._load_auto_fee_pair(
+            office_transaction_id,
+            require_client_pair=False,
+        )
+
+        result = await self.bulk_delete_monthly_fees(
+            office_transaction_ids=[office_transaction_id],
+            deleted_by_id=deleted_by_id,
+            reason=reason,
+        )
+        item = result["items"][0]
+        if not item["success"]:
+            raise ValueError(item["detail"] or "Não foi possível excluir o honorário")
+
+        _, _, client_transaction, _ = await self._load_auto_fee_pair(
+            office_transaction_id,
+            include_deleted=True,
+            require_client_pair=False,
+        )
+
+        return {
+            "success": True,
+            "client_id": client.id,
+            "reference_month": reference_month,
+            "office_transaction": office_transaction,
+            "client_transaction": client_transaction,
+            "blocked_competence": True,
+            "detail": item.get("detail"),
         }
 
     async def _get_last_generated_reference_month(self, client: Client) -> Optional[date]:

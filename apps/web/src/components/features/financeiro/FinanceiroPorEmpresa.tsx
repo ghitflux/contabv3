@@ -36,6 +36,7 @@ import {
   TransactionType,
   type Transaction,
   type TransactionUpdate,
+  isAutomaticClientMonthlyFeeTransaction,
   isDuePaymentStatus,
   getPaymentMethodLabel,
 } from '@/types/finance';
@@ -595,7 +596,30 @@ export function FinanceiroPorEmpresa({
     return parts[0] ?? '';
   };
 
+  const isAutomaticClientFee = useCallback(
+    (transaction: Transaction) => isAutomaticClientMonthlyFeeTransaction(transaction),
+    []
+  );
+  const isEditingAutomaticClientFee = useMemo(
+    () => (editingTransaction ? isAutomaticClientFee(editingTransaction) : false),
+    [editingTransaction, isAutomaticClientFee]
+  );
+  const canMarkTransactionAsPaid = useCallback(
+    (transaction: Transaction) =>
+      !isAutomaticClientFee(transaction) &&
+      (isAdminOrFunc || transaction.created_by_id === user?.id),
+    [isAdminOrFunc, isAutomaticClientFee, user?.id]
+  );
+
   const openEditTransaction = (transaction: Transaction) => {
+    if (isAutomaticClientFee(transaction)) {
+      toast.error(
+        isAdminOrFunc
+          ? 'Honorários automáticos devem ser geridos pela aba Escritório.'
+          : 'Honorários automáticos são geridos pelo escritório.'
+      );
+      return;
+    }
     if (!isAdminOrFunc && transaction.created_by_id !== user?.id) {
       toast.error('Você só pode editar lançamentos criados por você.');
       return;
@@ -631,17 +655,23 @@ export function FinanceiroPorEmpresa({
       return;
     }
 
-    const payload: TransactionUpdate = {
+    const basePayload: TransactionUpdate = {
       amount: amountValue,
       description: editForm.description.trim(),
       due_date: editForm.due_date,
-      payment_status: editForm.payment_status,
-      payment_method: editForm.payment_method ? editForm.payment_method : null,
-      paid_date: editForm.payment_status === PaymentStatus.PAGO ? editForm.paid_date || null : null,
       category: editForm.category.trim() || null,
       notes: editForm.notes.trim() || null,
       invoice_number: editForm.invoice_number.trim() || null,
     };
+    const payload: TransactionUpdate = isAdminOrFunc
+      ? {
+          ...basePayload,
+          payment_status: editForm.payment_status,
+          payment_method: editForm.payment_method ? editForm.payment_method : null,
+          paid_date:
+            editForm.payment_status === PaymentStatus.PAGO ? editForm.paid_date || null : null,
+        }
+      : basePayload;
 
     try {
       await updateTransaction(editingTransaction.id, payload);
@@ -682,8 +712,7 @@ export function FinanceiroPorEmpresa({
     try {
       setIsConfirmingBaixa(true);
       const paymentMethod = pendingBaixaTransaction.payment_method ?? PaymentMethod.TRANSFERENCIA;
-      await updateTransaction(pendingBaixaTransaction.id, {
-        payment_status: PaymentStatus.PAGO,
+      await financeApi.markAsPaid(pendingBaixaTransaction.id, {
         payment_method: paymentMethod,
         paid_date: new Date().toISOString(),
       });
@@ -702,6 +731,14 @@ export function FinanceiroPorEmpresa({
   };
 
   const requestDeleteTransaction = (transaction: Transaction) => {
+    if (isAutomaticClientFee(transaction)) {
+      toast.error(
+        isAdminOrFunc
+          ? 'Honorários automáticos devem ser geridos pela aba Escritório.'
+          : 'Honorários automáticos são geridos pelo escritório.'
+      );
+      return;
+    }
     if (!isAdminOrFunc && transaction.created_by_id !== user?.id) {
       toast.error('Você só pode excluir lançamentos criados por você.');
       return;
@@ -710,16 +747,25 @@ export function FinanceiroPorEmpresa({
   };
 
   const requestMarkAsPaid = (transaction: Transaction) => {
-    if (!isAdminOrFunc) {
-      toast.error('A baixa de lançamentos é feita somente pelo admin.');
+    if (isAutomaticClientFee(transaction)) {
+      toast.error(
+        isAdminOrFunc
+          ? 'Honorários automáticos devem ser geridos pela aba Escritório.'
+          : 'Honorários automáticos são baixados pelo escritório.'
+      );
+      return;
+    }
+    if (!canMarkTransactionAsPaid(transaction)) {
+      toast.error('Você só pode dar baixa em lançamentos criados por você.');
       return;
     }
     setPendingBaixaTransaction(transaction);
   };
 
   const canManageTransaction = useCallback(
-    (transaction: Transaction) => isAdminOrFunc || transaction.created_by_id === user?.id,
-    [isAdminOrFunc, user?.id]
+    (transaction: Transaction) =>
+      !isAutomaticClientFee(transaction) && (isAdminOrFunc || transaction.created_by_id === user?.id),
+    [isAdminOrFunc, isAutomaticClientFee, user?.id]
   );
 
   const handleDownloadAttachment = useCallback(async (transaction: Transaction) => {
@@ -989,7 +1035,7 @@ export function FinanceiroPorEmpresa({
                   <TableColumn>Vencimento</TableColumn>
                   <TableColumn>Descrição</TableColumn>
                   <TableColumn className="text-right">Valor</TableColumn>
-                  <TableColumn className={isAdminOrFunc ? 'text-right' : 'hidden w-0 p-0'}>{isAdminOrFunc ? 'Ação' : ''}</TableColumn>
+                  <TableColumn className="text-right">Ação</TableColumn>
                 </TableHeader>
                 <TableBody
                   emptyContent={
@@ -1007,8 +1053,9 @@ export function FinanceiroPorEmpresa({
                       <TableCell className="text-right font-semibold">
                         {formatCurrency(transaction.amount)}
                       </TableCell>
-                      <TableCell className={isAdminOrFunc ? 'text-right' : 'hidden w-0 p-0'}>
-                        {isAdminOrFunc && isDuePaymentStatus(transaction.payment_status) && (
+                      <TableCell className="text-right">
+                        {isDuePaymentStatus(transaction.payment_status) &&
+                          canMarkTransactionAsPaid(transaction) && (
                           <Button
                             size="sm"
                             color="primary"
@@ -1189,7 +1236,8 @@ export function FinanceiroPorEmpresa({
                           <Download className="h-4 w-4" />
                         </Button>
                       )}
-                      {isAdminOrFunc && isDuePaymentStatus(transaction.raw.payment_status) && (
+                      {isDuePaymentStatus(transaction.raw.payment_status) &&
+                        canMarkTransactionAsPaid(transaction.raw) && (
                         <Button
                           size="sm"
                           variant="flat"
@@ -1334,7 +1382,9 @@ export function FinanceiroPorEmpresa({
         <ModalContent>
           {(onClose) => (
             <>
-              <ModalHeader>Editar Lançamento</ModalHeader>
+              <ModalHeader>
+                {isEditingAutomaticClientFee ? 'Editar Honorário Automático' : 'Editar Lançamento'}
+              </ModalHeader>
               <ModalBody className="space-y-3">
                 <Input
                   label="Descrição"
@@ -1363,38 +1413,42 @@ export function FinanceiroPorEmpresa({
                     aria-label="Data de vencimento"
                   />
                 </div>
-                <Select
-                  label="Status do Pagamento"
-                  selectedKeys={[editForm.payment_status]}
-                  onSelectionChange={(keys) => {
-                    const value = Array.from(keys)[0] as PaymentStatus | undefined;
-                    if (!value) return;
-                    setEditForm((prev) => ({ ...prev, payment_status: value }));
-                  }}
-                >
-                  <SelectItem key={PaymentStatus.PENDENTE}>Pendente</SelectItem>
-                  <SelectItem key={PaymentStatus.PAGO}>Pago</SelectItem>
-                  <SelectItem key={PaymentStatus.PARCIAL}>Parcial</SelectItem>
-                  <SelectItem key={PaymentStatus.ATRASADO}>Atrasado</SelectItem>
-                  <SelectItem key={PaymentStatus.CANCELADO}>Cancelado</SelectItem>
-                </Select>
-                <Select
-                  label="Metodo de Pagamento"
-                  selectedKeys={editForm.payment_method ? [editForm.payment_method] : []}
-                  onSelectionChange={(keys) => {
-                    const value = Array.from(keys)[0] as PaymentMethod | undefined;
-                    setEditForm((prev) => ({ ...prev, payment_method: value ?? '' }));
-                  }}
-                >
-                  <SelectItem key={PaymentMethod.PIX}>PIX</SelectItem>
-                  <SelectItem key={PaymentMethod.BOLETO}>Boleto</SelectItem>
-                  <SelectItem key={PaymentMethod.TRANSFERENCIA}>Transferencia</SelectItem>
-                  <SelectItem key={PaymentMethod.DINHEIRO}>Dinheiro</SelectItem>
-                  <SelectItem key={PaymentMethod.CARTAO_CREDITO}>Cartao de Credito</SelectItem>
-                  <SelectItem key={PaymentMethod.CARTAO_DEBITO}>Cartao de Debito</SelectItem>
-                  <SelectItem key={PaymentMethod.CHEQUE}>Cheque</SelectItem>
-                </Select>
-                {editForm.payment_status === PaymentStatus.PAGO && (
+                {isAdminOrFunc && (
+                  <Select
+                    label="Status do Pagamento"
+                    selectedKeys={[editForm.payment_status]}
+                    onSelectionChange={(keys) => {
+                      const value = Array.from(keys)[0] as PaymentStatus | undefined;
+                      if (!value) return;
+                      setEditForm((prev) => ({ ...prev, payment_status: value }));
+                    }}
+                  >
+                    <SelectItem key={PaymentStatus.PENDENTE}>Pendente</SelectItem>
+                    <SelectItem key={PaymentStatus.PAGO}>Pago</SelectItem>
+                    <SelectItem key={PaymentStatus.PARCIAL}>Parcial</SelectItem>
+                    <SelectItem key={PaymentStatus.ATRASADO}>Atrasado</SelectItem>
+                    <SelectItem key={PaymentStatus.CANCELADO}>Cancelado</SelectItem>
+                  </Select>
+                )}
+                {isAdminOrFunc && (
+                  <Select
+                    label="Metodo de Pagamento"
+                    selectedKeys={editForm.payment_method ? [editForm.payment_method] : []}
+                    onSelectionChange={(keys) => {
+                      const value = Array.from(keys)[0] as PaymentMethod | undefined;
+                      setEditForm((prev) => ({ ...prev, payment_method: value ?? '' }));
+                    }}
+                  >
+                    <SelectItem key={PaymentMethod.PIX}>PIX</SelectItem>
+                    <SelectItem key={PaymentMethod.BOLETO}>Boleto</SelectItem>
+                    <SelectItem key={PaymentMethod.TRANSFERENCIA}>Transferencia</SelectItem>
+                    <SelectItem key={PaymentMethod.DINHEIRO}>Dinheiro</SelectItem>
+                    <SelectItem key={PaymentMethod.CARTAO_CREDITO}>Cartao de Credito</SelectItem>
+                    <SelectItem key={PaymentMethod.CARTAO_DEBITO}>Cartao de Debito</SelectItem>
+                    <SelectItem key={PaymentMethod.CHEQUE}>Cheque</SelectItem>
+                  </Select>
+                )}
+                {isAdminOrFunc && editForm.payment_status === PaymentStatus.PAGO && (
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-600 dark:text-slate-400">
                       Data de Pagamento

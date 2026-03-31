@@ -62,8 +62,8 @@ pnpm install
 # Configure as variáveis de ambiente
 cp .env.example .env
 
-# Inicie o ambiente de desenvolvimento
-docker compose -f infra/docker-compose.dev.yml up
+# Inicie o ambiente de desenvolvimento completo
+docker compose up --build
 ```
 
 ### Desenvolvimento Local
@@ -75,8 +75,11 @@ pnpm dev:web
 # Backend (FastAPI)
 pnpm dev:api
 
-# Todos os serviços via Docker
-docker compose -f infra/docker-compose.dev.yml up
+# Todos os serviços via Docker (Postgres + API + Frontend)
+docker compose up --build
+
+# Em background
+docker compose up --build -d
 ```
 
 ## 📁 Estrutura do Projeto

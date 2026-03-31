@@ -1,6 +1,7 @@
 """Unit tests for fee generator service."""
 
-from datetime import date
+from datetime import date, datetime, timezone
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
@@ -9,8 +10,13 @@ import pytest
 
 from app.core.config import settings
 from app.db.models.client import Client, ClientStatus, RegimeTributario, TipoEmpresa
-from app.db.models.finance import TransactionType
+from app.db.models.finance import PaymentStatus, TransactionType
+from app.schemas.finance import MonthlyFeePairUpdate
 from app.services.finance.fee_generator_service import FeeGeneratorService
+from app.services.finance.honorarios_utils import (
+    build_client_auto_fee_metadata,
+    build_office_auto_fee_metadata,
+)
 
 
 def _build_client() -> Client:
@@ -293,3 +299,140 @@ async def test_preview_monthly_fees_marks_blocked_clients(monkeypatch: pytest.Mo
     assert result["would_generate_entries"] == 0
     assert result["clients"][0]["blocked"] is True
     assert result["clients"][0]["blocked_reason"] == "Bloqueado manualmente"
+
+
+@pytest.mark.asyncio
+async def test_mark_monthly_fee_as_paid_updates_both_sides(monkeypatch: pytest.MonkeyPatch):
+    office_client_id = uuid4()
+    monkeypatch.setattr(settings, "OFFICE_CLIENT_ID", office_client_id, raising=False)
+
+    client = _build_client()
+    office_transaction = SimpleNamespace(
+        id=uuid4(),
+        client_id=office_client_id,
+        transaction_type=TransactionType.RECEITA,
+        payment_status=PaymentStatus.PENDENTE,
+        paid_date=None,
+        payment_method=None,
+        reference_month=date(2026, 3, 1),
+        notes=build_office_auto_fee_metadata(datetime(2026, 3, 1, 10, 0, 0), client.id),
+    )
+    client_transaction = SimpleNamespace(
+        id=uuid4(),
+        client_id=client.id,
+        transaction_type=TransactionType.DESPESA,
+        payment_status=PaymentStatus.PENDENTE,
+        paid_date=None,
+        payment_method=None,
+        reference_month=date(2026, 3, 1),
+        notes=build_client_auto_fee_metadata(datetime(2026, 3, 1, 10, 0, 0)),
+    )
+
+    db = AsyncMock()
+    db.flush = AsyncMock()
+    db.refresh = AsyncMock()
+
+    service = FeeGeneratorService(db)
+    service._load_auto_fee_pair = AsyncMock(
+        return_value=(office_transaction, client, client_transaction, date(2026, 3, 1))
+    )
+
+    paid_at = datetime(2026, 3, 31, 14, 30, tzinfo=timezone.utc)
+    result = await service.mark_monthly_fee_as_paid(
+        office_transaction_id=office_transaction.id,
+        paid_date=paid_at,
+        payment_method="pix",
+        notes="Comprovante anexado",
+    )
+
+    assert office_transaction.payment_status == PaymentStatus.PAGO
+    assert client_transaction.payment_status == PaymentStatus.PAGO
+    assert office_transaction.payment_method == "pix"
+    assert client_transaction.payment_method == "pix"
+    assert office_transaction.paid_date == datetime(2026, 3, 31, 14, 30)
+    assert client_transaction.paid_date == datetime(2026, 3, 31, 14, 30)
+    assert "Comprovante anexado" in office_transaction.notes
+    assert "Comprovante anexado" in client_transaction.notes
+    assert result["client_id"] == client.id
+    assert result["office_transaction"] is office_transaction
+    assert result["client_transaction"] is client_transaction
+
+
+@pytest.mark.asyncio
+async def test_update_monthly_fee_pair_syncs_amount_due_date_and_notes(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    office_client_id = uuid4()
+    monkeypatch.setattr(settings, "OFFICE_CLIENT_ID", office_client_id, raising=False)
+
+    client = _build_client()
+    office_transaction = SimpleNamespace(
+        id=uuid4(),
+        client_id=office_client_id,
+        transaction_type=TransactionType.RECEITA,
+        amount=Decimal("1500.00"),
+        due_date=date(2026, 3, 31),
+        payment_status=PaymentStatus.PENDENTE,
+        paid_date=None,
+        payment_method=None,
+        reference_month=date(2026, 3, 1),
+        invoice_number=None,
+        created_at=datetime(2026, 3, 1, 10, 0, 0),
+        notes=build_office_auto_fee_metadata(datetime(2026, 3, 1, 10, 0, 0), client.id),
+    )
+    client_transaction = SimpleNamespace(
+        id=uuid4(),
+        client_id=client.id,
+        transaction_type=TransactionType.DESPESA,
+        amount=Decimal("1500.00"),
+        due_date=date(2026, 3, 31),
+        payment_status=PaymentStatus.PENDENTE,
+        paid_date=None,
+        payment_method=None,
+        reference_month=date(2026, 3, 1),
+        invoice_number=None,
+        created_at=datetime(2026, 3, 1, 10, 0, 0),
+        notes=build_client_auto_fee_metadata(datetime(2026, 3, 1, 10, 0, 0)),
+    )
+
+    db = AsyncMock()
+    db.flush = AsyncMock()
+    db.refresh = AsyncMock()
+
+    service = FeeGeneratorService(db)
+    service._load_auto_fee_pair = AsyncMock(
+        return_value=(office_transaction, client, client_transaction, date(2026, 3, 1))
+    )
+
+    payload = MonthlyFeePairUpdate(
+        amount=Decimal("1980.55"),
+        due_date=date(2026, 4, 10),
+        notes="Ajuste de contrato",
+        invoice_number="NF-2026-44",
+        payment_method="boleto",
+        paid_date=datetime(2026, 4, 10, 12, 0, tzinfo=timezone.utc),
+    )
+
+    result = await service.update_monthly_fee_pair(
+        office_transaction_id=office_transaction.id,
+        data=payload,
+    )
+
+    assert office_transaction.amount == Decimal("1980.55")
+    assert client_transaction.amount == Decimal("1980.55")
+    assert office_transaction.due_date == date(2026, 4, 10)
+    assert client_transaction.due_date == date(2026, 4, 10)
+    assert office_transaction.invoice_number == "NF-2026-44"
+    assert client_transaction.invoice_number == "NF-2026-44"
+    assert office_transaction.payment_method == "boleto"
+    assert client_transaction.payment_method == "boleto"
+    assert office_transaction.payment_status == PaymentStatus.PAGO
+    assert client_transaction.payment_status == PaymentStatus.PAGO
+    assert office_transaction.paid_date == datetime(2026, 4, 10, 12, 0)
+    assert client_transaction.paid_date == datetime(2026, 4, 10, 12, 0)
+    assert "Ajuste de contrato" in office_transaction.notes
+    assert "Ajuste de contrato" in client_transaction.notes
+    assert f"Cliente: {client.id}" in office_transaction.notes
+    assert "honorários recorrentes" in office_transaction.notes
+    assert "honorários recorrentes" in client_transaction.notes
+    assert result["client_id"] == client.id

@@ -33,6 +33,7 @@ import {
   TransactionType,
   type Transaction,
   type TransactionUpdate,
+  isAutomaticMonthlyFeeTransaction,
   isDuePaymentStatus,
   getPaymentStatusColor,
   getPaymentStatusLabel,
@@ -43,6 +44,7 @@ import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
 import { resolveCategoriaLancamento } from '@/constants/planoDeContas';
 import { NovoLancamentoModal, type NovoLancamentoData } from './NovoLancamentoModal';
 import { clientsApi } from '@/lib/api/endpoints/clients';
+import { financeApi } from '@/lib/api/endpoints/finance';
 import { toast } from '@/lib/toast';
 import { TransactionTrashModal } from './TransactionTrashModal';
 import { ConfirmBaixaLancamentoDialog } from './ConfirmBaixaLancamentoDialog';
@@ -75,6 +77,7 @@ interface Lancamento {
 
 const LANCAMENTOS_PER_PAGE = 20;
 const MAX_CUSTOM_CATEGORY_LENGTH = 20;
+const OFFICE_CLIENT_ID = process.env.NEXT_PUBLIC_OFFICE_CLIENT_ID ?? '';
 
 export function FinanceiroLancamentos() {
   const initialMonthFilterState = getCurrentMonthFilterState();
@@ -368,7 +371,14 @@ export function FinanceiroLancamentos() {
     return datePart ?? '';
   };
 
+  const isAutomaticFee = (transaction: Transaction) =>
+    isAutomaticMonthlyFeeTransaction(transaction, OFFICE_CLIENT_ID || undefined);
+
   const openEditTransaction = (transaction: Transaction) => {
+    if (isAutomaticFee(transaction)) {
+      toast.error('Honorários automáticos devem ser geridos pela aba Escritório.');
+      return;
+    }
     const resolvedCategory = resolveCategoriaLancamento(transaction.category);
     const isCustomCategory = Boolean(resolvedCategory?.isCustom);
     const categoryValue = transaction.category ?? '';
@@ -478,8 +488,7 @@ export function FinanceiroLancamentos() {
     try {
       setIsConfirmingBaixa(true);
       const paymentMethod = pendingBaixaTransaction.payment_method ?? PaymentMethod.TRANSFERENCIA;
-      await updateTransaction(pendingBaixaTransaction.id, {
-        payment_status: PaymentStatus.PAGO,
+      await financeApi.markAsPaid(pendingBaixaTransaction.id, {
         payment_method: paymentMethod,
         paid_date: new Date().toISOString(),
       });
@@ -495,6 +504,22 @@ export function FinanceiroLancamentos() {
     } finally {
       setIsConfirmingBaixa(false);
     }
+  };
+
+  const requestDeleteTransaction = (transaction: Transaction) => {
+    if (isAutomaticFee(transaction)) {
+      toast.error('Honorários automáticos devem ser geridos pela aba Escritório.');
+      return;
+    }
+    setPendingDeleteTransaction(transaction);
+  };
+
+  const requestMarkAsPaid = (transaction: Transaction) => {
+    if (isAutomaticFee(transaction)) {
+      toast.error('Honorários automáticos devem ser geridos pela aba Escritório.');
+      return;
+    }
+    setPendingBaixaTransaction(transaction);
   };
 
   if (isLoading) {
@@ -753,35 +778,43 @@ export function FinanceiroLancamentos() {
                         </span>
                       </TableCell>
                       <TableCell className="text-right space-x-1">
-                        {isDuePaymentStatus(lancamento.status) && (
-                          <Button
-                            size="sm"
-                            variant="flat"
-                            color="primary"
-                            onPress={() => setPendingBaixaTransaction(lancamento.raw)}
-                          >
-                            Baixa
-                          </Button>
+                        {isAutomaticFee(lancamento.raw) ? (
+                          <span className="text-xs text-default-500">
+                            Gerencie na aba Escritório
+                          </span>
+                        ) : (
+                          <>
+                            {isDuePaymentStatus(lancamento.status) && (
+                              <Button
+                                size="sm"
+                                variant="flat"
+                                color="primary"
+                                onPress={() => requestMarkAsPaid(lancamento.raw)}
+                              >
+                                Baixa
+                              </Button>
+                            )}
+                            <Button
+                              variant="light"
+                              size="sm"
+                              isIconOnly
+                              aria-label="Editar lançamento"
+                              onPress={() => openEditTransaction(lancamento.raw)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="light"
+                              size="sm"
+                              isIconOnly
+                              color="danger"
+                              aria-label="Excluir lançamento"
+                              onPress={() => requestDeleteTransaction(lancamento.raw)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
                         )}
-                        <Button
-                          variant="light"
-                          size="sm"
-                          isIconOnly
-                          aria-label="Editar lançamento"
-                          onPress={() => openEditTransaction(lancamento.raw)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="light"
-                          size="sm"
-                          isIconOnly
-                          color="danger"
-                          aria-label="Excluir lançamento"
-                          onPress={() => setPendingDeleteTransaction(lancamento.raw)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
                       </TableCell>
                     </TableRow>
                   );

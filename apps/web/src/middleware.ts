@@ -3,6 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { getDefaultAppRouteFromRefreshToken } from "./lib/auth/default-route";
 
 const publicRoutes = ["/login", "/reset-password"];
 const authRoutes = ["/login", "/reset-password"];
@@ -19,9 +20,17 @@ export function middleware(request: NextRequest) {
   // Get refresh token from cookies or check for auth header
   const refreshToken = request.cookies.get("refresh_token")?.value;
 
+  if (pathname === "/" && refreshToken) {
+    return NextResponse.redirect(
+      new URL(getDefaultAppRouteFromRefreshToken(refreshToken), request.url)
+    );
+  }
+
   // If trying to access auth routes while authenticated, redirect to dashboard
   if (isAuthRoute && refreshToken) {
-    return NextResponse.redirect(new URL("/clientes", request.url));
+    return NextResponse.redirect(
+      new URL(getDefaultAppRouteFromRefreshToken(refreshToken), request.url)
+    );
   }
 
   // If trying to access protected route without authentication, redirect to login

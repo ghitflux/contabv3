@@ -61,3 +61,14 @@ tests/
 # Misc
 .turbo/
 *.tsbuildinfo
+backups/
+debugs/
+uploads/
+coverage/
+.venv/
+apps/web/.next/
+apps/web/node_modules/
+apps/api/.pytest_cache/
+apps/api/htmlcov/
+apps/api/uploads/
+d:*

@@ -374,6 +374,35 @@ class MonthlyFeeBulkDeleteResponse(BaseModel):
     items: list[MonthlyFeeBulkDeleteItem]
 
 
+class MonthlyFeePairUpdate(BaseModel):
+    """Editable fields for an automatic honorários pair."""
+
+    amount: Optional[Decimal] = Field(None, gt=0, description="Fee amount")
+    due_date: Optional[date] = Field(None, description="Due date for both mirrored entries")
+    payment_method: Optional[PaymentMethod] = Field(
+        None,
+        description="Payment method mirrored on both entries",
+    )
+    paid_date: Optional[datetime] = Field(
+        None,
+        description="Paid date mirrored on both entries; null reopens the pair",
+    )
+    notes: Optional[str] = Field(None, max_length=2000, description="User notes")
+    invoice_number: Optional[str] = Field(None, max_length=100, description="Invoice number")
+
+
+class MonthlyFeePairResponse(BaseModel):
+    """Operation response for one automatic honorários pair."""
+
+    success: bool
+    client_id: UUID
+    reference_month: date
+    office_transaction: TransactionResponse
+    client_transaction: Optional[TransactionResponse] = None
+    blocked_competence: bool = False
+    detail: Optional[str] = None
+
+
 # Financial KPI schemas
 class FinancialDashboardKPIs(BaseModel):
     """Schema for financial dashboard KPIs."""

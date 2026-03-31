@@ -37,6 +37,7 @@ type QuickLaunchForm = {
   entryType: string;
   observation: string;
   value: string;
+  isSettled: boolean;
   isRecurring: boolean;
   recurringDay: number;
 };
@@ -63,6 +64,7 @@ const buildDefaultForm = (): QuickLaunchForm => ({
   entryType: '',
   observation: '',
   value: '',
+  isSettled: true,
   isRecurring: false,
   recurringDay: 1,
 });
@@ -120,8 +122,9 @@ export function ClienteLancamentoRapidoCard({
     if (bankName) notesParts.push(`Banco: ${bankName}`);
     if (form.observation.trim()) notesParts.push(`Obs: ${form.observation.trim()}`);
     const notes = notesParts.length ? notesParts.join(' | ') : undefined;
-    const paidDate = new Date(`${form.date}T12:00:00`).toISOString();
     const referenceMonth = `${form.date.slice(0, 7)}-01`;
+    const isSettled = !form.isRecurring && form.isSettled;
+    const paidDate = isSettled ? new Date(`${form.date}T12:00:00`).toISOString() : null;
 
     try {
       setIsSubmitting(true);
@@ -130,16 +133,18 @@ export function ClienteLancamentoRapidoCard({
         transaction_type:
           form.movement === 'Entrada' ? TransactionType.RECEITA : TransactionType.DESPESA,
         amount,
-        payment_method: form.isRecurring
+        payment_method: !isSettled
+          ? undefined
+          : form.isRecurring
           ? undefined
           : bankName
             ? bankName.toLowerCase().includes('pix')
               ? PaymentMethod.PIX
               : PaymentMethod.TRANSFERENCIA
             : undefined,
-        payment_status: form.isRecurring ? PaymentStatus.PENDENTE : PaymentStatus.PAGO,
+        payment_status: isSettled ? PaymentStatus.PAGO : PaymentStatus.PENDENTE,
         due_date: form.date,
-        paid_date: form.isRecurring ? null : paidDate,
+        paid_date: paidDate,
         reference_month: referenceMonth,
         description: form.entryType.trim(),
         notes,
@@ -207,7 +212,13 @@ export function ClienteLancamentoRapidoCard({
         </div>
       </CardHeader>
       <CardBody className="space-y-4">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_180px_140px]">
+        {form.isRecurring && (
+          <p className="text-xs text-default-500">
+            Lançamentos recorrentes nascem pendentes e entram em contas a receber/pagar até a
+            baixa manual.
+          </p>
+        )}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_180px_140px_140px]">
           <DatePickerField
             label="Data"
             value={form.date}
@@ -219,7 +230,12 @@ export function ClienteLancamentoRapidoCard({
             onSelectionChange={(keys) => {
               const value = Array.from(keys)[0] as DisplayMovement | undefined;
               if (!value) return;
-              setForm((prev) => ({ ...prev, movement: value, entryType: '' }));
+              setForm((prev) => ({
+                ...prev,
+                movement: value,
+                entryType: '',
+                isSettled: prev.isRecurring ? false : value === 'Entrada',
+              }));
             }}
           >
             <SelectItem key="Entrada">Entrada</SelectItem>
@@ -263,11 +279,21 @@ export function ClienteLancamentoRapidoCard({
           />
           <div className="flex flex-col justify-center">
             <Checkbox
+              isSelected={form.isSettled}
+              onValueChange={(checked) => setForm((prev) => ({ ...prev, isSettled: checked }))}
+              isDisabled={form.isRecurring}
+            >
+              {form.movement === 'Entrada' ? 'Já recebido' : 'Já pago'}
+            </Checkbox>
+          </div>
+          <div className="flex flex-col justify-center">
+            <Checkbox
               isSelected={form.isRecurring}
               onValueChange={(checked) =>
                 setForm((prev) => ({
                   ...prev,
                   isRecurring: checked,
+                  isSettled: checked ? false : prev.movement === 'Entrada',
                   recurringDay: checked ? prev.recurringDay : 1,
                 }))
               }

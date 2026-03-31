@@ -2,6 +2,7 @@
 
 import { Button, Card, CardBody, CardHeader, Input, Link } from '@/heroui';
 import { useAuth } from '@/hooks/auth/useAuth';
+import { getDefaultAppRoute } from '@/lib/auth/default-route';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -14,7 +15,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!isLoading && isAuthenticated && user) {
-      router.replace('/financeiro');
+      router.replace(getDefaultAppRoute(user.role));
     }
   }, [isAuthenticated, isLoading, router, user]);
 

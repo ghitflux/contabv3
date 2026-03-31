@@ -221,6 +221,25 @@ export interface MonthlyFeeBulkDeleteResponse {
   items: MonthlyFeeBulkDeleteItem[];
 }
 
+export interface MonthlyFeePairUpdate {
+  amount?: number;
+  due_date?: string;
+  payment_method?: PaymentMethod | null;
+  paid_date?: string | null;
+  notes?: string | null;
+  invoice_number?: string | null;
+}
+
+export interface MonthlyFeePairOperationResponse {
+  success: boolean;
+  client_id: string;
+  reference_month: string;
+  office_transaction: Transaction;
+  client_transaction?: Transaction | null;
+  blocked_competence: boolean;
+  detail?: string | null;
+}
+
 // Financial KPIs
 export interface FinancialDashboardKPIs {
   // Revenue
@@ -332,4 +351,48 @@ export function getPaymentMethodLabel(method: PaymentMethod): string {
     [PaymentMethod.CHEQUE]: 'Cheque',
   };
   return labels[method];
+}
+
+const AUTO_FEE_MARKER = 'honorários recorrentes';
+const CLIENT_AUTO_FEE_DESCRIPTION_REGEX = /^Honorários do escritório - \d{2}\/\d{4}$/;
+const OFFICE_AUTO_FEE_DESCRIPTION_REGEX = /^Honorários - .+ \([^)]+\) - \d{2}\/\d{4}$/;
+const AUTO_FEE_CLIENT_ID_REGEX =
+  /Cliente:\s*[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
+
+function hasAutomaticFeeMarker(notes?: string | null): boolean {
+  return Boolean(notes && notes.toLowerCase().includes(AUTO_FEE_MARKER));
+}
+
+export function isAutomaticClientMonthlyFeeTransaction(
+  transaction: Pick<Transaction, 'transaction_type' | 'description' | 'notes'>
+): boolean {
+  return (
+    transaction.transaction_type === TransactionType.DESPESA &&
+    CLIENT_AUTO_FEE_DESCRIPTION_REGEX.test(transaction.description || '') &&
+    hasAutomaticFeeMarker(transaction.notes)
+  );
+}
+
+export function isAutomaticOfficeMonthlyFeeTransaction(
+  transaction: Pick<Transaction, 'client_id' | 'transaction_type' | 'description' | 'notes'>,
+  officeClientId?: string | null
+): boolean {
+  return Boolean(
+    officeClientId &&
+      transaction.client_id === officeClientId &&
+      transaction.transaction_type === TransactionType.RECEITA &&
+      OFFICE_AUTO_FEE_DESCRIPTION_REGEX.test(transaction.description || '') &&
+      hasAutomaticFeeMarker(transaction.notes) &&
+      AUTO_FEE_CLIENT_ID_REGEX.test(transaction.notes || '')
+  );
+}
+
+export function isAutomaticMonthlyFeeTransaction(
+  transaction: Pick<Transaction, 'client_id' | 'transaction_type' | 'description' | 'notes'>,
+  officeClientId?: string | null
+): boolean {
+  return (
+    isAutomaticClientMonthlyFeeTransaction(transaction) ||
+    isAutomaticOfficeMonthlyFeeTransaction(transaction, officeClientId)
+  );
 }

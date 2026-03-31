@@ -1,10 +1,10 @@
 # Dockerfile for Next.js (Development)
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
 # Install pnpm
-RUN npm install -g pnpm@8.15.0
+RUN npm install -g pnpm@8.15.9
 
 # Copy root package files
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
@@ -19,5 +19,6 @@ COPY . .
 # Expose port
 EXPOSE 3000
 
-# Start development server with Turbopack
-CMD ["pnpm", "dev:web"]
+# Start development server with Turbopack listening on all interfaces.
+# In compose, mounted volumes replace node_modules from the image, so install the workspace at boot.
+CMD ["sh", "-c", "pnpm install --frozen-lockfile && exec pnpm --filter web exec next dev --turbopack --hostname 0.0.0.0 --port 3000"]

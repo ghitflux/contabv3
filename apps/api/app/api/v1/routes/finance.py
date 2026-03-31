@@ -22,6 +22,8 @@ from app.schemas.finance import (
     MonthlyFeeBulkDeleteResponse,
     MonthlyFeeGenerateRequest,
     MonthlyFeeGenerateResponse,
+    MonthlyFeePairResponse,
+    MonthlyFeePairUpdate,
     MonthlyFeePreviewResponse,
     TransactionBulkIdsRequest,
     TransactionBulkOperationResponse,
@@ -95,6 +97,34 @@ def _build_transaction_payload(transaction, summary: str, extra: Optional[dict] 
     if extra:
         payload.update(extra)
     return payload
+
+
+def _serialize_transaction_response(transaction) -> TransactionResponse:
+    return TransactionResponse(
+        id=transaction.id,
+        client_id=transaction.client_id,
+        client_name=transaction.client.razao_social if getattr(transaction, "client", None) else None,
+        client_cnpj=transaction.client.cnpj if getattr(transaction, "client", None) else None,
+        obligation_id=transaction.obligation_id,
+        transaction_type=transaction.transaction_type,
+        amount=transaction.amount,
+        payment_method=transaction.payment_method,
+        payment_status=transaction.payment_status,
+        due_date=transaction.due_date,
+        paid_date=transaction.paid_date,
+        reference_month=transaction.reference_month,
+        description=transaction.description,
+        category=transaction.category,
+        notes=transaction.notes,
+        invoice_number=transaction.invoice_number,
+        receipt_url=transaction.receipt_url,
+        recurring_template_id=transaction.recurring_template_id,
+        restore_blocked_reason=transaction.restore_blocked_reason,
+        created_by_id=transaction.created_by_id,
+        created_at=transaction.created_at,
+        updated_at=transaction.updated_at,
+        deleted_at=transaction.deleted_at,
+    )
 
 
 async def _get_client_profile(db: AsyncSession, current_user: User):
@@ -351,7 +381,7 @@ async def update_transaction(
         return transaction
     except ValueError as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
 
@@ -367,15 +397,32 @@ async def mark_as_paid(
     """
     Mark a transaction as paid.
 
-    Admin/Func only.
+    Admin/Func can mark any common transaction as paid.
+    Clients can mark only their own common transactions as paid.
     """
-    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC, UserRole.CLIENTE]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin/func can mark transactions as paid",
+            detail="Not authorized to mark transactions as paid",
         )
 
     service = TransactionService(db)
+    repo = TransactionRepository(db)
+    transaction = await repo.get_by_id_with_relations(transaction_id, include_deleted=True)
+    if not transaction or transaction.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transaction not found",
+        )
+
+    if current_user.role == UserRole.CLIENTE:
+        client = await _get_client_profile(db, current_user)
+        if transaction.client_id != client.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to mark this transaction as paid",
+            )
+        _assert_client_can_manage_transaction(transaction, current_user)
 
     try:
         transaction = await service.mark_as_paid(
@@ -1119,6 +1166,254 @@ async def bulk_delete_monthly_fees(
         "blocked_competences": result["blocked_competences"],
         "items": result["items"],
     }
+
+
+@router.post("/fees/{office_transaction_id}/pay", response_model=MonthlyFeePairResponse)
+async def mark_monthly_fee_as_paid(
+    office_transaction_id: UUID,
+    data: TransactionMarkAsPaid,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Mark both sides of an automatic honorários pair as paid."""
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/func can mark automatic fees as paid",
+        )
+
+    service = FeeGeneratorService(db)
+    repo = TransactionRepository(db)
+
+    try:
+        office_before, _, client_before, _ = await service._load_auto_fee_pair(office_transaction_id)
+        before_office_snapshot = _transaction_snapshot(office_before)
+        before_client_snapshot = _transaction_snapshot(client_before) if client_before else None
+
+        result = await service.mark_monthly_fee_as_paid(
+            office_transaction_id=office_transaction_id,
+            paid_date=data.paid_date,
+            payment_method=data.payment_method,
+            notes=data.notes,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+    office_transaction = await repo.get_by_id_with_relations(office_transaction_id, include_deleted=True)
+    client_transaction = None
+    if result["client_transaction"] is not None:
+        client_transaction = await repo.get_by_id_with_relations(
+            result["client_transaction"].id,
+            include_deleted=True,
+        )
+
+    if office_transaction is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Honorário do escritório não encontrado após a baixa",
+        )
+
+    db.add(
+        AuditLog(
+            user_id=current_user.id,
+            action="transaction.monthly_fee_pay",
+            entity="financial_transaction",
+            entity_id=str(office_transaction.id),
+            payload={
+                "summary": (
+                    f"Baixa de honorário automático: {office_transaction.description} - "
+                    f"R$ {_format_amount(office_transaction.amount)}"
+                ),
+                "before_office": before_office_snapshot,
+                "after_office": _transaction_snapshot(office_transaction),
+                "before_client": before_client_snapshot,
+                "after_client": _transaction_snapshot(client_transaction) if client_transaction else None,
+            },
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    )
+    await db.commit()
+
+    return MonthlyFeePairResponse(
+        success=True,
+        client_id=result["client_id"],
+        reference_month=result["reference_month"],
+        office_transaction=_serialize_transaction_response(office_transaction),
+        client_transaction=_serialize_transaction_response(client_transaction)
+        if client_transaction
+        else None,
+        blocked_competence=False,
+        detail=None,
+    )
+
+
+@router.put("/fees/{office_transaction_id}", response_model=MonthlyFeePairResponse)
+async def update_monthly_fee_pair(
+    office_transaction_id: UUID,
+    data: MonthlyFeePairUpdate,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Update editable fields for both sides of an automatic honorários pair."""
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/func can edit automatic fees",
+        )
+
+    service = FeeGeneratorService(db)
+    repo = TransactionRepository(db)
+
+    try:
+        office_before, _, client_before, _ = await service._load_auto_fee_pair(office_transaction_id)
+        before_office_snapshot = _transaction_snapshot(office_before)
+        before_client_snapshot = _transaction_snapshot(client_before) if client_before else None
+
+        result = await service.update_monthly_fee_pair(
+            office_transaction_id=office_transaction_id,
+            data=data,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+    office_transaction = await repo.get_by_id_with_relations(office_transaction_id, include_deleted=True)
+    client_transaction = None
+    if result["client_transaction"] is not None:
+        client_transaction = await repo.get_by_id_with_relations(
+            result["client_transaction"].id,
+            include_deleted=True,
+        )
+
+    if office_transaction is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Honorário do escritório não encontrado após a edição",
+        )
+
+    db.add(
+        AuditLog(
+            user_id=current_user.id,
+            action="transaction.monthly_fee_update",
+            entity="financial_transaction",
+            entity_id=str(office_transaction.id),
+            payload={
+                "summary": (
+                    f"Honorário automático atualizado: {office_transaction.description} - "
+                    f"R$ {_format_amount(office_transaction.amount)}"
+                ),
+                "before_office": before_office_snapshot,
+                "after_office": _transaction_snapshot(office_transaction),
+                "before_client": before_client_snapshot,
+                "after_client": _transaction_snapshot(client_transaction) if client_transaction else None,
+            },
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    )
+    await db.commit()
+
+    return MonthlyFeePairResponse(
+        success=True,
+        client_id=result["client_id"],
+        reference_month=result["reference_month"],
+        office_transaction=_serialize_transaction_response(office_transaction),
+        client_transaction=_serialize_transaction_response(client_transaction)
+        if client_transaction
+        else None,
+        blocked_competence=False,
+        detail=None,
+    )
+
+
+@router.delete("/fees/{office_transaction_id}", response_model=MonthlyFeePairResponse)
+async def delete_monthly_fee_pair(
+    office_transaction_id: UUID,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Delete one automatic honorários pair and block regeneration for the competence."""
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/func can delete automatic fees",
+        )
+
+    service = FeeGeneratorService(db)
+    repo = TransactionRepository(db)
+
+    try:
+        office_before, _, client_before, _ = await service._load_auto_fee_pair(
+            office_transaction_id,
+            require_client_pair=False,
+        )
+        before_office_snapshot = _transaction_snapshot(office_before)
+        before_client_snapshot = _transaction_snapshot(client_before) if client_before else None
+
+        result = await service.delete_monthly_fee_pair(
+            office_transaction_id=office_transaction_id,
+            deleted_by_id=current_user.id,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+    office_transaction = await repo.get_by_id_with_relations(office_transaction_id, include_deleted=True)
+    client_transaction = None
+    if result["client_transaction"] is not None:
+        client_transaction = await repo.get_by_id_with_relations(
+            result["client_transaction"].id,
+            include_deleted=True,
+        )
+
+    if office_transaction is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Honorário do escritório não encontrado após a exclusão",
+        )
+
+    db.add(
+        AuditLog(
+            user_id=current_user.id,
+            action="transaction.monthly_fee_delete",
+            entity="financial_transaction",
+            entity_id=str(office_transaction.id),
+            payload={
+                "summary": "Honorário automático excluído com bloqueio da competência.",
+                "before_office": before_office_snapshot,
+                "after_office": _transaction_snapshot(office_transaction),
+                "before_client": before_client_snapshot,
+                "after_client": _transaction_snapshot(client_transaction) if client_transaction else None,
+                "blocked_competence": True,
+            },
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    )
+    await db.commit()
+
+    return MonthlyFeePairResponse(
+        success=True,
+        client_id=result["client_id"],
+        reference_month=result["reference_month"],
+        office_transaction=_serialize_transaction_response(office_transaction),
+        client_transaction=_serialize_transaction_response(client_transaction)
+        if client_transaction
+        else None,
+        blocked_competence=True,
+        detail=result.get("detail"),
+    )
 
 
 # Reports endpoints

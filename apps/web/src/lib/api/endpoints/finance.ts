@@ -16,6 +16,8 @@ import type {
   MonthlyFeePreviewResponse,
   MonthlyFeeBulkDeleteRequest,
   MonthlyFeeBulkDeleteResponse,
+  MonthlyFeePairOperationResponse,
+  MonthlyFeePairUpdate,
   TransactionBulkIdsRequest,
   TransactionBulkOperationResponse,
   TransactionBulkPayRequest,
@@ -170,6 +172,30 @@ export const financeApi = {
     data: MonthlyFeeBulkDeleteRequest
   ): Promise<MonthlyFeeBulkDeleteResponse> {
     return apiClient.post<MonthlyFeeBulkDeleteResponse>('/finance/fees/bulk-delete', data);
+  },
+
+  async markMonthlyFeeAsPaid(
+    officeTransactionId: string,
+    data: TransactionMarkAsPaid
+  ): Promise<MonthlyFeePairOperationResponse> {
+    return apiClient.post<MonthlyFeePairOperationResponse>(
+      `/finance/fees/${officeTransactionId}/pay`,
+      data
+    );
+  },
+
+  async updateMonthlyFee(
+    officeTransactionId: string,
+    data: MonthlyFeePairUpdate
+  ): Promise<MonthlyFeePairOperationResponse> {
+    return apiClient.put<MonthlyFeePairOperationResponse>(
+      `/finance/fees/${officeTransactionId}`,
+      data
+    );
+  },
+
+  async deleteMonthlyFee(officeTransactionId: string): Promise<MonthlyFeePairOperationResponse> {
+    return apiClient.delete<MonthlyFeePairOperationResponse>(`/finance/fees/${officeTransactionId}`);
   },
 
   async uploadTransactionAttachment(transactionId: string, file: File): Promise<Transaction> {
