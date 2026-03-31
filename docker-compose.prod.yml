@@ -49,6 +49,7 @@ services:
       dockerfile: infra/docker/Dockerfile.web.prod
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://cicgestao.com/api}
+        INTERNAL_API_URL: ${INTERNAL_API_URL:-http://api:8000/api/v1}
         NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-wss://cicgestao.com/ws}
         NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-CIC Gestão}
         NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://cicgestao.com}
@@ -58,6 +59,7 @@ services:
       - .env.prod
     environment:
       NODE_ENV: production
+      INTERNAL_API_URL: ${INTERNAL_API_URL:-http://api:8000/api/v1}
     depends_on:
       - api
     ports:
