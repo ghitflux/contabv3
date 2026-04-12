@@ -35,6 +35,7 @@ import {
   type TransactionUpdate,
   isAutomaticMonthlyFeeTransaction,
   isDuePaymentStatus,
+  isProfitDistributionTransaction,
   getPaymentStatusColor,
   getPaymentStatusLabel,
 } from '@/types/finance';
@@ -78,6 +79,7 @@ interface Lancamento {
 const LANCAMENTOS_PER_PAGE = 20;
 const MAX_CUSTOM_CATEGORY_LENGTH = 20;
 const OFFICE_CLIENT_ID = process.env.NEXT_PUBLIC_OFFICE_CLIENT_ID ?? '';
+const PROFIT_DISTRIBUTION_LABEL = 'Distribuição de lucros';
 
 export function FinanceiroLancamentos() {
   const initialMonthFilterState = getCurrentMonthFilterState();
@@ -89,7 +91,9 @@ export function FinanceiroLancamentos() {
   const [startDate, setStartDate] = useState(initialMonthFilterState.startDate);
   const [endDate, setEndDate] = useState(initialMonthFilterState.endDate);
   const [clients, setClients] = useState<ClientListItem[]>([]);
-  const [activePendingPanel, setActivePendingPanel] = useState<'all' | 'receber' | 'pagar'>('all');
+  const [activePendingPanel, setActivePendingPanel] = useState<
+    'all' | 'receber' | 'pagar' | 'distribuicao'
+  >('all');
   const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -278,6 +282,15 @@ export function FinanceiroLancamentos() {
       ),
     [lancamentos]
   );
+  const paidProfitDistributionLancamentos = useMemo(
+    () =>
+      lancamentos.filter(
+        (lancamento) =>
+          isProfitDistributionTransaction(lancamento.raw) &&
+          lancamento.status === PaymentStatus.PAGO
+      ),
+    [lancamentos]
+  );
   const totalReceber = useMemo(
     () => receivableLancamentos.reduce((sum, lancamento) => sum + lancamento.valor, 0),
     [receivableLancamentos]
@@ -285,6 +298,11 @@ export function FinanceiroLancamentos() {
   const totalPagar = useMemo(
     () => payableLancamentos.reduce((sum, lancamento) => sum + lancamento.valor, 0),
     [payableLancamentos]
+  );
+  const totalDistribuicaoLucros = useMemo(
+    () =>
+      paidProfitDistributionLancamentos.reduce((sum, lancamento) => sum + lancamento.valor, 0),
+    [paidProfitDistributionLancamentos]
   );
 
   const lancamentosFiltrados = useMemo(() => {
@@ -299,7 +317,10 @@ export function FinanceiroLancamentos() {
           isDuePaymentStatus(lancamento.status)) ||
         (activePendingPanel === 'pagar' &&
           lancamento.tipo === TransactionType.DESPESA &&
-          isDuePaymentStatus(lancamento.status));
+          isDuePaymentStatus(lancamento.status)) ||
+        (activePendingPanel === 'distribuicao' &&
+          isProfitDistributionTransaction(lancamento.raw) &&
+          lancamento.status === PaymentStatus.PAGO);
       const categoriaInfo = resolveCategoriaLancamento(lancamento.categoria);
       const categoriaSearchText = `${lancamento.categoria ?? ''} ${categoriaInfo?.label ?? ''} ${
         categoriaInfo?.conta?.descricao ?? ''
@@ -646,7 +667,7 @@ export function FinanceiroLancamentos() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card
             isPressable
             onPress={() =>
@@ -688,6 +709,29 @@ export function FinanceiroLancamentos() {
               </p>
               <p className="text-xs text-slate-500 mt-2">
                 {payableLancamentos.length} lançamento(s) pendente(s)
+              </p>
+            </CardBody>
+          </Card>
+          <Card
+            isPressable
+            onPress={() =>
+              setActivePendingPanel((prev) => (prev === 'distribuicao' ? 'all' : 'distribuicao'))
+            }
+            className={`border ${
+              activePendingPanel === 'distribuicao'
+                ? 'border-sky-400 bg-sky-50 dark:bg-sky-900/20'
+                : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/20'
+            }`}
+          >
+            <CardBody>
+              <p className="text-sm text-slate-700 dark:text-slate-400 font-medium mb-1">
+                DISTRIBUIÇÃO DE LUCROS
+              </p>
+              <p className="text-2xl font-bold text-sky-700 dark:text-sky-400">
+                {formatCurrency(totalDistribuicaoLucros)}
+              </p>
+              <p className="text-xs text-slate-500 mt-2">
+                {paidProfitDistributionLancamentos.length} pagamento(s) no período
               </p>
             </CardBody>
           </Card>
@@ -744,7 +788,9 @@ export function FinanceiroLancamentos() {
                       <TableCell className="text-sm">{lancamento.cliente ?? '-'}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          {lancamento.tipo === TransactionType.RECEITA ? (
+                          {isProfitDistributionTransaction(lancamento.raw) ? (
+                            <span className="text-sm text-sky-600">{PROFIT_DISTRIBUTION_LABEL}</span>
+                          ) : lancamento.tipo === TransactionType.RECEITA ? (
                             <>
                               <ArrowUpRight className="h-4 w-4 text-green-600" />
                               <span className="text-sm text-green-600">Receita</span>

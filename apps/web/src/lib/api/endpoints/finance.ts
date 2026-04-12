@@ -21,6 +21,7 @@ import type {
   TransactionBulkIdsRequest,
   TransactionBulkOperationResponse,
   TransactionBulkPayRequest,
+  TransactionTrashPurgeResponse,
   FinancialDashboardKPIs,
   ReceivablesAgingReport,
   RevenueByPeriodReport,
@@ -166,6 +167,26 @@ export const financeApi = {
     data: TransactionBulkIdsRequest
   ): Promise<TransactionBulkOperationResponse> {
     return apiClient.post<TransactionBulkOperationResponse>('/finance/bulk/delete', data);
+  },
+
+  async purgeTransactionTrash(filters?: TransactionFilters): Promise<TransactionTrashPurgeResponse> {
+    const params = new URLSearchParams();
+
+    const clientId =
+      filters?.client_id && UUID_REGEX.test(filters.client_id) ? filters.client_id : undefined;
+    const referenceMonth = normalizeReferenceMonth(filters?.reference_month);
+    const dueDateFrom = normalizeDateParam(filters?.due_date_from);
+    const dueDateTo = normalizeDateParam(filters?.due_date_to);
+
+    if (clientId) params.append('client_id', clientId);
+    if (referenceMonth) params.append('reference_month', referenceMonth);
+    if (dueDateFrom) params.append('due_date_from', dueDateFrom);
+    if (dueDateTo) params.append('due_date_to', dueDateTo);
+
+    const queryString = params.toString();
+    const endpoint = queryString ? `/finance/trash/purge?${queryString}` : '/finance/trash/purge';
+
+    return apiClient.delete<TransactionTrashPurgeResponse>(endpoint);
   },
 
   async bulkDeleteMonthlyFees(

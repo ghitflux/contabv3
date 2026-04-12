@@ -28,6 +28,7 @@ from app.schemas.finance import (
     TransactionBulkIdsRequest,
     TransactionBulkOperationResponse,
     TransactionBulkPayRequest,
+    TransactionTrashPurgeResponse,
     TransactionCancel,
     TransactionCreate,
     TransactionListResponse,
@@ -181,6 +182,18 @@ async def list_transactions(
     if deleted_only:
         include_deleted = True
 
+    if not include_deleted and not deleted_only and skip == 0:
+        recurring_until_month = reference_month
+        if recurring_until_month is None and due_date_to is not None:
+            recurring_until_month = due_date_to.replace(day=1)
+        if recurring_until_month is not None:
+            recurring_summary = await TransactionService(db).generate_missing_recurring_transactions(
+                until_month=recurring_until_month,
+                fallback_created_by_id=current_user.id,
+            )
+            if recurring_summary.get("total_transactions", 0) > 0:
+                await db.commit()
+
     transactions, total = await repo.list_with_filters(
         client_id=client_id,
         status=payment_status,
@@ -228,6 +241,61 @@ async def list_transactions(
         "total": total,
         "skip": skip,
         "limit": limit,
+    }
+
+
+@router.delete("/trash/purge", response_model=TransactionTrashPurgeResponse)
+async def purge_transaction_trash(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    client_id: Optional[UUID] = Query(None),
+    reference_month: Optional[date] = Query(None),
+    due_date_from: Optional[date] = Query(None),
+    due_date_to: Optional[date] = Query(None),
+):
+    """Permanently remove soft-deleted transactions matching the filters."""
+    if current_user.role not in [UserRole.ADMIN, UserRole.FUNC, UserRole.CLIENTE]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to purge trash",
+        )
+
+    if current_user.role == UserRole.CLIENTE:
+        client = await _get_client_profile(db, current_user)
+        client_id = client.id
+
+    repo = TransactionRepository(db)
+    deleted_count = await repo.purge_deleted_with_filters(
+        client_id=client_id,
+        reference_month=reference_month,
+        due_date_from=due_date_from,
+        due_date_to=due_date_to,
+    )
+
+    db.add(
+        AuditLog(
+            user_id=current_user.id,
+            action="transaction.trash_purge",
+            entity="financial_transaction",
+            entity_id=None,
+            payload={
+                "summary": f"Lixeira limpa permanentemente: {deleted_count} lançamento(s) removido(s).",
+                "deleted": deleted_count,
+                "client_id": str(client_id) if client_id else None,
+                "reference_month": reference_month.isoformat() if reference_month else None,
+                "due_date_from": due_date_from.isoformat() if due_date_from else None,
+                "due_date_to": due_date_to.isoformat() if due_date_to else None,
+            },
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    )
+    await db.commit()
+
+    return {
+        "success": True,
+        "deleted": deleted_count,
     }
 
 

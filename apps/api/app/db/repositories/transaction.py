@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Optional, Sequence
 from uuid import UUID
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -421,3 +421,32 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
         self.db.add_all(transactions)
         await self.db.flush()
         return transactions
+
+    async def purge_deleted_with_filters(
+        self,
+        *,
+        client_id: Optional[UUID] = None,
+        reference_month: Optional[date] = None,
+        due_date_from: Optional[date] = None,
+        due_date_to: Optional[date] = None,
+    ) -> int:
+        """Permanently remove soft-deleted transactions matching the filters."""
+        conditions = [FinancialTransaction.deleted_at.is_not(None)]
+
+        if client_id:
+            conditions.append(FinancialTransaction.client_id == client_id)
+
+        if reference_month:
+            conditions.append(FinancialTransaction.reference_month == reference_month)
+
+        if due_date_from:
+            conditions.append(FinancialTransaction.due_date >= due_date_from)
+
+        if due_date_to:
+            conditions.append(FinancialTransaction.due_date <= due_date_to)
+
+        result = await self.db.execute(
+            delete(FinancialTransaction).where(and_(*conditions))
+        )
+        await self.db.flush()
+        return int(result.rowcount or 0)

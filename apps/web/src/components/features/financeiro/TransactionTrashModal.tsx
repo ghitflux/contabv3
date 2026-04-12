@@ -61,6 +61,7 @@ export function TransactionTrashModal({
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [isPurging, setIsPurging] = useState(false);
 
   const loadDeletedTransactions = useCallback(async () => {
     setIsLoading(true);
@@ -107,6 +108,34 @@ export function TransactionTrashModal({
     }
   };
 
+  const handlePurge = async () => {
+    if (transactions.length === 0) {
+      toast.error('A lixeira já está vazia.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Remover permanentemente ${transactions.length} lançamento(s) da lixeira?`
+    );
+    if (!confirmed) return;
+
+    try {
+      setIsPurging(true);
+      const response = await financeApi.purgeTransactionTrash(filters);
+      setTransactions([]);
+      toast.success(`${response.deleted} lançamento(s) removido(s) permanentemente.`);
+      await onRestored?.();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
+      }
+    } catch (error) {
+      console.error('Erro ao limpar lixeira de lançamentos', error);
+      toast.error('Não foi possível limpar a lixeira.');
+    } finally {
+      setIsPurging(false);
+    }
+  };
+
   return (
     <Modal isOpen={isOpen} onOpenChange={onOpenChange} size="4xl" scrollBehavior="inside">
       <ModalContent>
@@ -117,7 +146,16 @@ export function TransactionTrashModal({
               {title}
             </ModalHeader>
             <ModalBody className="space-y-3">
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
+                <Button
+                  color="danger"
+                  variant="flat"
+                  onPress={handlePurge}
+                  isDisabled={transactions.length === 0}
+                  isLoading={isPurging}
+                >
+                  Limpar lixeira
+                </Button>
                 <Button variant="flat" onPress={loadDeletedTransactions} isLoading={isLoading}>
                   Atualizar
                 </Button>

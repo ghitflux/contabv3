@@ -33,7 +33,12 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
-      <Card className="w-full max-w-md">
+      <div className="w-full max-w-md space-y-6">
+        <div className="flex flex-col items-center gap-3">
+          <img src="/logo.png" alt="CIC Gestão" width={96} height={96} className="drop-shadow-lg" />
+          <h1 className="text-2xl font-bold text-foreground">CIC Gestão</h1>
+        </div>
+      <Card className="w-full">
         <CardHeader className="flex flex-col gap-1 px-6 pt-6">
           <h1 className="text-2xl font-bold">Bem-vindo</h1>
           <p className="text-sm text-default-500">Entre com suas credenciais</p>
@@ -82,6 +87,7 @@ export default function LoginPage() {
           </form>
         </CardBody>
       </Card>
+      </div>
     </div>
   );
 }

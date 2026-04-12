@@ -41,6 +41,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FinanceiroKPIs, type FinanceiroKpi } from './FinanceiroKPIs';
 import { useTransactions } from '@/hooks/useTransactions';
 import {
+  DISTRIBUTION_PROFITS_CATEGORY,
   type MonthlyFeePreviewResponse,
   type MonthlyFeePairUpdate,
   PaymentMethod,
@@ -48,8 +49,10 @@ import {
   TransactionType,
   type Transaction,
   type TransactionUpdate,
+  extractBankNameFromNotes,
   isAutomaticOfficeMonthlyFeeTransaction,
   isDuePaymentStatus,
+  isProfitDistributionTransaction,
   getPaymentStatusLabel,
   getPaymentMethodLabel,
 } from '@/types/finance';
@@ -72,7 +75,7 @@ import {
   normalizeMonthFilterFromRange,
 } from '@/lib/finance/month-filter';
 
-type DisplayTransactionType = 'Entrada' | 'Saída';
+type DisplayTransactionType = 'Entrada' | 'Saída' | 'Distribuição de Lucros';
 
 type DisplayTransaction = {
   id: string;
@@ -91,8 +94,7 @@ type DisplayTransaction = {
 type StandardHistory = {
   id: string;
   description: string;
-  accountingAccount?: string;
-  type: 'income' | 'expense';
+  type: 'income' | 'expense' | 'profit_distribution';
 };
 
 type NewTransactionState = {
@@ -108,11 +110,14 @@ type NewTransactionState = {
 };
 
 const initialHistories: StandardHistory[] = [
-  { id: '1', description: 'Honorários do mês', accountingAccount: '3.1.1.01', type: 'income' },
-  { id: '2', description: 'Serviço extra', accountingAccount: '3.1.1.02', type: 'income' },
-  { id: '3', description: 'Aluguel', accountingAccount: '2.1.1.01', type: 'expense' },
-  { id: '4', description: 'Internet', accountingAccount: '2.1.1.02', type: 'expense' },
+  { id: '1', description: 'Honorários do mês', type: 'income' },
+  { id: '2', description: 'Serviço extra', type: 'income' },
+  { id: '3', description: 'Aluguel', type: 'expense' },
+  { id: '4', description: 'Internet', type: 'expense' },
+  { id: '5', description: 'Distribuição de lucros', type: 'profit_distribution' },
 ];
+
+const OFFICE_HISTORY_STORAGE_KEY = 'financeiro:escritorio:historicos';
 
 const buildDefaultTransaction = (
   baseDate: Date = new Date(),
@@ -144,6 +149,7 @@ const normalizeDateInput = (value?: string | null): string => {
 };
 
 const HONORARIOS_DESCRIPTION_PATTERN = /^Honorários - (.+?) \(([^)]+)\) - (\d{2}\/\d{4})$/;
+const PROFIT_DISTRIBUTION_LABEL = 'Distribuição de Lucros';
 
 const formatMonthYear = (value: string) => {
   const parsed = new Date(value);
@@ -153,16 +159,58 @@ const formatMonthYear = (value: string) => {
   return `${String(parsed.getMonth() + 1).padStart(2, '0')}/${parsed.getFullYear()}`;
 };
 
-type ActiveTransactionPanel = 'all' | 'receber' | 'pagar' | 'receita' | 'despesa';
+type ActiveTransactionPanel =
+  | 'all'
+  | 'receber'
+  | 'pagar'
+  | 'receita'
+  | 'despesa'
+  | 'distribuicao';
 
 export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => void }) {
   const initialMonthFilterState = getCurrentMonthFilterState();
   const [monthFilter, setMonthFilter] = useState(initialMonthFilterState.monthFilter);
+  const [feesReferenceMonth, setFeesReferenceMonth] = useState(
+    initialMonthFilterState.monthFilter || getCurrentMonthValue()
+  );
   const [startDate, setStartDate] = useState(initialMonthFilterState.startDate);
   const [endDate, setEndDate] = useState(initialMonthFilterState.endDate);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [isLoadingBanks, setIsLoadingBanks] = useState(false);
-  const [standardHistories, setStandardHistories] = useState<StandardHistory[]>(initialHistories);
+  const [standardHistories, setStandardHistories] = useState<StandardHistory[]>(() => {
+    if (typeof window === 'undefined') {
+      return initialHistories;
+    }
+    const storedValue = window.localStorage.getItem(OFFICE_HISTORY_STORAGE_KEY);
+    if (!storedValue) {
+      return initialHistories;
+    }
+    try {
+      const parsed = JSON.parse(storedValue);
+      if (!Array.isArray(parsed)) {
+        return initialHistories;
+      }
+      const normalized = parsed
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null;
+          const id = typeof item.id === 'string' ? item.id : crypto.randomUUID();
+          const description =
+            typeof item.description === 'string' ? item.description.trim() : '';
+          const type =
+            item.type === 'income' || item.type === 'expense' || item.type === 'profit_distribution'
+              ? item.type
+              : null;
+          if (!description || !type) {
+            return null;
+          }
+          return { id, description, type } satisfies StandardHistory;
+        })
+        .filter((item): item is StandardHistory => item !== null);
+      return normalized.length > 0 ? normalized : initialHistories;
+    } catch {
+      return initialHistories;
+    }
+  });
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [editingBank, setEditingBank] = useState<BankAccount | null>(null);
   const [isSavingBank, setIsSavingBank] = useState(false);
@@ -184,8 +232,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   });
   const [newHistory, setNewHistory] = useState({
     description: '',
-    accountingAccount: '',
-    type: 'income' as 'income' | 'expense',
+    type: 'income' as 'income' | 'expense' | 'profit_distribution',
   });
   const [newTransaction, setNewTransaction] = useState<NewTransactionState>(() =>
     buildDefaultTransaction()
@@ -286,6 +333,11 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     void loadBankAccounts();
   }, [loadBankAccounts]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(OFFICE_HISTORY_STORAGE_KEY, JSON.stringify(standardHistories));
+  }, [standardHistories]);
+
   const handleSaveBank = async () => {
     if (!bankForm.name.trim() || !bankForm.account_number.trim()) {
       toast.error('Informe o nome e o número da conta.');
@@ -368,14 +420,65 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       fetchAllPages: true,
     });
 
+  const currentYear = useMemo(() => new Date().getFullYear(), []);
+  const { transactions: paidBalanceTransactions } = useTransactions({
+    filters: {
+      client_id: OFFICE_CLIENT_ID || undefined,
+      status: PaymentStatus.PAGO,
+      page: 1,
+      size: 100,
+    },
+    autoFetch: Boolean(OFFICE_CLIENT_ID),
+    fetchAllPages: true,
+  });
+  const { transactions: yearTransactions } = useTransactions({
+    filters: {
+      client_id: OFFICE_CLIENT_ID || undefined,
+      due_date_from: `${new Date().getFullYear()}-01-01`,
+      due_date_to: `${new Date().getFullYear()}-12-31`,
+      page: 1,
+      size: 100,
+    },
+    autoFetch: Boolean(OFFICE_CLIENT_ID),
+    fetchAllPages: true,
+  });
+  const paidYearTransactions = useMemo(
+    () => yearTransactions.filter((t) => t.payment_status === PaymentStatus.PAGO),
+    [yearTransactions]
+  );
+  const receitaAno = useMemo(
+    () =>
+      paidYearTransactions
+        .filter((t) => t.transaction_type === TransactionType.RECEITA)
+        .reduce((sum, t) => sum + t.amount, 0),
+    [paidYearTransactions]
+  );
+  const despesaAno = useMemo(
+    () =>
+      paidYearTransactions
+        .filter(
+          (t) =>
+            t.transaction_type === TransactionType.DESPESA && !isProfitDistributionTransaction(t)
+        )
+        .reduce((sum, t) => sum + t.amount, 0),
+    [paidYearTransactions]
+  );
+  const lucroAno = receitaAno - despesaAno;
+
   const displayTransactions = useMemo<DisplayTransaction[]>(() => {
     return transactions.map((transaction) => ({
       id: transaction.id,
       date: transaction.paid_date || transaction.due_date,
-      type: transaction.transaction_type === TransactionType.RECEITA ? 'Entrada' : 'Saída',
-      bank: transaction.payment_method
-        ? getPaymentMethodLabel(transaction.payment_method) || transaction.payment_method
-        : '-',
+      type: isProfitDistributionTransaction(transaction)
+        ? PROFIT_DISTRIBUTION_LABEL
+        : transaction.transaction_type === TransactionType.RECEITA
+          ? 'Entrada'
+          : 'Saída',
+      bank:
+        extractBankNameFromNotes(transaction.notes) ||
+        (transaction.payment_method
+          ? getPaymentMethodLabel(transaction.payment_method) || transaction.payment_method
+          : '-'),
       history: transaction.description,
       observation: transaction.notes || undefined,
       value: transaction.amount,
@@ -440,6 +543,26 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     () => transactions.filter((transaction) => transaction.payment_status === PaymentStatus.PAGO),
     [transactions]
   );
+  const paidDistributionTransactions = useMemo(
+    () =>
+      paidTransactions.filter((transaction) => isProfitDistributionTransaction(transaction)),
+    [paidTransactions]
+  );
+  const paidYearDistributionTransactions = useMemo(
+    () =>
+      paidYearTransactions.filter((transaction) => isProfitDistributionTransaction(transaction)),
+    [paidYearTransactions]
+  );
+  const distribuicaoLucrosMes = useMemo(
+    () =>
+      paidDistributionTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
+    [paidDistributionTransactions]
+  );
+  const distribuicaoLucrosAno = useMemo(
+    () =>
+      paidYearDistributionTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
+    [paidYearDistributionTransactions]
+  );
 
   const receita = useMemo(
     () =>
@@ -451,7 +574,11 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   const despesa = useMemo(
     () =>
       paidTransactions
-        .filter((transaction) => transaction.transaction_type === TransactionType.DESPESA)
+        .filter(
+          (transaction) =>
+            transaction.transaction_type === TransactionType.DESPESA &&
+            !isProfitDistributionTransaction(transaction)
+        )
         .reduce((sum, transaction) => sum + transaction.amount, 0),
     [paidTransactions]
   );
@@ -483,6 +610,27 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     () => payableTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
     [payableTransactions]
   );
+  const syncedBankBalances = useMemo(() => {
+    const totalsByBank = new Map<string, number>();
+
+    paidBalanceTransactions.forEach((transaction) => {
+      const bankName = extractBankNameFromNotes(transaction.notes);
+      if (!bankName) return;
+      const signedAmount =
+        transaction.transaction_type === TransactionType.RECEITA
+          ? transaction.amount
+          : -transaction.amount;
+      totalsByBank.set(bankName, (totalsByBank.get(bankName) ?? 0) + signedAmount);
+    });
+
+    return bankAccounts.map((bank) => {
+      const currentBalance = (bank.balance || 0) + (totalsByBank.get(bank.name) ?? 0);
+      return {
+        ...bank,
+        synced_balance: currentBalance,
+      };
+    });
+  }, [bankAccounts, paidBalanceTransactions]);
 
   const panelTransactions = useMemo<DisplayTransaction[]>(() => {
     if (activePendingPanel === 'receber') {
@@ -510,6 +658,14 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       return filteredDisplayTransactions.filter(
         (transaction) =>
           transaction.raw.transaction_type === TransactionType.DESPESA &&
+          !isProfitDistributionTransaction(transaction.raw) &&
+          transaction.status === PaymentStatus.PAGO
+      );
+    }
+    if (activePendingPanel === 'distribuicao') {
+      return filteredDisplayTransactions.filter(
+        (transaction) =>
+          isProfitDistributionTransaction(transaction.raw) &&
           transaction.status === PaymentStatus.PAGO
       );
     }
@@ -634,7 +790,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   }, [refresh]);
 
   useEffect(() => {
-    const referenceMonth = `${monthFilter || getCurrentMonthValue()}-01`;
+    const referenceMonth = `${feesReferenceMonth || getCurrentMonthValue()}-01`;
     let active = true;
 
     (async () => {
@@ -659,7 +815,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     return () => {
       active = false;
     };
-  }, [monthFilter, transactions.length]);
+  }, [feesReferenceMonth, transactions.length]);
 
   const toggleTransactionSelection = (transactionId: string, checked: boolean) => {
     setSelectedTransactionIds((prev) => {
@@ -749,21 +905,46 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
 
     setIsBulkUpdatingTransactions(true);
     try {
-      const response = await financeApi.bulkDeleteTransactions({
-        transaction_ids: selectedTransactionIds,
-      });
+      const selectedTransactions = transactions.filter((transaction) =>
+        selectedTransactionIds.includes(transaction.id)
+      );
+      const manualTransactionIds = selectedTransactions
+        .filter((transaction) => !isAutomaticOfficeFee(transaction))
+        .map((transaction) => transaction.id);
+      const automaticFeeIds = selectedTransactions
+        .filter((transaction) => isAutomaticOfficeFee(transaction))
+        .map((transaction) => transaction.id);
+
+      const responses = await Promise.all([
+        manualTransactionIds.length > 0
+          ? financeApi.bulkDeleteTransactions({
+              transaction_ids: manualTransactionIds,
+            })
+          : Promise.resolve(null),
+        automaticFeeIds.length > 0
+          ? financeApi.bulkDeleteMonthlyFees({
+              office_transaction_ids: automaticFeeIds,
+            })
+          : Promise.resolve(null),
+      ]);
+
+      const manualResponse = responses[0];
+      const automaticResponse = responses[1];
+      const succeeded =
+        (manualResponse?.succeeded ?? 0) + (automaticResponse?.succeeded ?? 0);
+      const failed = (manualResponse?.failed ?? 0) + (automaticResponse?.failed ?? 0);
+
       await refresh();
+      await refreshFeePreview();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
       }
       setSelectedTransactionIds([]);
 
-      if (response.failed > 0) {
-        toast.error(
-          `${response.succeeded} lançamento(s) excluído(s) e ${response.failed} falharam.`
-        );
+      if (failed > 0) {
+        toast.error(`${succeeded} lançamento(s) excluído(s) e ${failed} falharam.`);
       } else {
-        toast.success(`${response.succeeded} lançamento(s) excluído(s) em lote.`);
+        toast.success(`${succeeded} lançamento(s) excluído(s) em lote.`);
       }
     } catch (error) {
       console.error('Erro ao excluir lançamentos em lote', error);
@@ -792,7 +973,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   };
 
   const refreshFeePreview = async () => {
-    const referenceMonth = `${monthFilter || getCurrentMonthValue()}-01`;
+    const referenceMonth = `${feesReferenceMonth || getCurrentMonthValue()}-01`;
     try {
       setIsLoadingFeePreview(true);
       const preview = await financeApi.previewMonthlyFees({ reference_month: referenceMonth });
@@ -808,7 +989,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
 
   const handleGenerateFees = async () => {
     try {
-      const referenceMonth = `${monthFilter || getCurrentMonthValue()}-01`;
+      const referenceMonth = `${feesReferenceMonth || getCurrentMonthValue()}-01`;
       const response = await financeApi.generateMonthlyFees({ reference_month: referenceMonth });
       await refresh();
       await refreshFeePreview();
@@ -896,6 +1077,22 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         ? 'bg-red-50 dark:bg-red-900/20'
         : 'bg-teal-50 dark:bg-teal-900/20',
     },
+    {
+      id: 'distribuicao',
+      title: 'Distribuição de Lucros',
+      value: formatCurrency(distribuicaoLucrosMes),
+      change:
+        distribuicaoLucrosMes > 0
+          ? 'Pagamentos realizados no período'
+          : 'Sem pagamentos no período',
+      trend: 'neutral',
+      icon: DollarSign,
+      colorClass: 'text-sky-600',
+      backgroundClass: 'bg-sky-50 dark:bg-sky-900/20',
+      isPressable: true,
+      onPress: () =>
+        setActivePendingPanel((prev) => (prev === 'distribuicao' ? 'all' : 'distribuicao')),
+    },
   ];
 
   const handleAddTransaction = async () => {
@@ -924,6 +1121,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     const paidDate = new Date(`${newTransaction.date}T12:00:00`).toISOString();
     const referenceMonth = `${newTransaction.date.slice(0, 7)}-01`;
     const isSettled = !newTransaction.isRecurring && newTransaction.isSettled;
+    const isProfitDistribution = newTransaction.type === PROFIT_DISTRIBUTION_LABEL;
 
     try {
       await createTransaction({
@@ -945,6 +1143,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         paid_date: isSettled ? paidDate : null,
         reference_month: referenceMonth,
         description: newTransaction.history,
+        category: isProfitDistribution ? DISTRIBUTION_PROFITS_CATEGORY : null,
         notes,
         is_recurring: newTransaction.isRecurring,
         recurring_day: newTransaction.isRecurring ? newTransaction.recurringDay : null,
@@ -1122,18 +1321,33 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   const settlementLabel = newTransaction.type === 'Entrada' ? 'Já recebido' : 'Já pago';
 
   const handleAddHistory = () => {
-    if (!newHistory.description) return;
+    const normalizedDescription = newHistory.description.trim();
+    if (!normalizedDescription) return;
+    if (
+      standardHistories.some(
+        (history) => history.description.toLowerCase() === normalizedDescription.toLowerCase()
+      )
+    ) {
+      toast.error('Já existe um histórico com esta descrição.');
+      return;
+    }
 
     const history: StandardHistory = {
-      id: String(standardHistories.length + 1),
-      description: newHistory.description,
-      accountingAccount: newHistory.accountingAccount || undefined,
+      id:
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : String(Date.now()),
+      description: normalizedDescription,
       type: newHistory.type,
     };
 
     setStandardHistories((prev) => [...prev, history]);
     setIsHistoryModalOpen(false);
-    setNewHistory({ description: '', accountingAccount: '', type: 'income' });
+    setNewHistory({ description: '', type: 'income' });
+  };
+
+  const handleRemoveHistory = (historyId: string) => {
+    setStandardHistories((prev) => prev.filter((history) => history.id !== historyId));
   };
 
   return (
@@ -1205,7 +1419,55 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
 
       <FinanceiroKPIs kpis={kpis} />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          Acumulado {currentYear}
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900">
+            <CardBody>
+              <p className="text-sm text-green-700 dark:text-green-400 font-medium mb-1">
+                RECEITA DO ANO
+              </p>
+              <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+                {formatCurrency(receitaAno)}
+              </p>
+            </CardBody>
+          </Card>
+          <Card className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900">
+            <CardBody>
+              <p className="text-sm text-amber-700 dark:text-amber-400 font-medium mb-1">
+                DESPESA DO ANO
+              </p>
+              <p className="text-2xl font-bold text-amber-700 dark:text-amber-400">
+                {formatCurrency(despesaAno)}
+              </p>
+            </CardBody>
+          </Card>
+          <Card className="bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-900">
+            <CardBody>
+              <p className="text-sm text-teal-700 dark:text-teal-400 font-medium mb-1">
+                LUCRO DO ANO
+              </p>
+              <p className="text-2xl font-bold text-teal-700 dark:text-teal-400">
+                {formatCurrency(lucroAno)}
+              </p>
+            </CardBody>
+          </Card>
+          <Card className="bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-900">
+            <CardBody>
+              <p className="text-sm text-sky-700 dark:text-sky-400 font-medium mb-1">
+                DISTRIBUIÇÃO NO ANO
+              </p>
+              <p className="text-2xl font-bold text-sky-700 dark:text-sky-400">
+                {formatCurrency(distribuicaoLucrosAno)}
+              </p>
+            </CardBody>
+          </Card>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card
           isPressable
           onPress={() => setActivePendingPanel((prev) => (prev === 'receber' ? 'all' : 'receber'))}
@@ -1248,6 +1510,29 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
             </p>
           </CardBody>
         </Card>
+        <Card
+          isPressable
+          onPress={() =>
+            setActivePendingPanel((prev) => (prev === 'distribuicao' ? 'all' : 'distribuicao'))
+          }
+          className={`border ${
+            activePendingPanel === 'distribuicao'
+              ? 'border-sky-400 bg-sky-50 dark:bg-sky-900/20'
+              : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/20'
+          }`}
+        >
+          <CardBody>
+            <p className="text-sm text-slate-700 dark:text-slate-400 font-medium mb-1">
+              DISTRIBUIÇÃO DE LUCROS
+            </p>
+            <p className="text-2xl font-bold text-sky-700 dark:text-sky-400">
+              {formatCurrency(distribuicaoLucrosMes)}
+            </p>
+            <p className="text-xs text-slate-500 mt-2">
+              {paidDistributionTransactions.length} pagamento(s) no período
+            </p>
+          </CardBody>
+        </Card>
       </div>
 
       {activePendingPanel !== 'all' && (
@@ -1260,7 +1545,9 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                   ? 'Lançamentos de Contas a Pagar'
                   : activePendingPanel === 'receita'
                     ? 'Lançamentos que compõem a Receita do Período'
-                    : 'Lançamentos que compõem as Despesas do Período'}
+                    : activePendingPanel === 'despesa'
+                      ? 'Lançamentos que compõem as Despesas do Período'
+                      : 'Pagamentos de Distribuição de Lucros'}
             </h3>
             <Button
               variant="light"
@@ -1349,7 +1636,15 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
               lançamento(s)
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <MonthYearPicker
+              label="Competência"
+              value={feesReferenceMonth}
+              onChange={(value) => setFeesReferenceMonth(value || getCurrentMonthValue())}
+              size="sm"
+              className="w-full sm:w-[180px]"
+              aria-label="Competência dos honorários"
+            />
             <Button
               variant="bordered"
               onPress={() =>
@@ -1371,7 +1666,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
             <div className="rounded-lg border border-default-200/60 bg-default-50/60 px-3 py-2">
               <p className="text-xs uppercase tracking-wide text-default-500">Competência</p>
               <p className="text-lg font-semibold text-default-800">
-                {formatMonthYear(`${monthFilter || getCurrentMonthValue()}-01`)}
+                {formatMonthYear(`${feesReferenceMonth || getCurrentMonthValue()}-01`)}
               </p>
             </div>
             <div className="rounded-lg border border-default-200/60 bg-default-50/60 px-3 py-2">
@@ -1396,7 +1691,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
           <div className="rounded-lg border border-default-200/60 bg-default-50/60 px-3 py-3 text-sm text-default-600">
             <p>
               Competência automática:{' '}
-              <strong>{formatMonthYear(`${monthFilter || getCurrentMonthValue()}-01`)}</strong>
+              <strong>{formatMonthYear(`${feesReferenceMonth || getCurrentMonthValue()}-01`)}</strong>
             </p>
             {isLoadingFeePreview ? (
               <p>Carregando prévia corrigida dos honorários...</p>
@@ -1582,11 +1877,11 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         <CardBody>
           {isLoadingBanks ? (
             <p className="text-sm text-default-500">Carregando bancos...</p>
-          ) : bankAccounts.length === 0 ? (
+          ) : syncedBankBalances.length === 0 ? (
             <p className="text-sm text-default-500">Nenhum banco cadastrado.</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {bankAccounts.map((bank) => (
+              {syncedBankBalances.map((bank) => (
                 <Card key={bank.id} className="bg-slate-50 dark:bg-slate-900/20">
                   <CardBody className="space-y-2">
                     <div className="flex items-start justify-between gap-2">
@@ -1618,9 +1913,14 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                         </Button>
                       </div>
                     </div>
-                    <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-                      {formatCurrency(bank.balance || 0)}
-                    </p>
+                    <div className="space-y-1">
+                      <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                        {formatCurrency(bank.synced_balance || 0)}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-500">
+                        Saldo inicial: {formatCurrency(bank.balance || 0)}
+                      </p>
+                    </div>
                     {bank.accounting_account && (
                       <p className="text-xs text-slate-500 dark:text-slate-500">
                         Conta contábil: {bank.accounting_account}
@@ -1673,6 +1973,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
             >
               <SelectItem key="Entrada">Entrada</SelectItem>
               <SelectItem key="Saída">Saída</SelectItem>
+              <SelectItem key={PROFIT_DISTRIBUTION_LABEL}>Distribuição de lucros</SelectItem>
             </Select>
             <Select
               label="Banco"
@@ -1702,13 +2003,12 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                 .filter((history) =>
                   newTransaction.type === 'Entrada'
                     ? history.type === 'income'
-                    : history.type === 'expense'
+                    : newTransaction.type === PROFIT_DISTRIBUTION_LABEL
+                      ? history.type === 'profit_distribution'
+                      : history.type === 'expense'
                 )
                 .map((history) => (
-                  <SelectItem key={history.description}>
-                    {history.description}
-                    {history.accountingAccount ? ` (${history.accountingAccount})` : ''}
-                  </SelectItem>
+                  <SelectItem key={history.description}>{history.description}</SelectItem>
                 ))}
             </Select>
             <Input
@@ -2073,15 +2373,48 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                 >
                   <SelectItem key="income">Receita</SelectItem>
                   <SelectItem key="expense">Despesa</SelectItem>
+                  <SelectItem key="profit_distribution">Distribuição de lucros</SelectItem>
                 </Select>
-                <Input
-                  label="Conta Contábil"
-                  placeholder="Ex: 3.1.1.01"
-                  value={newHistory.accountingAccount}
-                  onValueChange={(value) =>
-                    setNewHistory((prev) => ({ ...prev, accountingAccount: value }))
-                  }
-                />
+                <div className="space-y-2 rounded-lg border border-default-200/60 bg-default-50/60 p-3">
+                  <p className="text-sm font-medium text-default-700">
+                    Históricos cadastrados
+                  </p>
+                  {standardHistories.length === 0 ? (
+                    <p className="text-sm text-default-500">Nenhum histórico cadastrado.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {standardHistories.map((history) => (
+                        <div
+                          key={history.id}
+                          className="flex items-center justify-between gap-3 rounded-md border border-default-200 bg-white px-3 py-2 dark:bg-default-100/5"
+                        >
+                          <div>
+                            <p className="text-sm font-medium text-default-700">
+                              {history.description}
+                            </p>
+                            <p className="text-xs text-default-500">
+                              {history.type === 'income'
+                                ? 'Receita'
+                                : history.type === 'expense'
+                                  ? 'Despesa'
+                                  : 'Distribuição de lucros'}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="light"
+                            color="danger"
+                            isIconOnly
+                            aria-label={`Excluir histórico ${history.description}`}
+                            onPress={() => handleRemoveHistory(history.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </ModalBody>
               <ModalFooter>
                 <Button variant="light" onPress={onClose}>

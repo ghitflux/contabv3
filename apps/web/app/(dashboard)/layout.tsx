@@ -83,8 +83,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           }`}
         >
           {!isCollapsed || isMobileSidebarOpen ? (
-            <h2 className="text-xl font-bold">CIC Gestão</h2>
-          ) : null}
+            <div className="flex items-center gap-2">
+              <img src="/logo.png" alt="CIC Gestão" width={36} height={36} />
+              <h2 className="text-xl font-bold">CIC Gestão</h2>
+            </div>
+          ) : (
+            <img src="/logo.png" alt="CIC Gestão" width={36} height={36} />
+          )}
           <Button
             isIconOnly
             size="sm"

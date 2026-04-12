@@ -323,6 +323,13 @@ class TransactionBulkOperationResponse(BaseModel):
     items: list[TransactionBulkOperationItem]
 
 
+class TransactionTrashPurgeResponse(BaseModel):
+    """Summary for permanent trash cleanup."""
+
+    success: bool
+    deleted: int
+
+
 class MonthlyFeeBulkDeleteRequest(BaseModel):
     """Bulk delete honorários payload."""
 

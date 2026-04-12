@@ -26,6 +26,8 @@ export enum PaymentStatus {
   PARCIAL = 'parcial',
 }
 
+export const DISTRIBUTION_PROFITS_CATEGORY = 'distribuicao_lucros';
+
 export const DUE_PAYMENT_STATUSES: PaymentStatus[] = [
   PaymentStatus.PENDENTE,
   PaymentStatus.ATRASADO,
@@ -34,6 +36,16 @@ export const DUE_PAYMENT_STATUSES: PaymentStatus[] = [
 
 export function isDuePaymentStatus(status: PaymentStatus): boolean {
   return DUE_PAYMENT_STATUSES.includes(status);
+}
+
+export function isProfitDistributionTransaction(transaction: Pick<Transaction, 'category'>): boolean {
+  return (transaction.category ?? '').trim().toLowerCase() === DISTRIBUTION_PROFITS_CATEGORY;
+}
+
+export function extractBankNameFromNotes(notes?: string | null): string | null {
+  if (!notes) return null;
+  const match = notes.match(/(?:^|\|\s*)Banco:\s*([^|]+)/i);
+  return match?.[1]?.trim() || null;
 }
 
 // Main transaction interface
@@ -194,6 +206,11 @@ export interface TransactionBulkOperationResponse {
   succeeded: number;
   failed: number;
   items: TransactionBulkOperationItem[];
+}
+
+export interface TransactionTrashPurgeResponse {
+  success: boolean;
+  deleted: number;
 }
 
 export interface MonthlyFeeBulkDeleteRequest {

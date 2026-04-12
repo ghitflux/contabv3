@@ -36,6 +36,7 @@ import {
   TransactionType,
   type Transaction,
   type TransactionUpdate,
+  extractBankNameFromNotes,
   isAutomaticClientMonthlyFeeTransaction,
   isDuePaymentStatus,
   getPaymentMethodLabel,
@@ -377,6 +378,63 @@ export function FinanceiroPorEmpresa({
       autoFetch: Boolean(selectedClient),
       fetchAllPages: true,
     });
+  const { transactions: paidBalanceTransactions } = useTransactions({
+    filters: {
+      client_id: selectedClient || undefined,
+      status: PaymentStatus.PAGO,
+      page: 1,
+      size: 100,
+    },
+    autoFetch: Boolean(selectedClient),
+    fetchAllPages: true,
+  });
+
+  const currentYear = useMemo(() => new Date().getFullYear(), []);
+  const yearTransactionFilters = useMemo(
+    () => ({
+      client_id: selectedClient || undefined,
+      due_date_from: `${currentYear}-01-01`,
+      due_date_to: `${currentYear}-12-31`,
+      page: 1,
+      size: 100,
+    }),
+    [selectedClient, currentYear]
+  );
+  const { transactions: yearTransactions } = useTransactions({
+    filters: yearTransactionFilters,
+    autoFetch: Boolean(selectedClient),
+    fetchAllPages: true,
+  });
+  const paidYearTransactions = useMemo(
+    () => yearTransactions.filter((t) => t.payment_status === PaymentStatus.PAGO),
+    [yearTransactions]
+  );
+  const receitaAno = useMemo(
+    () =>
+      paidYearTransactions
+        .filter((t) => t.transaction_type === TransactionType.RECEITA)
+        .reduce((sum, t) => sum + t.amount, 0),
+    [paidYearTransactions]
+  );
+  const despesaAno = useMemo(
+    () =>
+      paidYearTransactions
+        .filter((t) => t.transaction_type === TransactionType.DESPESA)
+        .reduce((sum, t) => sum + t.amount, 0),
+    [paidYearTransactions]
+  );
+  const lucroAno = receitaAno - despesaAno;
+  const aReceberAno = useMemo(
+    () =>
+      yearTransactions
+        .filter(
+          (t) =>
+            t.transaction_type === TransactionType.RECEITA &&
+            isDuePaymentStatus(t.payment_status)
+        )
+        .reduce((sum, t) => sum + t.amount, 0),
+    [yearTransactions]
+  );
 
   const handleSaveTransaction = async (data: NovoLancamentoData) => {
     if (!selectedClient) {
@@ -545,6 +603,24 @@ export function FinanceiroPorEmpresa({
     () => payableTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
     [payableTransactions]
   );
+  const syncedBankBalances = useMemo(() => {
+    const totalsByBank = new Map<string, number>();
+
+    paidBalanceTransactions.forEach((transaction) => {
+      const bankName = extractBankNameFromNotes(transaction.notes);
+      if (!bankName) return;
+      const signedAmount =
+        transaction.transaction_type === TransactionType.RECEITA
+          ? transaction.amount
+          : -transaction.amount;
+      totalsByBank.set(bankName, (totalsByBank.get(bankName) ?? 0) + signedAmount);
+    });
+
+    return bankAccounts.map((bank) => ({
+      ...bank,
+      synced_balance: (bank.balance || 0) + (totalsByBank.get(bank.name) ?? 0),
+    }));
+  }, [bankAccounts, paidBalanceTransactions]);
   const panelTransactions = useMemo(() => {
     if (activePendingPanel === 'receber') return receivableTransactions;
     if (activePendingPanel === 'pagar') return payableTransactions;
@@ -663,15 +739,13 @@ export function FinanceiroPorEmpresa({
       notes: editForm.notes.trim() || null,
       invoice_number: editForm.invoice_number.trim() || null,
     };
-    const payload: TransactionUpdate = isAdminOrFunc
-      ? {
-          ...basePayload,
-          payment_status: editForm.payment_status,
-          payment_method: editForm.payment_method ? editForm.payment_method : null,
-          paid_date:
-            editForm.payment_status === PaymentStatus.PAGO ? editForm.paid_date || null : null,
-        }
-      : basePayload;
+    const payload: TransactionUpdate = {
+      ...basePayload,
+      payment_status: editForm.payment_status,
+      payment_method: editForm.payment_method ? editForm.payment_method : null,
+      paid_date:
+        editForm.payment_status === PaymentStatus.PAGO ? editForm.paid_date || null : null,
+    };
 
     try {
       await updateTransaction(editingTransaction.id, payload);
@@ -839,17 +913,15 @@ export function FinanceiroPorEmpresa({
               </Autocomplete>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-              {isAdminOrFunc && (
-                <Button
-                  color="primary"
-                  variant="solid"
-                  startContent={<Plus className="h-4 w-4" />}
-                  onPress={onOpen}
-                  isDisabled={!selectedClient || isLoadingClients}
-                >
-                  Novo Lançamento
-                </Button>
-              )}
+              <Button
+                color="primary"
+                variant="solid"
+                startContent={<Plus className="h-4 w-4" />}
+                onPress={onOpen}
+                isDisabled={!selectedClient || isLoadingClients}
+              >
+                Novo Lançamento
+              </Button>
               <Button
                 color="primary"
                 variant="flat"
@@ -1007,6 +1079,54 @@ export function FinanceiroPorEmpresa({
         </Card>
       </div>
 
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          Acumulado {currentYear}
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900">
+            <CardBody>
+              <p className="text-sm text-green-700 dark:text-green-400 font-medium mb-1">
+                RECEITA DO ANO
+              </p>
+              <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+                {formatCurrency(receitaAno)}
+              </p>
+            </CardBody>
+          </Card>
+          <Card className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900">
+            <CardBody>
+              <p className="text-sm text-amber-700 dark:text-amber-400 font-medium mb-1">
+                DESPESA DO ANO
+              </p>
+              <p className="text-2xl font-bold text-amber-700 dark:text-amber-400">
+                {formatCurrency(despesaAno)}
+              </p>
+            </CardBody>
+          </Card>
+          <Card className="bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-900">
+            <CardBody>
+              <p className="text-sm text-teal-700 dark:text-teal-400 font-medium mb-1">
+                LUCRO DO ANO
+              </p>
+              <p className="text-2xl font-bold text-teal-700 dark:text-teal-400">
+                {formatCurrency(lucroAno)}
+              </p>
+            </CardBody>
+          </Card>
+          <Card className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800">
+            <CardBody>
+              <p className="text-sm text-slate-700 dark:text-slate-400 font-medium mb-1">
+                A RECEBER NO ANO
+              </p>
+              <p className="text-2xl font-bold text-slate-700 dark:text-slate-400">
+                {formatCurrency(aReceberAno)}
+              </p>
+            </CardBody>
+          </Card>
+        </div>
+      </div>
+
       {activePendingPanel !== 'all' && (
         <Card className="border border-default-200/50 dark:border-default-100/20">
           <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1099,11 +1219,11 @@ export function FinanceiroPorEmpresa({
         <CardBody>
           {isLoadingBanks ? (
             <p className="text-sm text-default-500">Carregando bancos...</p>
-          ) : bankAccounts.length === 0 ? (
+          ) : syncedBankBalances.length === 0 ? (
             <p className="text-sm text-default-500">Nenhum banco cadastrado.</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {bankAccounts.map((bank) => (
+              {syncedBankBalances.map((bank) => (
                 <Card key={bank.id} className="bg-slate-50 dark:bg-slate-900/20">
                   <CardBody className="space-y-2">
                     <div className="flex items-start justify-between gap-2">
@@ -1135,9 +1255,14 @@ export function FinanceiroPorEmpresa({
                         </Button>
                       </div>
                     </div>
-                    <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-                      {formatCurrency(bank.balance || 0)}
-                    </p>
+                    <div className="space-y-1">
+                      <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                        {formatCurrency(bank.synced_balance || 0)}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-500">
+                        Saldo inicial: {formatCurrency(bank.balance || 0)}
+                      </p>
+                    </div>
                     {bank.accounting_account && (
                       <p className="text-xs text-slate-500 dark:text-slate-500">
                         Conta contábil: {bank.accounting_account}
@@ -1413,42 +1538,38 @@ export function FinanceiroPorEmpresa({
                     aria-label="Data de vencimento"
                   />
                 </div>
-                {isAdminOrFunc && (
-                  <Select
-                    label="Status do Pagamento"
-                    selectedKeys={[editForm.payment_status]}
-                    onSelectionChange={(keys) => {
-                      const value = Array.from(keys)[0] as PaymentStatus | undefined;
-                      if (!value) return;
-                      setEditForm((prev) => ({ ...prev, payment_status: value }));
-                    }}
-                  >
-                    <SelectItem key={PaymentStatus.PENDENTE}>Pendente</SelectItem>
-                    <SelectItem key={PaymentStatus.PAGO}>Pago</SelectItem>
-                    <SelectItem key={PaymentStatus.PARCIAL}>Parcial</SelectItem>
-                    <SelectItem key={PaymentStatus.ATRASADO}>Atrasado</SelectItem>
-                    <SelectItem key={PaymentStatus.CANCELADO}>Cancelado</SelectItem>
-                  </Select>
-                )}
-                {isAdminOrFunc && (
-                  <Select
-                    label="Metodo de Pagamento"
-                    selectedKeys={editForm.payment_method ? [editForm.payment_method] : []}
-                    onSelectionChange={(keys) => {
-                      const value = Array.from(keys)[0] as PaymentMethod | undefined;
-                      setEditForm((prev) => ({ ...prev, payment_method: value ?? '' }));
-                    }}
-                  >
-                    <SelectItem key={PaymentMethod.PIX}>PIX</SelectItem>
-                    <SelectItem key={PaymentMethod.BOLETO}>Boleto</SelectItem>
-                    <SelectItem key={PaymentMethod.TRANSFERENCIA}>Transferencia</SelectItem>
-                    <SelectItem key={PaymentMethod.DINHEIRO}>Dinheiro</SelectItem>
-                    <SelectItem key={PaymentMethod.CARTAO_CREDITO}>Cartao de Credito</SelectItem>
-                    <SelectItem key={PaymentMethod.CARTAO_DEBITO}>Cartao de Debito</SelectItem>
-                    <SelectItem key={PaymentMethod.CHEQUE}>Cheque</SelectItem>
-                  </Select>
-                )}
-                {isAdminOrFunc && editForm.payment_status === PaymentStatus.PAGO && (
+                <Select
+                  label="Status do Pagamento"
+                  selectedKeys={[editForm.payment_status]}
+                  onSelectionChange={(keys) => {
+                    const value = Array.from(keys)[0] as PaymentStatus | undefined;
+                    if (!value) return;
+                    setEditForm((prev) => ({ ...prev, payment_status: value }));
+                  }}
+                >
+                  <SelectItem key={PaymentStatus.PENDENTE}>Pendente</SelectItem>
+                  <SelectItem key={PaymentStatus.PAGO}>Pago</SelectItem>
+                  <SelectItem key={PaymentStatus.PARCIAL}>Parcial</SelectItem>
+                  <SelectItem key={PaymentStatus.ATRASADO}>Atrasado</SelectItem>
+                  <SelectItem key={PaymentStatus.CANCELADO}>Cancelado</SelectItem>
+                </Select>
+                <Select
+                  label="Metodo de Pagamento"
+                  selectedKeys={editForm.payment_method ? [editForm.payment_method] : []}
+                  onSelectionChange={(keys) => {
+                    const value = Array.from(keys)[0] as PaymentMethod | undefined;
+                    setEditForm((prev) => ({ ...prev, payment_method: value ?? '' }));
+                  }}
+                >
+                  <SelectItem key={PaymentMethod.PIX}>PIX</SelectItem>
+                  <SelectItem key={PaymentMethod.BOLETO}>Boleto</SelectItem>
+                  <SelectItem key={PaymentMethod.TRANSFERENCIA}>Transferencia</SelectItem>
+                  <SelectItem key={PaymentMethod.DINHEIRO}>Dinheiro</SelectItem>
+                  <SelectItem key={PaymentMethod.CARTAO_CREDITO}>Cartao de Credito</SelectItem>
+                  <SelectItem key={PaymentMethod.CARTAO_DEBITO}>Cartao de Debito</SelectItem>
+                  <SelectItem key={PaymentMethod.CHEQUE}>Cheque</SelectItem>
+                </Select>
+                {editForm.payment_status === PaymentStatus.PAGO && (
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-600 dark:text-slate-400">
                       Data de Pagamento

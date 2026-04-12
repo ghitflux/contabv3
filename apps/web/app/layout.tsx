@@ -10,12 +10,16 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'SaaS Contábil',
+  title: 'CIC Gestão',
   description: 'Sistema de gestão para escritórios de contabilidade',
   viewport: {
     width: 'device-width',
     initialScale: 1,
     maximumScale: 1,
+  },
+  icons: {
+    icon: '/favicon.png',
+    apple: '/favicon.png',
   },
 };
 
