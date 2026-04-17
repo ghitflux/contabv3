@@ -120,12 +120,13 @@ export function FinanceiroLancamentos() {
 
   const transactionFilters = useMemo(
     () => ({
-      due_date_from: startDate,
-      due_date_to: endDate,
+      ...(monthFilter
+        ? { reference_month: monthFilter }
+        : { due_date_from: startDate, due_date_to: endDate }),
       page: 1,
       size: 100,
     }),
-    [startDate, endDate]
+    [monthFilter, startDate, endDate]
   );
 
   const setRangeForMonth = (monthValue: string) => {
@@ -300,8 +301,7 @@ export function FinanceiroLancamentos() {
     [payableLancamentos]
   );
   const totalDistribuicaoLucros = useMemo(
-    () =>
-      paidProfitDistributionLancamentos.reduce((sum, lancamento) => sum + lancamento.valor, 0),
+    () => paidProfitDistributionLancamentos.reduce((sum, lancamento) => sum + lancamento.valor, 0),
     [paidProfitDistributionLancamentos]
   );
 
@@ -739,7 +739,11 @@ export function FinanceiroLancamentos() {
 
         <div className="rounded-lg border border-default-200/60 dark:border-default-100/20">
           <div className="w-full overflow-x-auto">
-            <Table aria-label="Tabela de lançamentos financeiros" removeWrapper className="min-w-[1100px]">
+            <Table
+              aria-label="Tabela de lançamentos financeiros"
+              removeWrapper
+              className="min-w-[1100px]"
+            >
               <TableHeader>
                 <TableColumn>Data</TableColumn>
                 <TableColumn>Descrição</TableColumn>
@@ -789,7 +793,9 @@ export function FinanceiroLancamentos() {
                       <TableCell>
                         <div className="flex items-center gap-1">
                           {isProfitDistributionTransaction(lancamento.raw) ? (
-                            <span className="text-sm text-sky-600">{PROFIT_DISTRIBUTION_LABEL}</span>
+                            <span className="text-sm text-sky-600">
+                              {PROFIT_DISTRIBUTION_LABEL}
+                            </span>
                           ) : lancamento.tipo === TransactionType.RECEITA ? (
                             <>
                               <ArrowUpRight className="h-4 w-4 text-green-600" />
@@ -991,7 +997,8 @@ export function FinanceiroLancamentos() {
                     label="Tipo de Categoria"
                     selectedKeys={[editForm.category_mode]}
                     onSelectionChange={(keys) => {
-                      const mode = (Array.from(keys)[0] as 'plano' | 'custom' | undefined) ?? 'plano';
+                      const mode =
+                        (Array.from(keys)[0] as 'plano' | 'custom' | undefined) ?? 'plano';
                       setEditForm((prev) => ({
                         ...prev,
                         category_mode: mode,
@@ -1058,10 +1065,14 @@ export function FinanceiroLancamentos() {
         <TransactionTrashModal
           isOpen={isTrashModalOpen}
           onOpenChange={setIsTrashModalOpen}
-          filters={{
-            due_date_from: startDate,
-            due_date_to: endDate,
-          }}
+          filters={
+            monthFilter
+              ? { reference_month: monthFilter }
+              : {
+                  due_date_from: startDate,
+                  due_date_to: endDate,
+                }
+          }
           title="Lixeira de Lançamentos"
           onRestored={async () => {
             await refresh();

@@ -2,7 +2,7 @@
  * Clients API endpoints
  */
 
-import { apiClient } from "../client";
+import { apiClient } from '../client';
 import type {
   Client,
   ClientCreate,
@@ -11,7 +11,9 @@ import type {
   ClientFilters,
   ClientCreateResult,
   ClientStatsSummaryResponse,
-} from "@/types/client";
+} from '@/types/client';
+
+const onlyDigits = (value?: string) => value?.replace(/\D/g, '') ?? '';
 
 export const clientsApi = {
   /**
@@ -19,22 +21,25 @@ export const clientsApi = {
    */
   async list(filters?: ClientFilters): Promise<ClientListResponse> {
     const params = new URLSearchParams();
+    const queryDigits = onlyDigits(filters?.query);
+    const cnpjDigits = onlyDigits(filters?.cnpj);
 
-    if (filters?.query) params.append("query", filters.query);
-    if (filters?.cnpj) params.append("cnpj", filters.cnpj);
-    if (filters?.status && filters.status !== "" as any) params.append("status", filters.status);
-    if (filters?.regime_tributario && filters.regime_tributario !== "" as any) {
-      params.append("regime_tributario", filters.regime_tributario);
+    if (filters?.query) params.append('query', filters.query);
+    if (filters?.cnpj) params.append('cnpj', cnpjDigits || filters.cnpj);
+    if (!filters?.cnpj && queryDigits.length >= 8) params.append('cnpj', queryDigits);
+    if (filters?.status && filters.status !== ('' as any)) params.append('status', filters.status);
+    if (filters?.regime_tributario && filters.regime_tributario !== ('' as any)) {
+      params.append('regime_tributario', filters.regime_tributario);
     }
-    if (filters?.tipo_empresa && filters.tipo_empresa !== "" as any) {
-      params.append("tipo_empresa", filters.tipo_empresa);
+    if (filters?.tipo_empresa && filters.tipo_empresa !== ('' as any)) {
+      params.append('tipo_empresa', filters.tipo_empresa);
     }
-    if (filters?.starts_with) params.append("starts_with", filters.starts_with);
-    if (typeof filters?.page === "number") params.append("page", filters.page.toString());
-    if (typeof filters?.size === "number") params.append("size", filters.size.toString());
+    if (filters?.starts_with) params.append('starts_with', filters.starts_with);
+    if (typeof filters?.page === 'number') params.append('page', filters.page.toString());
+    if (typeof filters?.size === 'number') params.append('size', filters.size.toString());
 
     const queryString = params.toString();
-    const endpoint = queryString ? `/clients?${queryString}` : "/clients";
+    const endpoint = queryString ? `/clients?${queryString}` : '/clients';
 
     return apiClient.get<ClientListResponse>(endpoint);
   },
@@ -43,7 +48,7 @@ export const clientsApi = {
    * Client KPIs/stats summary
    */
   async statsSummary(): Promise<ClientStatsSummaryResponse> {
-    return apiClient.get<ClientStatsSummaryResponse>("/clients/stats/summary");
+    return apiClient.get<ClientStatsSummaryResponse>('/clients/stats/summary');
   },
 
   /**
@@ -57,7 +62,7 @@ export const clientsApi = {
    * Create a new client
    */
   async create(data: ClientCreate): Promise<ClientCreateResult> {
-    return apiClient.post<ClientCreateResult>("/clients", data);
+    return apiClient.post<ClientCreateResult>('/clients', data);
   },
 
   /**
@@ -78,6 +83,6 @@ export const clientsApi = {
    * Get current authenticated client data
    */
   async getMe(): Promise<Client> {
-    return apiClient.get<Client>("/clients/me");
+    return apiClient.get<Client>('/clients/me');
   },
 };

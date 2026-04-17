@@ -1,17 +1,57 @@
 'use client';
 
-import { motion } from "framer-motion";
-import { Button, Card, CardBody, CardHeader, Chip, Divider, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, Pagination, Spinner, Table, TableBody, TableCell, TableColumn, TableHeader, TableRow, useDisclosure } from '@/heroui';
-import { pageTransition } from "@/lib/animations";
+import { motion } from 'framer-motion';
+import {
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  Chip,
+  Divider,
+  Dropdown,
+  DropdownTrigger,
+  DropdownMenu,
+  DropdownItem,
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  Pagination,
+  Spinner,
+  Table,
+  TableBody,
+  TableCell,
+  TableColumn,
+  TableHeader,
+  TableRow,
+  useDisclosure,
+} from '@/heroui';
+import { pageTransition } from '@/lib/animations';
 import { useClients } from '@/hooks/useClients';
 import { clientsApi } from '@/lib/api/endpoints/clients';
 import { obligationsApi, type ObligationResponse } from '@/lib/api/endpoints/obligations';
-import type { ClientListItem, ClientCreate, ClientUserCredentials, ClientStats, RegimeTributario } from '@/types/client';
+import type {
+  ClientListItem,
+  ClientCreate,
+  ClientUserCredentials,
+  ClientStats,
+  RegimeTributario,
+} from '@/types/client';
 import { ClientStatus, getDigitsOnly, getRegimeLabel, getStatusLabel } from '@/types/client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { SearchInput } from '@/components/ui/SearchInput';
-import { PlusIcon, EyeIcon, EditIcon, MoreVerticalIcon, CheckCircleIcon, XCircleIcon, ClockIcon, TrashIcon } from '@/lib/icons';
+import {
+  PlusIcon,
+  EyeIcon,
+  EditIcon,
+  MoreVerticalIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ClockIcon,
+  TrashIcon,
+} from '@/lib/icons';
 import { ClientFormModal } from '@/components/features/clientes/ClientFormModal';
 import { ClientDetailsModal } from '@/components/features/clientes/ClientDetailsModal';
 import { ClientCreatedSuccessModal } from '@/components/features/clientes/ClientCreatedSuccessModal';
@@ -31,7 +71,17 @@ type ObligationAlertGroup = {
 };
 
 export default function ClientesPage() {
-  const { clients, selectedClient, isLoading, fetchClients, fetchClientById, createClient, updateClient, deleteClient, setSelectedClient } = useClients();
+  const {
+    clients,
+    selectedClient,
+    isLoading,
+    fetchClients,
+    fetchClientById,
+    createClient,
+    updateClient,
+    deleteClient,
+    setSelectedClient,
+  } = useClients();
   const router = useRouter();
   const [editingClient, setEditingClient] = useState<ClientListItem | null>(null);
   const [deletingClient, setDeletingClient] = useState<ClientListItem | null>(null);
@@ -55,8 +105,16 @@ export default function ClientesPage() {
   const { isOpen: isDetailsOpen, onOpen: onDetailsOpen, onClose: onDetailsClose } = useDisclosure();
   const { isOpen: isCreatedOpen, onOpen: onCreatedOpen, onClose: onCreatedClose } = useDisclosure();
   const { isOpen: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
-  const { isOpen: isDueTodayOpen, onOpen: onDueTodayOpen, onClose: onDueTodayClose } = useDisclosure();
-  const { isOpen: isDueInFiveOpen, onOpen: onDueInFiveOpen, onClose: onDueInFiveClose } = useDisclosure();
+  const {
+    isOpen: isDueTodayOpen,
+    onOpen: onDueTodayOpen,
+    onClose: onDueTodayClose,
+  } = useDisclosure();
+  const {
+    isOpen: isDueInFiveOpen,
+    onOpen: onDueInFiveOpen,
+    onClose: onDueInFiveClose,
+  } = useDisclosure();
   const [createdCredentials, setCreatedCredentials] = useState<ClientUserCredentials | null>(null);
 
   const pageSize = 10;
@@ -190,9 +248,10 @@ export default function ClientesPage() {
 
   // Fetch clients on mount and when filters change
   useEffect(() => {
+    const searchDigits = getDigitsOnly(searchQuery);
     fetchClients({
       query: searchQuery || undefined,
-      cnpj: cnpjFilter || undefined,
+      cnpj: cnpjFilter || (searchDigits.length >= 8 ? searchDigits : undefined),
       status: (statusFilter as ClientStatus) || undefined,
       regime_tributario: regimeFilter || undefined,
       starts_with: letterFilter || undefined,
@@ -207,7 +266,16 @@ export default function ClientesPage() {
       }
       toast.error('Não foi possível carregar a lista de clientes.');
     });
-  }, [searchQuery, cnpjFilter, statusFilter, regimeFilter, letterFilter, page, fetchClients, router]);
+  }, [
+    searchQuery,
+    cnpjFilter,
+    statusFilter,
+    regimeFilter,
+    letterFilter,
+    page,
+    fetchClients,
+    router,
+  ]);
 
   const handleViewDetails = async (client: ClientListItem) => {
     await fetchClientById(client.id);
@@ -232,7 +300,9 @@ export default function ClientesPage() {
       console.log('🔄 Atualizando lista de clientes...');
       await fetchClients({
         query: searchQuery || undefined,
-        cnpj: cnpjFilter || undefined,
+        cnpj:
+          cnpjFilter ||
+          (getDigitsOnly(searchQuery).length >= 8 ? getDigitsOnly(searchQuery) : undefined),
         status: (statusFilter as ClientStatus) || undefined,
         regime_tributario: regimeFilter || undefined,
         starts_with: letterFilter || undefined,
@@ -289,7 +359,9 @@ export default function ClientesPage() {
 
       await fetchClients({
         query: searchQuery || undefined,
-        cnpj: cnpjFilter || undefined,
+        cnpj:
+          cnpjFilter ||
+          (getDigitsOnly(searchQuery).length >= 8 ? getDigitsOnly(searchQuery) : undefined),
         status: (statusFilter as ClientStatus) || undefined,
         regime_tributario: regimeFilter || undefined,
         starts_with: letterFilter || undefined,
@@ -322,7 +394,9 @@ export default function ClientesPage() {
       // Refresh list
       fetchClients({
         query: searchQuery || undefined,
-        cnpj: cnpjFilter || undefined,
+        cnpj:
+          cnpjFilter ||
+          (getDigitsOnly(searchQuery).length >= 8 ? getDigitsOnly(searchQuery) : undefined),
         status: (statusFilter as ClientStatus) || undefined,
         regime_tributario: regimeFilter || undefined,
         starts_with: letterFilter || undefined,
@@ -346,7 +420,9 @@ export default function ClientesPage() {
       // Refresh list
       fetchClients({
         query: searchQuery || undefined,
-        cnpj: cnpjFilter || undefined,
+        cnpj:
+          cnpjFilter ||
+          (getDigitsOnly(searchQuery).length >= 8 ? getDigitsOnly(searchQuery) : undefined),
         status: (statusFilter as ClientStatus) || undefined,
         regime_tributario: regimeFilter || undefined,
         starts_with: letterFilter || undefined,
@@ -366,11 +442,11 @@ export default function ClientesPage() {
     onFormClose();
   };
 
-  const statusColors: Record<ClientStatus, "success" | "warning" | "default" | "danger"> = {
-    ativo: "success",
-    pendente: "warning",
-    inativo: "default",
-    inadimplente: "danger",
+  const statusColors: Record<ClientStatus, 'success' | 'warning' | 'default' | 'danger'> = {
+    ativo: 'success',
+    pendente: 'warning',
+    inativo: 'default',
+    inadimplente: 'danger',
   };
 
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -387,7 +463,10 @@ export default function ClientesPage() {
         pages: clients.pages,
         items: clients.items.length,
       });
-      console.log('📋 Lista de clientes:', clients.items.map(c => ({ id: c.id, razao: c.razao_social })));
+      console.log(
+        '📋 Lista de clientes:',
+        clients.items.map((c) => ({ id: c.id, razao: c.razao_social }))
+      );
     }
   }, [clients]);
 
@@ -425,7 +504,8 @@ export default function ClientesPage() {
             <div>
               <h2 className="text-lg font-semibold">Lista de Clientes</h2>
               <p className="text-sm text-default-500">
-                {clients?.total || 0} cliente{clients?.total !== 1 ? 's' : ''} cadastrado{clients?.total !== 1 ? 's' : ''}
+                {clients?.total || 0} cliente{clients?.total !== 1 ? 's' : ''} cadastrado
+                {clients?.total !== 1 ? 's' : ''}
               </p>
             </div>
           </div>
@@ -535,10 +615,10 @@ export default function ClientesPage() {
                   removeWrapper
                   className="text-[11px] sm:text-xs"
                   classNames={{
-                    th: "px-2 py-2 sm:px-3 sm:py-2.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-default-500 whitespace-nowrap",
-                    td: "px-2 py-2 sm:px-3 sm:py-2.5 text-[11px] sm:text-xs whitespace-nowrap",
-                    table: "min-w-[1240px]",
-                    tr: "cursor-pointer hover:bg-default-100 transition-colors",
+                    th: 'px-2 py-2 sm:px-3 sm:py-2.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-default-500 whitespace-nowrap',
+                    td: 'px-2 py-2 sm:px-3 sm:py-2.5 text-[11px] sm:text-xs whitespace-nowrap',
+                    table: 'min-w-[1240px]',
+                    tr: 'cursor-pointer hover:bg-default-100 transition-colors',
                   }}
                 >
                   <TableHeader>
@@ -565,23 +645,33 @@ export default function ClientesPage() {
                       </div>
                     </TableColumn>
                     <TableColumn>
+                      <div className="flex items-center gap-1">CPF</div>
+                    </TableColumn>
+                    <TableColumn>
+                      <div className="flex items-center gap-1">CÓDIGO DO SIMPLES</div>
+                    </TableColumn>
+                    <TableColumn>
                       <div className="flex items-center gap-1">
-                        CPF
+                        <Chip
+                          size="sm"
+                          variant="flat"
+                          color="secondary"
+                          className="text-[10px] sm:text-xs"
+                        >
+                          SENHA GOV
+                        </Chip>
                       </div>
                     </TableColumn>
                     <TableColumn>
                       <div className="flex items-center gap-1">
-                        CÓDIGO DO SIMPLES
-                      </div>
-                    </TableColumn>
-                    <TableColumn>
-                      <div className="flex items-center gap-1">
-                        <Chip size="sm" variant="flat" color="secondary" className="text-[10px] sm:text-xs">SENHA GOV</Chip>
-                      </div>
-                    </TableColumn>
-                    <TableColumn>
-                      <div className="flex items-center gap-1">
-                        <Chip size="sm" variant="flat" color="primary" className="text-[10px] sm:text-xs">SENHA PREFEITURA</Chip>
+                        <Chip
+                          size="sm"
+                          variant="flat"
+                          color="primary"
+                          className="text-[10px] sm:text-xs"
+                        >
+                          SENHA PREFEITURA
+                        </Chip>
                       </div>
                     </TableColumn>
                     <TableColumn>
@@ -649,20 +739,30 @@ export default function ClientesPage() {
                         </TableCell>
                         <TableCell>
                           {client.senha_gov ? (
-                            <SnippetCopy text={client.senha_gov} hideByDefault textClassName="max-w-[90px]" />
+                            <SnippetCopy
+                              text={client.senha_gov}
+                              hideByDefault
+                              textClassName="max-w-[90px]"
+                            />
                           ) : (
                             <span className="text-default-400 text-xs">-</span>
                           )}
                         </TableCell>
                         <TableCell>
                           {client.senha_prefeitura ? (
-                            <SnippetCopy text={client.senha_prefeitura} hideByDefault textClassName="max-w-[90px]" />
+                            <SnippetCopy
+                              text={client.senha_prefeitura}
+                              hideByDefault
+                              textClassName="max-w-[90px]"
+                            />
                           ) : (
                             <span className="text-default-400 text-xs">-</span>
                           )}
                         </TableCell>
                         <TableCell>
-                          <span className="text-sm">{getRegimeLabel(client.regime_tributario)}</span>
+                          <span className="text-sm">
+                            {getRegimeLabel(client.regime_tributario)}
+                          </span>
                         </TableCell>
                         <TableCell>
                           <Chip size="sm" color={statusColors[client.status]} variant="flat">
@@ -670,15 +770,13 @@ export default function ClientesPage() {
                           </Chip>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <div
+                            className="flex items-center justify-center gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <Dropdown>
                               <DropdownTrigger>
-                                <Button
-                                  size="sm"
-                                  variant="light"
-                                  isIconOnly
-                                  aria-label="Ações"
-                                >
+                                <Button size="sm" variant="light" isIconOnly aria-label="Ações">
                                   <MoreVerticalIcon className="h-5 w-5" />
                                 </Button>
                               </DropdownTrigger>
@@ -717,15 +815,21 @@ export default function ClientesPage() {
                                   key="status-pendente"
                                   startContent={<ClockIcon className="h-4 w-4" />}
                                   onPress={() => handleChangeStatus(client, ClientStatus.PENDENTE)}
-                                  className={client.status === ClientStatus.PENDENTE ? 'hidden' : ''}
+                                  className={
+                                    client.status === ClientStatus.PENDENTE ? 'hidden' : ''
+                                  }
                                 >
                                   Marcar como Pendente
                                 </DropdownItem>
                                 <DropdownItem
                                   key="status-inadimplente"
                                   startContent={<ClockIcon className="h-4 w-4" />}
-                                  onPress={() => handleChangeStatus(client, ClientStatus.INADIMPLENTE)}
-                                  className={client.status === ClientStatus.INADIMPLENTE ? 'hidden' : ''}
+                                  onPress={() =>
+                                    handleChangeStatus(client, ClientStatus.INADIMPLENTE)
+                                  }
+                                  className={
+                                    client.status === ClientStatus.INADIMPLENTE ? 'hidden' : ''
+                                  }
                                   color="danger"
                                 >
                                   Marcar como Inadimplente
@@ -752,12 +856,7 @@ export default function ClientesPage() {
               {/* Pagination */}
               {clients && clients.pages > 1 && (
                 <div className="flex justify-center py-4">
-                  <Pagination
-                    total={clients.pages}
-                    page={page}
-                    onChange={setPage}
-                    showControls
-                  />
+                  <Pagination total={clients.pages} page={page} onChange={setPage} showControls />
                 </div>
               )}
             </>
@@ -806,7 +905,8 @@ export default function ClientesPage() {
                   <p className="text-xs">{deletingClient?.cnpj}</p>
                 </div>
                 <p className="text-xs text-default-500">
-                  Esta ação remove o cadastro da listagem (exclusão lógica) e não pode ser desfeita pela interface.
+                  Esta ação remove o cadastro da listagem (exclusão lógica) e não pode ser desfeita
+                  pela interface.
                 </p>
               </ModalBody>
               <ModalFooter>
@@ -823,7 +923,12 @@ export default function ClientesPage() {
       </Modal>
 
       {/* Alerts: Due Today */}
-      <Modal isOpen={isDueTodayOpen} onClose={handleCloseDueTodayAlert} size="2xl" scrollBehavior="inside">
+      <Modal
+        isOpen={isDueTodayOpen}
+        onClose={handleCloseDueTodayAlert}
+        size="2xl"
+        scrollBehavior="inside"
+      >
         <ModalContent>
           {() => (
             <>
@@ -836,7 +941,10 @@ export default function ClientesPage() {
                 </p>
                 <div className="space-y-4">
                   {dueTodayAlerts.map((group) => (
-                    <div key={group.obligation_type_id} className="rounded-lg border border-danger-200 bg-danger-50 p-3">
+                    <div
+                      key={group.obligation_type_id}
+                      className="rounded-lg border border-danger-200 bg-danger-50 p-3"
+                    >
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-semibold text-danger-800">
                           {group.obligation_type_name}
@@ -848,12 +956,14 @@ export default function ClientesPage() {
                         )}
                       </div>
                       <p className="text-xs text-danger-700 mt-1">
-                        {group.clients.length} empresa{group.clients.length === 1 ? '' : 's'} pendente{group.clients.length === 1 ? '' : 's'}
+                        {group.clients.length} empresa{group.clients.length === 1 ? '' : 's'}{' '}
+                        pendente{group.clients.length === 1 ? '' : 's'}
                       </p>
                       <ul className="mt-2 list-disc pl-5 text-sm text-danger-900 space-y-1">
                         {group.clients.map((client) => (
                           <li key={client.id}>
-                            {client.name} <span className="text-xs text-danger-700">({client.cnpj})</span>
+                            {client.name}{' '}
+                            <span className="text-xs text-danger-700">({client.cnpj})</span>
                           </li>
                         ))}
                       </ul>
@@ -885,7 +995,10 @@ export default function ClientesPage() {
                 </p>
                 <div className="space-y-4">
                   {dueInFiveAlerts.map((group) => (
-                    <div key={group.obligation_type_id} className="rounded-lg border border-default-200 bg-default-50 p-3">
+                    <div
+                      key={group.obligation_type_id}
+                      className="rounded-lg border border-default-200 bg-default-50 p-3"
+                    >
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-semibold text-foreground">
                           {group.obligation_type_name}
@@ -897,12 +1010,14 @@ export default function ClientesPage() {
                         )}
                       </div>
                       <p className="text-xs text-default-600 mt-1">
-                        {group.clients.length} empresa{group.clients.length === 1 ? '' : 's'} pendente{group.clients.length === 1 ? '' : 's'}
+                        {group.clients.length} empresa{group.clients.length === 1 ? '' : 's'}{' '}
+                        pendente{group.clients.length === 1 ? '' : 's'}
                       </p>
                       <ul className="mt-2 list-disc pl-5 text-sm text-foreground/90 space-y-1">
                         {group.clients.map((client) => (
                           <li key={client.id}>
-                            {client.name} <span className="text-xs text-default-500">({client.cnpj})</span>
+                            {client.name}{' '}
+                            <span className="text-xs text-default-500">({client.cnpj})</span>
                           </li>
                         ))}
                       </ul>

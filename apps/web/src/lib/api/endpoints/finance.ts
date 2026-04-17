@@ -74,6 +74,8 @@ export const financeApi = {
       filters?.client_id && UUID_REGEX.test(filters.client_id) ? filters.client_id : undefined;
     const status = filters?.status || undefined;
     const referenceMonth = normalizeReferenceMonth(filters?.reference_month);
+    const referenceMonthFrom = normalizeDateParam(filters?.reference_month_from);
+    const referenceMonthTo = normalizeDateParam(filters?.reference_month_to);
     const dueDateFrom = normalizeDateParam(filters?.due_date_from);
     const dueDateTo = normalizeDateParam(filters?.due_date_to);
     const includeDeleted = Boolean(filters?.include_deleted);
@@ -82,6 +84,8 @@ export const financeApi = {
     if (clientId) params.append('client_id', clientId);
     if (status) params.append('status', status);
     if (referenceMonth) params.append('reference_month', referenceMonth);
+    if (referenceMonthFrom) params.append('reference_month_from', referenceMonthFrom);
+    if (referenceMonthTo) params.append('reference_month_to', referenceMonthTo);
     if (dueDateFrom) params.append('due_date_from', dueDateFrom);
     if (dueDateTo) params.append('due_date_to', dueDateTo);
     if (includeDeleted) params.append('include_deleted', 'true');
@@ -114,8 +118,7 @@ export const financeApi = {
   async updateTransaction(id: string, data: TransactionUpdate): Promise<Transaction> {
     return apiClient.put<Transaction>(`/finance/${id}`, {
       ...data,
-      amount:
-        typeof data.amount === 'number' ? normalizeCurrencyNumber(data.amount) : data.amount,
+      amount: typeof data.amount === 'number' ? normalizeCurrencyNumber(data.amount) : data.amount,
     });
   },
 
@@ -169,17 +172,23 @@ export const financeApi = {
     return apiClient.post<TransactionBulkOperationResponse>('/finance/bulk/delete', data);
   },
 
-  async purgeTransactionTrash(filters?: TransactionFilters): Promise<TransactionTrashPurgeResponse> {
+  async purgeTransactionTrash(
+    filters?: TransactionFilters
+  ): Promise<TransactionTrashPurgeResponse> {
     const params = new URLSearchParams();
 
     const clientId =
       filters?.client_id && UUID_REGEX.test(filters.client_id) ? filters.client_id : undefined;
     const referenceMonth = normalizeReferenceMonth(filters?.reference_month);
+    const referenceMonthFrom = normalizeDateParam(filters?.reference_month_from);
+    const referenceMonthTo = normalizeDateParam(filters?.reference_month_to);
     const dueDateFrom = normalizeDateParam(filters?.due_date_from);
     const dueDateTo = normalizeDateParam(filters?.due_date_to);
 
     if (clientId) params.append('client_id', clientId);
     if (referenceMonth) params.append('reference_month', referenceMonth);
+    if (referenceMonthFrom) params.append('reference_month_from', referenceMonthFrom);
+    if (referenceMonthTo) params.append('reference_month_to', referenceMonthTo);
     if (dueDateFrom) params.append('due_date_from', dueDateFrom);
     if (dueDateTo) params.append('due_date_to', dueDateTo);
 
@@ -216,7 +225,9 @@ export const financeApi = {
   },
 
   async deleteMonthlyFee(officeTransactionId: string): Promise<MonthlyFeePairOperationResponse> {
-    return apiClient.delete<MonthlyFeePairOperationResponse>(`/finance/fees/${officeTransactionId}`);
+    return apiClient.delete<MonthlyFeePairOperationResponse>(
+      `/finance/fees/${officeTransactionId}`
+    );
   },
 
   async uploadTransactionAttachment(transactionId: string, file: File): Promise<Transaction> {

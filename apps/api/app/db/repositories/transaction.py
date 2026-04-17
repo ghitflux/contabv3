@@ -46,6 +46,8 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
         client_id: UUID,
         status: Optional[PaymentStatus] = None,
         reference_month: Optional[date] = None,
+        reference_month_from: Optional[date] = None,
+        reference_month_to: Optional[date] = None,
         due_date_from: Optional[date] = None,
         due_date_to: Optional[date] = None,
         include_deleted: bool = False,
@@ -68,6 +70,11 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
             # Finance filters labeled as "Mês de referência" must stay on competence basis,
             # even after a transaction is marked as paid.
             conditions.append(FinancialTransaction.reference_month == reference_month)
+        else:
+            if reference_month_from:
+                conditions.append(FinancialTransaction.reference_month >= reference_month_from)
+            if reference_month_to:
+                conditions.append(FinancialTransaction.reference_month <= reference_month_to)
 
         if due_date_from:
             conditions.append(FinancialTransaction.due_date >= due_date_from)
@@ -109,6 +116,8 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
         client_id: Optional[UUID] = None,
         status: Optional[PaymentStatus] = None,
         reference_month: Optional[date] = None,
+        reference_month_from: Optional[date] = None,
+        reference_month_to: Optional[date] = None,
         due_date_from: Optional[date] = None,
         due_date_to: Optional[date] = None,
         include_deleted: bool = False,
@@ -134,6 +143,11 @@ class TransactionRepository(BaseRepository[FinancialTransaction]):
             # Finance filters labeled as "Mês de referência" must stay on competence basis,
             # even after a transaction is marked as paid.
             conditions.append(FinancialTransaction.reference_month == reference_month)
+        else:
+            if reference_month_from:
+                conditions.append(FinancialTransaction.reference_month >= reference_month_from)
+            if reference_month_to:
+                conditions.append(FinancialTransaction.reference_month <= reference_month_to)
 
         if due_date_from:
             conditions.append(FinancialTransaction.due_date >= due_date_from)

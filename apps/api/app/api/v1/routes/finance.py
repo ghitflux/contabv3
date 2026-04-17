@@ -159,6 +159,8 @@ async def list_transactions(
     client_id: Optional[UUID] = Query(None),
     payment_status: Optional[PaymentStatus] = Query(None, alias="status"),
     reference_month: Optional[date] = Query(None),
+    reference_month_from: Optional[date] = Query(None),
+    reference_month_to: Optional[date] = Query(None),
     due_date_from: Optional[date] = Query(None),
     due_date_to: Optional[date] = Query(None),
     include_deleted: bool = Query(False, description="Include soft-deleted transactions"),
@@ -186,6 +188,11 @@ async def list_transactions(
         recurring_until_month = reference_month
         if recurring_until_month is None and due_date_to is not None:
             recurring_until_month = due_date_to.replace(day=1)
+        if recurring_until_month is None and reference_month_to is not None:
+            recurring_until_month = reference_month_to.replace(day=1)
+        current_month = date.today().replace(day=1)
+        if recurring_until_month is not None and recurring_until_month > current_month:
+            recurring_until_month = current_month
         if recurring_until_month is not None:
             recurring_summary = await TransactionService(db).generate_missing_recurring_transactions(
                 until_month=recurring_until_month,
@@ -198,6 +205,8 @@ async def list_transactions(
         client_id=client_id,
         status=payment_status,
         reference_month=reference_month,
+        reference_month_from=reference_month_from,
+        reference_month_to=reference_month_to,
         due_date_from=due_date_from,
         due_date_to=due_date_to,
         include_deleted=include_deleted,

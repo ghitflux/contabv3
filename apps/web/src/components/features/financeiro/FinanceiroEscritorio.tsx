@@ -159,13 +159,7 @@ const formatMonthYear = (value: string) => {
   return `${String(parsed.getMonth() + 1).padStart(2, '0')}/${parsed.getFullYear()}`;
 };
 
-type ActiveTransactionPanel =
-  | 'all'
-  | 'receber'
-  | 'pagar'
-  | 'receita'
-  | 'despesa'
-  | 'distribuicao';
+type ActiveTransactionPanel = 'all' | 'receber' | 'pagar' | 'receita' | 'despesa' | 'distribuicao';
 
 export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => void }) {
   const initialMonthFilterState = getCurrentMonthFilterState();
@@ -194,8 +188,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         .map((item) => {
           if (!item || typeof item !== 'object') return null;
           const id = typeof item.id === 'string' ? item.id : crypto.randomUUID();
-          const description =
-            typeof item.description === 'string' ? item.description.trim() : '';
+          const description = typeof item.description === 'string' ? item.description.trim() : '';
           const type =
             item.type === 'income' || item.type === 'expense' || item.type === 'profit_distribution'
               ? item.type
@@ -434,8 +427,8 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   const { transactions: yearTransactions } = useTransactions({
     filters: {
       client_id: OFFICE_CLIENT_ID || undefined,
-      due_date_from: `${new Date().getFullYear()}-01-01`,
-      due_date_to: `${new Date().getFullYear()}-12-31`,
+      reference_month_from: `${currentYear}-01-01`,
+      reference_month_to: `${currentYear}-12-01`,
       page: 1,
       size: 100,
     },
@@ -535,7 +528,10 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       return 'Mostrando 0 de 0';
     }
     const startIndex = (transactionsPage - 1) * TRANSACTIONS_PER_PAGE + 1;
-    const endIndex = Math.min(transactionsPage * TRANSACTIONS_PER_PAGE, filteredDisplayTransactions.length);
+    const endIndex = Math.min(
+      transactionsPage * TRANSACTIONS_PER_PAGE,
+      filteredDisplayTransactions.length
+    );
     return `Mostrando ${startIndex}-${endIndex} de ${filteredDisplayTransactions.length}`;
   }, [filteredDisplayTransactions.length, transactionsPage]);
 
@@ -544,8 +540,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     [transactions]
   );
   const paidDistributionTransactions = useMemo(
-    () =>
-      paidTransactions.filter((transaction) => isProfitDistributionTransaction(transaction)),
+    () => paidTransactions.filter((transaction) => isProfitDistributionTransaction(transaction)),
     [paidTransactions]
   );
   const paidYearDistributionTransactions = useMemo(
@@ -554,8 +549,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     [paidYearTransactions]
   );
   const distribuicaoLucrosMes = useMemo(
-    () =>
-      paidDistributionTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
+    () => paidDistributionTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
     [paidDistributionTransactions]
   );
   const distribuicaoLucrosAno = useMemo(
@@ -584,6 +578,10 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   );
   const lucro = receita - despesa;
   const isNegativeProfit = lucro < 0;
+  const margemLucroAtual = useMemo(() => {
+    if (receita === 0) return 0;
+    return (lucro / receita) * 100;
+  }, [lucro, receita]);
   const receivableTransactions = useMemo(
     () =>
       transactions.filter(
@@ -674,9 +672,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
 
   const honorariosTransactions = useMemo(() => {
     return transactions
-      .filter(
-        (transaction) => isAutomaticOfficeFee(transaction)
-      )
+      .filter((transaction) => isAutomaticOfficeFee(transaction))
       .map((transaction) => {
         const descriptionMatch = transaction.description.match(HONORARIOS_DESCRIPTION_PATTERN);
         const cliente = descriptionMatch?.[1] ?? '-';
@@ -726,7 +722,9 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   const isAllTransactionsOnPageSelected = useMemo(
     () =>
       paginatedDisplayTransactions.length > 0 &&
-      paginatedDisplayTransactions.every((transaction) => selectedTransactionSet.has(transaction.id)),
+      paginatedDisplayTransactions.every((transaction) =>
+        selectedTransactionSet.has(transaction.id)
+      ),
     [paginatedDisplayTransactions, selectedTransactionSet]
   );
   const isAllPanelTransactionsSelected = useMemo(
@@ -930,8 +928,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
 
       const manualResponse = responses[0];
       const automaticResponse = responses[1];
-      const succeeded =
-        (manualResponse?.succeeded ?? 0) + (automaticResponse?.succeeded ?? 0);
+      const succeeded = (manualResponse?.succeeded ?? 0) + (automaticResponse?.succeeded ?? 0);
       const failed = (manualResponse?.failed ?? 0) + (automaticResponse?.failed ?? 0);
 
       await refresh();
@@ -1049,8 +1046,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       colorClass: 'text-green-600',
       backgroundClass: 'bg-green-50 dark:bg-green-900/20',
       isPressable: true,
-      onPress: () =>
-        setActivePendingPanel((prev) => (prev === 'receita' ? 'all' : 'receita')),
+      onPress: () => setActivePendingPanel((prev) => (prev === 'receita' ? 'all' : 'receita')),
     },
     {
       id: 'despesa',
@@ -1062,8 +1058,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       colorClass: 'text-amber-600',
       backgroundClass: 'bg-amber-50 dark:bg-amber-900/20',
       isPressable: true,
-      onPress: () =>
-        setActivePendingPanel((prev) => (prev === 'despesa' ? 'all' : 'despesa')),
+      onPress: () => setActivePendingPanel((prev) => (prev === 'despesa' ? 'all' : 'despesa')),
     },
     {
       id: 'lucro',
@@ -1132,12 +1127,12 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         payment_method: !isSettled
           ? undefined
           : newTransaction.isRecurring
-          ? undefined
-          : bankName
-            ? bankName.toLowerCase().includes('pix')
-              ? PaymentMethod.PIX
-              : PaymentMethod.TRANSFERENCIA
-            : undefined,
+            ? undefined
+            : bankName
+              ? bankName.toLowerCase().includes('pix')
+                ? PaymentMethod.PIX
+                : PaymentMethod.TRANSFERENCIA
+              : undefined,
         payment_status: isSettled ? PaymentStatus.PAGO : PaymentStatus.PENDENTE,
         due_date: newTransaction.date,
         paid_date: isSettled ? paidDate : null,
@@ -1510,26 +1505,18 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
             </p>
           </CardBody>
         </Card>
-        <Card
-          isPressable
-          onPress={() =>
-            setActivePendingPanel((prev) => (prev === 'distribuicao' ? 'all' : 'distribuicao'))
-          }
-          className={`border ${
-            activePendingPanel === 'distribuicao'
-              ? 'border-sky-400 bg-sky-50 dark:bg-sky-900/20'
-              : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/20'
-          }`}
-        >
+        <Card className="border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/20">
           <CardBody>
             <p className="text-sm text-slate-700 dark:text-slate-400 font-medium mb-1">
-              DISTRIBUIÇÃO DE LUCROS
+              MARGEM DE LUCRO ATUAL
             </p>
-            <p className="text-2xl font-bold text-sky-700 dark:text-sky-400">
-              {formatCurrency(distribuicaoLucrosMes)}
+            <p className="text-2xl font-bold text-teal-700 dark:text-teal-400">
+              {`${margemLucroAtual.toFixed(1).replace('.', ',')}%`}
             </p>
             <p className="text-xs text-slate-500 mt-2">
-              {paidDistributionTransactions.length} pagamento(s) no período
+              {receita > 0
+                ? 'Lucro liquido dividido pela receita do período'
+                : 'Sem receita paga no período'}
             </p>
           </CardBody>
         </Card>
@@ -1558,7 +1545,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
               Limpar filtro
             </Button>
           </CardHeader>
-        <CardBody>
+          <CardBody>
             <div className="w-full overflow-x-auto">
               <Table aria-label="Tabela de baixa rápida" removeWrapper className="min-w-[680px]">
                 <TableHeader>
@@ -1593,9 +1580,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                           aria-label={`Selecionar lançamento ${transaction.history}`}
                         />
                       </TableCell>
-                      <TableCell>
-                        {formatLocalDate(transaction.raw.due_date)}
-                      </TableCell>
+                      <TableCell>{formatLocalDate(transaction.raw.due_date)}</TableCell>
                       <TableCell>{transaction.history}</TableCell>
                       <TableCell className="text-right font-semibold">
                         {formatCurrency(transaction.value)}
@@ -1691,7 +1676,9 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
           <div className="rounded-lg border border-default-200/60 bg-default-50/60 px-3 py-3 text-sm text-default-600">
             <p>
               Competência automática:{' '}
-              <strong>{formatMonthYear(`${feesReferenceMonth || getCurrentMonthValue()}-01`)}</strong>
+              <strong>
+                {formatMonthYear(`${feesReferenceMonth || getCurrentMonthValue()}-01`)}
+              </strong>
             </p>
             {isLoadingFeePreview ? (
               <p>Carregando prévia corrigida dos honorários...</p>
@@ -1703,7 +1690,8 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                   somando <strong>{formatCurrency(feePreview.total_amount)}</strong>.
                 </p>
                 <p>
-                  Clientes com competência bloqueada nesta data: <strong>{feePreview.blocked_count}</strong>.
+                  Clientes com competência bloqueada nesta data:{' '}
+                  <strong>{feePreview.blocked_count}</strong>.
                 </p>
               </>
             ) : (
@@ -1798,9 +1786,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                         <TableCell>{transaction.competenciaLabel}</TableCell>
                         <TableCell>{transaction.cliente}</TableCell>
                         <TableCell>{transaction.cnpj}</TableCell>
-                        <TableCell>
-                          {formatLocalDate(transaction.dueDate)}
-                        </TableCell>
+                        <TableCell>{formatLocalDate(transaction.dueDate)}</TableCell>
                         <TableCell className="text-right font-semibold">
                           {formatCurrency(transaction.amount)}
                         </TableCell>
@@ -1811,9 +1797,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                             : '-'}
                         </TableCell>
                         <TableCell>
-                          {transaction.paidDate
-                            ? formatLocalDate(transaction.paidDate)
-                            : '-'}
+                          {transaction.paidDate ? formatLocalDate(transaction.paidDate) : '-'}
                         </TableCell>
                         <TableCell className="text-right space-x-1">
                           {isDuePaymentStatus(transaction.paymentStatus) && (
@@ -2376,9 +2360,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                   <SelectItem key="profit_distribution">Distribuição de lucros</SelectItem>
                 </Select>
                 <div className="space-y-2 rounded-lg border border-default-200/60 bg-default-50/60 p-3">
-                  <p className="text-sm font-medium text-default-700">
-                    Históricos cadastrados
-                  </p>
+                  <p className="text-sm font-medium text-default-700">Históricos cadastrados</p>
                   {standardHistories.length === 0 ? (
                     <p className="text-sm text-default-500">Nenhum histórico cadastrado.</p>
                   ) : (
@@ -2437,22 +2419,15 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         }}
       >
         <ModalContent>
-            {(onClose) => (
-              <>
+          {(onClose) => (
+            <>
               <ModalHeader>
-                {isEditingAutomaticOfficeFee
-                  ? 'Editar Honorário Automático'
-                  : 'Editar Lançamento'}
+                {isEditingAutomaticOfficeFee ? 'Editar Honorário Automático' : 'Editar Lançamento'}
               </ModalHeader>
               <ModalBody className="space-y-3">
                 {isEditingAutomaticOfficeFee ? (
                   <>
-                    <Input
-                      label="Descrição"
-                      value={editForm.description}
-                      isReadOnly
-                      isDisabled
-                    />
+                    <Input label="Descrição" value={editForm.description} isReadOnly isDisabled />
                     <Input
                       label="Competência"
                       value={
@@ -2555,9 +2530,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                     label="Categoria"
                     placeholder="Ex: 1.1.01"
                     value={editForm.category}
-                    onValueChange={(value) =>
-                      setEditForm((prev) => ({ ...prev, category: value }))
-                    }
+                    onValueChange={(value) => setEditForm((prev) => ({ ...prev, category: value }))}
                   />
                 )}
                 <Input

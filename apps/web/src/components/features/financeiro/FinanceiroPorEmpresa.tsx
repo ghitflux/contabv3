@@ -393,8 +393,8 @@ export function FinanceiroPorEmpresa({
   const yearTransactionFilters = useMemo(
     () => ({
       client_id: selectedClient || undefined,
-      due_date_from: `${currentYear}-01-01`,
-      due_date_to: `${currentYear}-12-31`,
+      reference_month_from: `${currentYear}-01-01`,
+      reference_month_to: `${currentYear}-12-01`,
       page: 1,
       size: 100,
     }),
@@ -429,8 +429,7 @@ export function FinanceiroPorEmpresa({
       yearTransactions
         .filter(
           (t) =>
-            t.transaction_type === TransactionType.RECEITA &&
-            isDuePaymentStatus(t.payment_status)
+            t.transaction_type === TransactionType.RECEITA && isDuePaymentStatus(t.payment_status)
         )
         .reduce((sum, t) => sum + t.amount, 0),
     [yearTransactions]
@@ -531,7 +530,10 @@ export function FinanceiroPorEmpresa({
       return 'Mostrando 0 de 0';
     }
     const startIndex = (transactionsPage - 1) * LANCAMENTOS_PER_PAGE + 1;
-    const endIndex = Math.min(transactionsPage * LANCAMENTOS_PER_PAGE, filteredDisplayTransactions.length);
+    const endIndex = Math.min(
+      transactionsPage * LANCAMENTOS_PER_PAGE,
+      filteredDisplayTransactions.length
+    );
     return `Mostrando ${startIndex}-${endIndex} de ${filteredDisplayTransactions.length}`;
   }, [filteredDisplayTransactions.length, transactionsPage]);
 
@@ -743,8 +745,7 @@ export function FinanceiroPorEmpresa({
       ...basePayload,
       payment_status: editForm.payment_status,
       payment_method: editForm.payment_method ? editForm.payment_method : null,
-      paid_date:
-        editForm.payment_status === PaymentStatus.PAGO ? editForm.paid_date || null : null,
+      paid_date: editForm.payment_status === PaymentStatus.PAGO ? editForm.paid_date || null : null,
     };
 
     try {
@@ -838,7 +839,8 @@ export function FinanceiroPorEmpresa({
 
   const canManageTransaction = useCallback(
     (transaction: Transaction) =>
-      !isAutomaticClientFee(transaction) && (isAdminOrFunc || transaction.created_by_id === user?.id),
+      !isAutomaticClientFee(transaction) &&
+      (isAdminOrFunc || transaction.created_by_id === user?.id),
     [isAdminOrFunc, isAutomaticClientFee, user?.id]
   );
 
@@ -967,7 +969,9 @@ export function FinanceiroPorEmpresa({
               />
             </div>
             <div className="space-y-2 flex-1 min-w-[200px]">
-              <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Buscar</label>
+              <label className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                Buscar
+              </label>
               <Input
                 size="sm"
                 placeholder="Descrição, categoria ou histórico..."
@@ -1148,9 +1152,13 @@ export function FinanceiroPorEmpresa({
               Limpar filtro
             </Button>
           </CardHeader>
-        <CardBody>
+          <CardBody>
             <div className="w-full overflow-x-auto">
-              <Table aria-label="Tabela de baixa rápida por empresa" removeWrapper className="min-w-[680px]">
+              <Table
+                aria-label="Tabela de baixa rápida por empresa"
+                removeWrapper
+                className="min-w-[680px]"
+              >
                 <TableHeader>
                   <TableColumn>Vencimento</TableColumn>
                   <TableColumn>Descrição</TableColumn>
@@ -1166,9 +1174,7 @@ export function FinanceiroPorEmpresa({
                 >
                   {panelTransactions.map((transaction) => (
                     <TableRow key={transaction.id}>
-                      <TableCell>
-                        {formatLocalDate(transaction.due_date)}
-                      </TableCell>
+                      <TableCell>{formatLocalDate(transaction.due_date)}</TableCell>
                       <TableCell>{transaction.description}</TableCell>
                       <TableCell className="text-right font-semibold">
                         {formatCurrency(transaction.amount)}
@@ -1176,15 +1182,15 @@ export function FinanceiroPorEmpresa({
                       <TableCell className="text-right">
                         {isDuePaymentStatus(transaction.payment_status) &&
                           canMarkTransactionAsPaid(transaction) && (
-                          <Button
-                            size="sm"
-                            color="primary"
-                            variant="flat"
-                            onPress={() => requestMarkAsPaid(transaction)}
-                          >
-                            Baixa
-                          </Button>
-                        )}
+                            <Button
+                              size="sm"
+                              color="primary"
+                              variant="flat"
+                              onPress={() => requestMarkAsPaid(transaction)}
+                            >
+                              Baixa
+                            </Button>
+                          )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1322,7 +1328,11 @@ export function FinanceiroPorEmpresa({
         <CardBody className="space-y-4">
           <h3 className="text-lg font-semibold">Lançamentos</h3>
           <div className="w-full overflow-x-auto">
-            <Table aria-label="Lançamentos financeiros por empresa" removeWrapper className="min-w-[900px]">
+            <Table
+              aria-label="Lançamentos financeiros por empresa"
+              removeWrapper
+              className="min-w-[900px]"
+            >
               <TableHeader>
                 <TableColumn>Data</TableColumn>
                 <TableColumn>Tipo</TableColumn>
@@ -1363,15 +1373,15 @@ export function FinanceiroPorEmpresa({
                       )}
                       {isDuePaymentStatus(transaction.raw.payment_status) &&
                         canMarkTransactionAsPaid(transaction.raw) && (
-                        <Button
-                          size="sm"
-                          variant="flat"
-                          color="primary"
-                          onPress={() => requestMarkAsPaid(transaction.raw)}
-                        >
-                          Baixa
-                        </Button>
-                      )}
+                          <Button
+                            size="sm"
+                            variant="flat"
+                            color="primary"
+                            onPress={() => requestMarkAsPaid(transaction.raw)}
+                          >
+                            Baixa
+                          </Button>
+                        )}
                       {canManageTransaction(transaction.raw) && (
                         <Button
                           size="sm"

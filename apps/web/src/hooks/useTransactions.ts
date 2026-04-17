@@ -33,6 +33,8 @@ const buildFiltersKey = (filters?: TransactionFilters) => {
     status: filters?.status ?? null,
     payment_method: filters?.payment_method ?? null,
     reference_month: filters?.reference_month ?? null,
+    reference_month_from: filters?.reference_month_from ?? null,
+    reference_month_to: filters?.reference_month_to ?? null,
     due_date_from: filters?.due_date_from ?? null,
     due_date_to: filters?.due_date_to ?? null,
     include_deleted: Boolean(filters?.include_deleted),

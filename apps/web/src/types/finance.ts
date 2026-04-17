@@ -38,7 +38,9 @@ export function isDuePaymentStatus(status: PaymentStatus): boolean {
   return DUE_PAYMENT_STATUSES.includes(status);
 }
 
-export function isProfitDistributionTransaction(transaction: Pick<Transaction, 'category'>): boolean {
+export function isProfitDistributionTransaction(
+  transaction: Pick<Transaction, 'category'>
+): boolean {
   return (transaction.category ?? '').trim().toLowerCase() === DISTRIBUTION_PROFITS_CATEGORY;
 }
 
@@ -130,6 +132,8 @@ export interface TransactionFilters {
   status?: PaymentStatus | '';
   payment_method?: PaymentMethod | '';
   reference_month?: string; // YYYY-MM format
+  reference_month_from?: string;
+  reference_month_to?: string;
   due_date_from?: string;
   due_date_to?: string;
   include_deleted?: boolean;
