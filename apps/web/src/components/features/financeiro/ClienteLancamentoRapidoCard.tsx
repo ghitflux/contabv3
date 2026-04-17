@@ -18,6 +18,7 @@ import { DatePickerField } from '@/components/ui/DatePickerField';
 import { financeApi } from '@/lib/api/endpoints/finance';
 import { normalizeAmountForRequest } from '@/lib/finance/amount';
 import { toast } from '@/lib/toast';
+import { getFinancePresetDescriptions, mergeFinancePresetDescriptions } from '@/constants/financePresets';
 import type { BankAccount } from '@/types/bank-account';
 import {
   PaymentMethod,
@@ -51,8 +52,14 @@ interface ClienteLancamentoRapidoCardProps {
 }
 
 const TYPE_PRESETS = {
-  Entrada: ['Recebimento de cliente', 'Serviço extra', 'Reembolso', 'Transferência recebida'],
-  Saída: ['Honorários do mês', 'Imposto', 'Pró-labore', 'Pagamento de fornecedor'],
+  Entrada: mergeFinancePresetDescriptions(
+    ['Recebimento de cliente', 'Serviço extra', 'Reembolso', 'Transferência recebida'],
+    getFinancePresetDescriptions('income')
+  ),
+  Saída: mergeFinancePresetDescriptions(
+    ['Honorários do mês', 'Imposto', 'Pró-labore', 'Pagamento de fornecedor'],
+    getFinancePresetDescriptions('expense')
+  ),
 } satisfies Record<DisplayMovement, string[]>;
 
 const ATTACHMENT_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png';

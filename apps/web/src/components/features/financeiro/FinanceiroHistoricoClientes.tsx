@@ -167,7 +167,6 @@ export function FinanceiroHistoricoClientes() {
       ["name", "Banco"],
       ["account_number", "Conta"],
       ["balance", "Saldo"],
-      ["accounting_account", "Conta contábil"],
     ];
 
     const changes = fields

@@ -302,6 +302,65 @@ async def test_preview_monthly_fees_marks_blocked_clients(monkeypatch: pytest.Mo
 
 
 @pytest.mark.asyncio
+async def test_preview_monthly_fees_can_ignore_blocks(monkeypatch: pytest.MonkeyPatch):
+    office_client_id = uuid4()
+    monkeypatch.setattr(settings, "OFFICE_CLIENT_ID", office_client_id, raising=False)
+
+    client = _build_client()
+    db = AsyncMock()
+    db.execute = AsyncMock(
+        return_value=SimpleNamespace(
+            scalars=lambda: SimpleNamespace(all=lambda: [client])
+        )
+    )
+
+    service = FeeGeneratorService(db)
+    service._get_fee_block = AsyncMock(return_value=SimpleNamespace(reason="Bloqueado manualmente"))
+    service._has_existing_honorarios_entry = AsyncMock(side_effect=[False, False])
+
+    result = await service.preview_monthly_fees(
+        reference_month=date(2026, 4, 1),
+        ignore_blocks=True,
+    )
+
+    assert result["blocked_count"] == 0
+    assert result["would_generate_count"] == 1
+    assert result["would_generate_entries"] == 2
+    assert result["clients"][0]["blocked"] is False
+
+
+@pytest.mark.asyncio
+async def test_generate_monthly_fees_passes_ignore_blocks_to_client_generation(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    office_client_id = uuid4()
+    monkeypatch.setattr(settings, "OFFICE_CLIENT_ID", office_client_id, raising=False)
+
+    db = AsyncMock()
+    db.commit = AsyncMock()
+
+    service = FeeGeneratorService(db)
+    client = _build_client()
+
+    service.client_repo = SimpleNamespace(get=AsyncMock(return_value=client))
+    service._generate_for_client = AsyncMock(
+        return_value=[
+            SimpleNamespace(client_id=client.id, transaction_type=TransactionType.DESPESA),
+            SimpleNamespace(client_id=office_client_id, transaction_type=TransactionType.RECEITA),
+        ]
+    )
+
+    await service.generate_monthly_fees(
+        reference_month=date(2026, 4, 1),
+        client_id=client.id,
+        generated_by_id=uuid4(),
+        ignore_blocks=True,
+    )
+
+    assert service._generate_for_client.await_args.kwargs["ignore_blocks"] is True
+
+
+@pytest.mark.asyncio
 async def test_mark_monthly_fee_as_paid_updates_both_sides(monkeypatch: pytest.MonkeyPatch):
     office_client_id = uuid4()
     monkeypatch.setattr(settings, "OFFICE_CLIENT_ID", office_client_id, raising=False)

@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  Autocomplete,
+  AutocompleteItem,
   Modal,
   ModalContent,
   ModalHeader,
@@ -12,11 +14,12 @@ import {
   SelectItem,
   Textarea,
 } from "@/heroui";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DatePickerField } from "@/components/ui/DatePickerField";
 import { PlanoDeContasAutocomplete } from "@/components/ui/PlanoDeContasAutocomplete";
 import { TransactionType, PaymentStatus, PaymentMethod } from "@/types/finance";
 import { isPlanoContaCodigo } from "@/constants/planoDeContas";
+import { getFinancePresetDescriptions } from "@/constants/financePresets";
 import { formatISO } from "date-fns";
 import { toast } from "@/lib/toast";
 import { normalizeAmountForRequest } from "@/lib/finance/amount";
@@ -107,6 +110,14 @@ export function NovoLancamentoModal({
       return { ...prev, client_id: defaultClientId };
     });
   }, [defaultClientId, isOpen]);
+
+  const descriptionSuggestions = useMemo(
+    () =>
+      getFinancePresetDescriptions(
+        formData.transaction_type === TransactionType.DESPESA ? "expense" : "income"
+      ),
+    [formData.transaction_type]
+  );
 
   const handleSubmit = async () => {
     try {
@@ -287,14 +298,28 @@ export function NovoLancamentoModal({
                 )}
 
                 {/* Descrição */}
-                <Input
+                <Autocomplete
                   label="Descrição"
                   placeholder="Ex: Honorários de janeiro/2024"
-                  value={formData.description || ""}
-                  onValueChange={(value) => setFormData((prev) => ({ ...prev, description: value }))}
+                  inputValue={formData.description || ""}
+                  onInputChange={(value) =>
+                    setFormData((prev) => ({ ...prev, description: value }))
+                  }
+                  onSelectionChange={(key) => {
+                    if (!key) return;
+                    setFormData((prev) => ({ ...prev, description: String(key) }));
+                  }}
+                  allowsCustomValue
+                  listboxProps={{
+                    emptyContent: "Nenhuma sugestão encontrada",
+                  }}
                   isRequired
                   variant="bordered"
-                />
+                >
+                  {descriptionSuggestions.map((value) => (
+                    <AutocompleteItem key={value}>{value}</AutocompleteItem>
+                  ))}
+                </Autocomplete>
 
                 {/* Valor */}
                 <Input

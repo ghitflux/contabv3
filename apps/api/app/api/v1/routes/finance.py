@@ -152,6 +152,12 @@ def _resolve_finance_attachment_path(receipt_url: str) -> Path:
     return FINANCE_UPLOAD_DIR / normalized
 
 
+def _add_months(base_date: date, months: int) -> date:
+    year = base_date.year + (base_date.month - 1 + months) // 12
+    month = (base_date.month - 1 + months) % 12 + 1
+    return date(year, month, 1)
+
+
 @router.get("", response_model=TransactionListResponse)
 async def list_transactions(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -191,8 +197,9 @@ async def list_transactions(
         if recurring_until_month is None and reference_month_to is not None:
             recurring_until_month = reference_month_to.replace(day=1)
         current_month = date.today().replace(day=1)
-        if recurring_until_month is not None and recurring_until_month > current_month:
-            recurring_until_month = current_month
+        max_preview_month = _add_months(current_month, 12)
+        if recurring_until_month is not None and recurring_until_month > max_preview_month:
+            recurring_until_month = max_preview_month
         if recurring_until_month is not None:
             recurring_summary = await TransactionService(db).generate_missing_recurring_transactions(
                 until_month=recurring_until_month,
@@ -1122,6 +1129,7 @@ async def preview_monthly_fees(
             reference_month=data.reference_month,
             client_id=data.client_id,
             client_ids=data.client_ids,
+            ignore_blocks=True,
         )
     except ValueError as e:
         raise HTTPException(
@@ -1156,6 +1164,7 @@ async def generate_monthly_fees(
             client_id=data.client_id,
             client_ids=data.client_ids,
             generated_by_id=current_user.id,
+            ignore_blocks=True,
         )
         return result
     except ValueError as e:

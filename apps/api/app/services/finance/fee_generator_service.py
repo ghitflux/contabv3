@@ -188,6 +188,19 @@ class FeeGeneratorService:
         return block
 
     async def _collect_generation_state(self, client: Client, reference_month: date) -> dict:
+        return await self._collect_generation_state_with_options(
+            client,
+            reference_month,
+            ignore_blocks=False,
+        )
+
+    async def _collect_generation_state_with_options(
+        self,
+        client: Client,
+        reference_month: date,
+        *,
+        ignore_blocks: bool,
+    ) -> dict:
         normalized_reference_month = self._normalize_reference_month(reference_month)
         reference_label = self._format_reference_label(normalized_reference_month)
         client_description = self._build_client_description(reference_label)
@@ -211,7 +224,7 @@ class FeeGeneratorService:
                 description=office_description,
             )
 
-        blocked = fee_block is not None
+        blocked = fee_block is not None and not ignore_blocks
         would_create_client_entry = not blocked and not has_client_entry
         would_create_office_entry = bool(
             settings.OFFICE_CLIENT_ID and not blocked and not has_office_entry
@@ -223,6 +236,7 @@ class FeeGeneratorService:
             "client_description": client_description,
             "office_description": office_description,
             "due_date": self._resolve_due_date_for_client(normalized_reference_month, client.dia_vencimento),
+            "fee_block": fee_block,
             "blocked": blocked,
             "block_reason": fee_block.reason if fee_block else None,
             "has_client_entry": has_client_entry,
@@ -230,6 +244,21 @@ class FeeGeneratorService:
             "would_create_client_entry": would_create_client_entry,
             "would_create_office_entry": would_create_office_entry,
         }
+
+    async def _clear_fee_block(
+        self,
+        *,
+        client_id: UUID,
+        reference_month: date,
+    ) -> None:
+        fee_block = await self._get_fee_block(
+            client_id=client_id,
+            reference_month=self._normalize_reference_month(reference_month),
+        )
+        if fee_block is None:
+            return
+        await self.db.delete(fee_block)
+        await self.db.flush()
 
     @staticmethod
     def _extract_client_id_from_notes(notes: str | None) -> UUID | None:
@@ -330,6 +359,7 @@ class FeeGeneratorService:
         reference_month: date,
         client_id: Optional[UUID] = None,
         client_ids: Optional[list[UUID]] = None,
+        ignore_blocks: bool = False,
     ) -> dict:
         """Preview honorários generation for the exact competence without creating data."""
         normalized_reference_month = self._normalize_reference_month(reference_month)
@@ -371,7 +401,11 @@ class FeeGeneratorService:
         would_generate_entries = 0
 
         for client in clients:
-            state = await self._collect_generation_state(client, normalized_reference_month)
+            state = await self._collect_generation_state_with_options(
+                client,
+                normalized_reference_month,
+                ignore_blocks=ignore_blocks,
+            )
             would_generate_this_client = int(state["would_create_client_entry"]) + int(
                 state["would_create_office_entry"]
             )
@@ -734,6 +768,7 @@ class FeeGeneratorService:
         client_id: Optional[UUID] = None,
         client_ids: Optional[list[UUID]] = None,
         generated_by_id: Optional[UUID] = None,
+        ignore_blocks: bool = False,
     ) -> dict:
         """
         Generate monthly fees for one or all eligible clients for the exact month provided.
@@ -753,6 +788,7 @@ class FeeGeneratorService:
                     client=selected_client,
                     reference_month=reference_month,
                     generated_by_id=generated_by_id,
+                    ignore_blocks=ignore_blocks,
                 )
                 await self.db.commit()
 
@@ -912,6 +948,7 @@ class FeeGeneratorService:
                     client=client,
                     reference_month=reference_month,
                     generated_by_id=generated_by_id,
+                    ignore_blocks=ignore_blocks,
                 )
                 if not transactions:
                     skipped += 1
@@ -961,6 +998,7 @@ class FeeGeneratorService:
         client: Client,
         reference_month: date,
         generated_by_id: Optional[UUID] = None,
+        ignore_blocks: bool = False,
     ) -> list[FinancialTransaction]:
         """
         Generate recurring honorários entries for a single client.
@@ -972,9 +1010,19 @@ class FeeGeneratorService:
         if not self._is_client_eligible(client):
             return []
 
-        state = await self._collect_generation_state(client, reference_month)
+        state = await self._collect_generation_state_with_options(
+            client,
+            reference_month,
+            ignore_blocks=ignore_blocks,
+        )
         if state["blocked"]:
             return []
+
+        if ignore_blocks and state["fee_block"] is not None:
+            await self._clear_fee_block(
+                client_id=client.id,
+                reference_month=state["reference_month"],
+            )
 
         reference_month = state["reference_month"]
         due_date = state["due_date"]

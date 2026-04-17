@@ -59,6 +59,10 @@ import {
 import { toast } from '@/lib/toast';
 import { formatISO } from 'date-fns';
 import { MonthYearPicker } from '@/components/ui/MonthYearPicker';
+import {
+  FINANCE_HISTORY_PRESETS,
+  type FinanceHistoryType,
+} from '@/constants/financePresets';
 import { bankAccountsApi } from '@/lib/api/endpoints/bank-accounts';
 import { financeApi } from '@/lib/api/endpoints/finance';
 import type { BankAccount } from '@/types/bank-account';
@@ -94,7 +98,7 @@ type DisplayTransaction = {
 type StandardHistory = {
   id: string;
   description: string;
-  type: 'income' | 'expense' | 'profit_distribution';
+  type: FinanceHistoryType;
 };
 
 type NewTransactionState = {
@@ -109,13 +113,11 @@ type NewTransactionState = {
   recurringDay: number;
 };
 
-const initialHistories: StandardHistory[] = [
-  { id: '1', description: 'Honorários do mês', type: 'income' },
-  { id: '2', description: 'Serviço extra', type: 'income' },
-  { id: '3', description: 'Aluguel', type: 'expense' },
-  { id: '4', description: 'Internet', type: 'expense' },
-  { id: '5', description: 'Distribuição de lucros', type: 'profit_distribution' },
-];
+const initialHistories: StandardHistory[] = FINANCE_HISTORY_PRESETS.map((preset) => ({
+  id: preset.id,
+  description: preset.description,
+  type: preset.type,
+}));
 
 const OFFICE_HISTORY_STORAGE_KEY = 'financeiro:escritorio:historicos';
 
@@ -151,6 +153,32 @@ const normalizeDateInput = (value?: string | null): string => {
 const HONORARIOS_DESCRIPTION_PATTERN = /^Honorários - (.+?) \(([^)]+)\) - (\d{2}\/\d{4})$/;
 const PROFIT_DISTRIBUTION_LABEL = 'Distribuição de Lucros';
 
+const mergeStandardHistories = (
+  baseHistories: StandardHistory[],
+  incomingHistories: StandardHistory[]
+): StandardHistory[] => {
+  const merged = [...baseHistories];
+  const seen = new Set(
+    baseHistories.map(
+      (history) => `${history.type}:${history.description.trim().toLocaleLowerCase('pt-BR')}`
+    )
+  );
+
+  incomingHistories.forEach((history) => {
+    const normalizedDescription = history.description.trim();
+    if (!normalizedDescription) return;
+    const key = `${history.type}:${normalizedDescription.toLocaleLowerCase('pt-BR')}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push({
+      ...history,
+      description: normalizedDescription,
+    });
+  });
+
+  return merged;
+};
+
 const formatMonthYear = (value: string) => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
@@ -171,39 +199,8 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   const [endDate, setEndDate] = useState(initialMonthFilterState.endDate);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [isLoadingBanks, setIsLoadingBanks] = useState(false);
-  const [standardHistories, setStandardHistories] = useState<StandardHistory[]>(() => {
-    if (typeof window === 'undefined') {
-      return initialHistories;
-    }
-    const storedValue = window.localStorage.getItem(OFFICE_HISTORY_STORAGE_KEY);
-    if (!storedValue) {
-      return initialHistories;
-    }
-    try {
-      const parsed = JSON.parse(storedValue);
-      if (!Array.isArray(parsed)) {
-        return initialHistories;
-      }
-      const normalized = parsed
-        .map((item) => {
-          if (!item || typeof item !== 'object') return null;
-          const id = typeof item.id === 'string' ? item.id : crypto.randomUUID();
-          const description = typeof item.description === 'string' ? item.description.trim() : '';
-          const type =
-            item.type === 'income' || item.type === 'expense' || item.type === 'profit_distribution'
-              ? item.type
-              : null;
-          if (!description || !type) {
-            return null;
-          }
-          return { id, description, type } satisfies StandardHistory;
-        })
-        .filter((item): item is StandardHistory => item !== null);
-      return normalized.length > 0 ? normalized : initialHistories;
-    } catch {
-      return initialHistories;
-    }
-  });
+  const [standardHistories, setStandardHistories] = useState<StandardHistory[]>(initialHistories);
+  const [hasLoadedStoredHistories, setHasLoadedStoredHistories] = useState(false);
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [editingBank, setEditingBank] = useState<BankAccount | null>(null);
   const [isSavingBank, setIsSavingBank] = useState(false);
@@ -327,9 +324,56 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   }, [loadBankAccounts]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || hasLoadedStoredHistories) return;
+    const storedValue = window.localStorage.getItem(OFFICE_HISTORY_STORAGE_KEY);
+    if (!storedValue) {
+      setHasLoadedStoredHistories(true);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(storedValue);
+      if (!Array.isArray(parsed)) {
+        setHasLoadedStoredHistories(true);
+        return;
+      }
+      const normalized = parsed
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null;
+          const id =
+            typeof item.id === 'string'
+              ? item.id
+              : typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+                ? crypto.randomUUID()
+                : String(Date.now());
+          const description = typeof item.description === 'string' ? item.description.trim() : '';
+          const type =
+            item.type === 'income' || item.type === 'expense' || item.type === 'profit_distribution'
+              ? item.type
+              : null;
+          if (!description || !type) {
+            return null;
+          }
+          return { id, description, type } satisfies StandardHistory;
+        })
+        .filter((item): item is StandardHistory => item !== null);
+
+      setStandardHistories((prev) => mergeStandardHistories(prev, normalized));
+    } catch {
+      // Ignore invalid storage and keep defaults.
+    } finally {
+      setHasLoadedStoredHistories(true);
+    }
+  }, [hasLoadedStoredHistories]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !hasLoadedStoredHistories) return;
     window.localStorage.setItem(OFFICE_HISTORY_STORAGE_KEY, JSON.stringify(standardHistories));
-  }, [standardHistories]);
+  }, [hasLoadedStoredHistories, standardHistories]);
+
+  useEffect(() => {
+    if (!monthFilter) return;
+    setFeesReferenceMonth(monthFilter);
+  }, [monthFilter]);
 
   const handleSaveBank = async () => {
     if (!bankForm.name.trim() || !bankForm.account_number.trim()) {
@@ -596,6 +640,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       transactions.filter(
         (transaction) =>
           transaction.transaction_type === TransactionType.DESPESA &&
+          !isProfitDistributionTransaction(transaction) &&
           isDuePaymentStatus(transaction.payment_status)
       ),
     [transactions]
@@ -642,6 +687,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       return filteredDisplayTransactions.filter(
         (transaction) =>
           transaction.raw.transaction_type === TransactionType.DESPESA &&
+          !isProfitDistributionTransaction(transaction.raw) &&
           isDuePaymentStatus(transaction.status)
       );
     }
@@ -762,6 +808,13 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       return;
     }
     setRangeForMonth(value);
+  };
+
+  const handleFeesReferenceMonthChange = (value: string) => {
+    const nextValue = value || getCurrentMonthValue();
+    setFeesReferenceMonth(nextValue);
+    setMonthFilter(nextValue);
+    setRangeForMonth(nextValue);
   };
 
   useEffect(() => {
@@ -1625,7 +1678,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
             <MonthYearPicker
               label="Competência"
               value={feesReferenceMonth}
-              onChange={(value) => setFeesReferenceMonth(value || getCurrentMonthValue())}
+              onChange={handleFeesReferenceMonthChange}
               size="sm"
               className="w-full sm:w-[180px]"
               aria-label="Competência dos honorários"
