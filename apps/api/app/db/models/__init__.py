@@ -13,6 +13,10 @@ from app.db.models.finance import (  # noqa: F401
     MonthlyFeeBlock,
     PaymentMethod,
     PaymentStatus,
+    StatementImport,
+    StatementImportFormat,
+    StatementImportRow,
+    StatementImportStatus,
     TransactionType,
 )
 from app.db.models.activity import Activity, ActivityPriority, ActivityRecurrence, ActivityStatus  # noqa: F401
@@ -45,6 +49,10 @@ __all__ = [
     "MonthlyFeeBlock",
     "PaymentMethod",
     "PaymentStatus",
+    "StatementImport",
+    "StatementImportRow",
+    "StatementImportFormat",
+    "StatementImportStatus",
     "TransactionType",
     "Activity",
     "ActivityPriority",

@@ -14,6 +14,7 @@ from app.api.v1.routes import (
     cnaes,
     documents,
     finance,
+    finance_imports,
     health,
     licenses,
     municipal_registrations,
@@ -35,6 +36,7 @@ api_router.include_router(clients.router)
 api_router.include_router(documents.router)
 api_router.include_router(activities.router, prefix="/activities", tags=["activities"])
 api_router.include_router(obligations.router, prefix="/obligations", tags=["obligations"])
+api_router.include_router(finance_imports.router)
 api_router.include_router(finance.router, prefix="/finance", tags=["finance"])
 api_router.include_router(bank_accounts.router)
 api_router.include_router(licenses.router)

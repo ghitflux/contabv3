@@ -39,11 +39,20 @@ class PaymentStatus(str, Enum):
     PARCIAL = "parcial"  # Partially paid
 
 
+class StatementImportFormat(str, Enum):
+    """Supported statement import formats."""
+
+    CSV = "csv"
+    OFX = "ofx"
+    PDF = "pdf"
+
+
 # Request schemas
 class TransactionCreate(BaseModel):
     """Schema for creating a new transaction."""
 
     client_id: UUID = Field(..., description="Client UUID")
+    bank_account_id: Optional[UUID] = Field(None, description="Bank account UUID")
     obligation_id: Optional[UUID] = Field(None, description="Related obligation UUID (optional)")
     transaction_type: TransactionType = Field(TransactionType.RECEITA, description="Transaction type")
     amount: Decimal = Field(..., gt=0, description="Transaction amount (must be positive)")
@@ -77,6 +86,7 @@ class TransactionCreate(BaseModel):
         json_schema_extra = {
             "example": {
                 "client_id": "550e8400-e29b-41d4-a716-446655440000",
+                "bank_account_id": None,
                 "obligation_id": None,
                 "transaction_type": "receita",
                 "amount": 1500.00,
@@ -98,6 +108,7 @@ class TransactionUpdate(BaseModel):
     """Schema for updating an existing transaction."""
 
     amount: Optional[Decimal] = Field(None, gt=0, description="Transaction amount")
+    bank_account_id: Optional[UUID] = Field(None, description="Bank account UUID")
     payment_method: Optional[PaymentMethod] = Field(None, description="Payment method")
     payment_status: Optional[PaymentStatus] = Field(None, description="Payment status")
     due_date: Optional[date] = Field(None, description="Due date")
@@ -156,6 +167,7 @@ class TransactionResponse(BaseModel):
     client_id: UUID
     client_name: Optional[str] = None  # Populated via join
     client_cnpj: Optional[str] = None  # Populated via join
+    bank_account_id: Optional[UUID] = None
     obligation_id: Optional[UUID]
     transaction_type: TransactionType
     amount: Decimal
@@ -187,6 +199,78 @@ class TransactionListResponse(BaseModel):
     total: int
     skip: int
     limit: int
+
+
+class StatementImportRowResponse(BaseModel):
+    """One parsed statement row in the preview."""
+
+    id: UUID
+    line_number: int
+    transaction_date: date
+    description: str
+    raw_description: Optional[str] = None
+    amount_signed: Decimal
+    balance_after: Optional[Decimal] = None
+    transaction_type: TransactionType
+    confidence: Optional[Decimal] = None
+    is_selected: bool
+    duplicate_suspected: bool
+    duplicate_reason: Optional[str] = None
+    category: Optional[str] = None
+    notes: Optional[str] = None
+    committed_transaction_id: Optional[UUID] = None
+    committed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class StatementImportPreviewResponse(BaseModel):
+    """Persisted statement preview batch."""
+
+    import_id: UUID
+    client_id: UUID
+    bank_account_id: UUID
+    source_format: StatementImportFormat
+    status: str
+    original_filename: str
+    detected_bank_name: Optional[str] = None
+    detected_account_number: Optional[str] = None
+    period_start: Optional[date] = None
+    period_end: Optional[date] = None
+    opening_balance: Optional[Decimal] = None
+    closing_balance: Optional[Decimal] = None
+    total_rows: int
+    duplicate_rows: int
+    imported_rows: int
+    total_income: Decimal
+    total_expense: Decimal
+    rows: list[StatementImportRowResponse]
+
+
+class StatementImportCommitRow(BaseModel):
+    """User decisions for one preview row."""
+
+    row_id: UUID
+    is_selected: bool = True
+    category: Optional[str] = Field(None, max_length=20)
+    notes: Optional[str] = Field(None, max_length=2000)
+
+
+class StatementImportCommitRequest(BaseModel):
+    """Commit request for a preview batch."""
+
+    rows: list[StatementImportCommitRow] = Field(..., min_length=1)
+
+
+class StatementImportCommitResponse(BaseModel):
+    """Commit summary for imported transactions."""
+
+    import_id: UUID
+    imported_count: int
+    skipped_count: int
+    duplicate_skipped_count: int
+    transaction_ids: list[UUID]
 
 
 # Fee generation schemas

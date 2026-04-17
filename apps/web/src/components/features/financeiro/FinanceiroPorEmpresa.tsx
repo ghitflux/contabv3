@@ -25,7 +25,7 @@ import {
   Textarea,
   useDisclosure,
 } from '@/heroui';
-import { Download, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Download, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
 import { clientsApi } from '@/lib/api/endpoints/clients';
 import { financeApi } from '@/lib/api/endpoints/finance';
 import { useTransactions } from '@/hooks/useTransactions';
@@ -39,6 +39,7 @@ import {
   extractBankNameFromNotes,
   isAutomaticClientMonthlyFeeTransaction,
   isDuePaymentStatus,
+  isProfitDistributionTransaction,
   getPaymentMethodLabel,
 } from '@/types/finance';
 import { toast } from '@/lib/toast';
@@ -52,6 +53,7 @@ import { TransactionTrashModal } from './TransactionTrashModal';
 import { ConfirmBaixaLancamentoDialog } from './ConfirmBaixaLancamentoDialog';
 import { ConfirmDeleteLancamentoDialog } from './ConfirmDeleteLancamentoDialog';
 import { ClienteLancamentoRapidoCard } from './ClienteLancamentoRapidoCard';
+import { StatementImportModal } from './StatementImportModal';
 import { normalizeAmountForRequest } from '@/lib/finance/amount';
 import { formatLocalDate } from '@/lib/finance/date';
 import {
@@ -96,6 +98,7 @@ export function FinanceiroPorEmpresa({
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [isLoadingBanks, setIsLoadingBanks] = useState(false);
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingBank, setEditingBank] = useState<BankAccount | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -378,7 +381,7 @@ export function FinanceiroPorEmpresa({
       autoFetch: Boolean(selectedClient),
       fetchAllPages: true,
     });
-  const { transactions: paidBalanceTransactions } = useTransactions({
+  const { transactions: paidBalanceTransactions, refresh: refreshPaidBalanceTransactions } = useTransactions({
     filters: {
       client_id: selectedClient || undefined,
       status: PaymentStatus.PAGO,
@@ -400,7 +403,7 @@ export function FinanceiroPorEmpresa({
     }),
     [selectedClient, currentYear]
   );
-  const { transactions: yearTransactions } = useTransactions({
+  const { transactions: yearTransactions, refresh: refreshYearTransactions } = useTransactions({
     filters: yearTransactionFilters,
     autoFetch: Boolean(selectedClient),
     fetchAllPages: true,
@@ -419,7 +422,11 @@ export function FinanceiroPorEmpresa({
   const despesaAno = useMemo(
     () =>
       paidYearTransactions
-        .filter((t) => t.transaction_type === TransactionType.DESPESA)
+        .filter(
+          (t) =>
+            t.transaction_type === TransactionType.DESPESA &&
+            !isProfitDistributionTransaction(t)
+        )
         .reduce((sum, t) => sum + t.amount, 0),
     [paidYearTransactions]
   );
@@ -435,6 +442,33 @@ export function FinanceiroPorEmpresa({
     [yearTransactions]
   );
 
+  const resolveTransactionBankName = useCallback(
+    (transaction: Transaction) => {
+      if (transaction.bank_account_id) {
+        const matchedBank = bankAccounts.find((bank) => bank.id === transaction.bank_account_id);
+        if (matchedBank) return matchedBank.name;
+      }
+      return extractBankNameFromNotes(transaction.notes);
+    },
+    [bankAccounts]
+  );
+
+  const refreshFinancialData = useCallback(async () => {
+    await Promise.all([
+      refresh(),
+      refreshPaidBalanceTransactions(),
+      refreshYearTransactions(),
+    ]);
+    await loadBankAccounts(isAdminOrFunc ? selectedClient || undefined : undefined);
+  }, [
+    isAdminOrFunc,
+    loadBankAccounts,
+    refresh,
+    refreshPaidBalanceTransactions,
+    refreshYearTransactions,
+    selectedClient,
+  ]);
+
   const handleSaveTransaction = async (data: NovoLancamentoData) => {
     if (!selectedClient) {
       toast.error('Selecione uma empresa antes de lançar.');
@@ -444,7 +478,7 @@ export function FinanceiroPorEmpresa({
     try {
       await createTransaction({ ...data, client_id: selectedClient });
       toast.success('Lançamento salvo com sucesso.');
-      await refresh();
+      await refreshFinancialData();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
       }
@@ -462,7 +496,7 @@ export function FinanceiroPorEmpresa({
     if (typeof window === 'undefined') return;
     const handleRefresh = () => {
       if (!selectedClient) return;
-      refresh().catch((error) => {
+      refreshFinancialData().catch((error) => {
         console.error('Erro ao atualizar lançamentos', error);
       });
     };
@@ -470,7 +504,7 @@ export function FinanceiroPorEmpresa({
     return () => {
       window.removeEventListener('finance:transactions-updated', handleRefresh);
     };
-  }, [refresh, selectedClient]);
+  }, [refreshFinancialData, selectedClient]);
 
   const displayTransactions = useMemo<ClientTransaction[]>(
     () =>
@@ -482,10 +516,10 @@ export function FinanceiroPorEmpresa({
         value: transaction.amount,
         payment: transaction.payment_method
           ? getPaymentMethodLabel(transaction.payment_method) || transaction.payment_method
-          : '-',
+          : resolveTransactionBankName(transaction) || '-',
         raw: transaction,
       })),
-    [transactions]
+    [resolveTransactionBankName, transactions]
   );
 
   useEffect(() => {
@@ -573,11 +607,15 @@ export function FinanceiroPorEmpresa({
   const despesa = useMemo(
     () =>
       paidDisplayTransactions
-        .filter((t) => t.type === TransactionType.DESPESA)
+        .filter(
+          (t) => t.type === TransactionType.DESPESA && !isProfitDistributionTransaction(t.raw)
+        )
         .reduce((sum, t) => sum + t.value, 0),
     [paidDisplayTransactions]
   );
   const lucro = receita - despesa;
+  const isNegativeProfit = lucro < 0;
+  const isNegativeProfitYear = lucroAno < 0;
 
   const receivableTransactions = useMemo(
     () =>
@@ -593,6 +631,7 @@ export function FinanceiroPorEmpresa({
       transactions.filter(
         (transaction) =>
           transaction.transaction_type === TransactionType.DESPESA &&
+          !isProfitDistributionTransaction(transaction) &&
           isDuePaymentStatus(transaction.payment_status)
       ),
     [transactions]
@@ -609,7 +648,7 @@ export function FinanceiroPorEmpresa({
     const totalsByBank = new Map<string, number>();
 
     paidBalanceTransactions.forEach((transaction) => {
-      const bankName = extractBankNameFromNotes(transaction.notes);
+      const bankName = resolveTransactionBankName(transaction);
       if (!bankName) return;
       const signedAmount =
         transaction.transaction_type === TransactionType.RECEITA
@@ -622,7 +661,7 @@ export function FinanceiroPorEmpresa({
       ...bank,
       synced_balance: (bank.balance || 0) + (totalsByBank.get(bank.name) ?? 0),
     }));
-  }, [bankAccounts, paidBalanceTransactions]);
+  }, [bankAccounts, paidBalanceTransactions, resolveTransactionBankName]);
   const panelTransactions = useMemo(() => {
     if (activePendingPanel === 'receber') return receivableTransactions;
     if (activePendingPanel === 'pagar') return payableTransactions;
@@ -637,6 +676,7 @@ export function FinanceiroPorEmpresa({
       return transactions.filter(
         (transaction) =>
           transaction.transaction_type === TransactionType.DESPESA &&
+          !isProfitDistributionTransaction(transaction) &&
           transaction.payment_status === PaymentStatus.PAGO
       );
     }
@@ -753,7 +793,7 @@ export function FinanceiroPorEmpresa({
       toast.success('Lançamento atualizado com sucesso.');
       setIsEditModalOpen(false);
       setEditingTransaction(null);
-      await refresh();
+      await refreshFinancialData();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
       }
@@ -769,7 +809,7 @@ export function FinanceiroPorEmpresa({
       setIsConfirmingDelete(true);
       await deleteTransaction(pendingDeleteTransaction.id);
       toast.success('Lançamento removido com sucesso.');
-      await refresh();
+      await refreshFinancialData();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
       }
@@ -792,7 +832,7 @@ export function FinanceiroPorEmpresa({
         paid_date: new Date().toISOString(),
       });
       toast.success('Baixa realizada com sucesso.');
-      await refresh();
+      await refreshFinancialData();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
       }
@@ -984,6 +1024,15 @@ export function FinanceiroPorEmpresa({
               />
             </div>
             <div className="md:ml-auto flex flex-wrap gap-2">
+              <Button
+                variant="flat"
+                color="primary"
+                startContent={<Upload className="h-4 w-4" />}
+                onPress={() => setIsImportModalOpen(true)}
+                isDisabled={!selectedClient && isAdminOrFunc}
+              >
+                Importar Extrato
+              </Button>
               <Button variant="bordered" onPress={setCurrentMonthRange}>
                 Mês atual
               </Button>
@@ -1035,10 +1084,30 @@ export function FinanceiroPorEmpresa({
             </p>
           </CardBody>
         </Card>
-        <Card className="bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-900">
+        <Card
+          className={`border ${
+            isNegativeProfit
+              ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-900'
+              : 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-900'
+          }`}
+        >
           <CardBody>
-            <p className="text-sm text-teal-700 dark:text-teal-400 font-medium mb-1">LUCRO</p>
-            <p className="text-2xl font-bold text-teal-700 dark:text-teal-400">
+            <p
+              className={`text-sm font-medium mb-1 ${
+                isNegativeProfit
+                  ? 'text-red-700 dark:text-red-400'
+                  : 'text-teal-700 dark:text-teal-400'
+              }`}
+            >
+              {isNegativeProfit ? 'PREJUÍZO' : 'LUCRO'}
+            </p>
+            <p
+              className={`text-2xl font-bold ${
+                isNegativeProfit
+                  ? 'text-red-700 dark:text-red-400'
+                  : 'text-teal-700 dark:text-teal-400'
+              }`}
+            >
               {formatCurrency(lucro)}
             </p>
           </CardBody>
@@ -1108,12 +1177,30 @@ export function FinanceiroPorEmpresa({
               </p>
             </CardBody>
           </Card>
-          <Card className="bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-900">
+          <Card
+            className={`border ${
+              isNegativeProfitYear
+                ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-900'
+                : 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-900'
+            }`}
+          >
             <CardBody>
-              <p className="text-sm text-teal-700 dark:text-teal-400 font-medium mb-1">
-                LUCRO DO ANO
+              <p
+                className={`text-sm font-medium mb-1 ${
+                  isNegativeProfitYear
+                    ? 'text-red-700 dark:text-red-400'
+                    : 'text-teal-700 dark:text-teal-400'
+                }`}
+              >
+                {isNegativeProfitYear ? 'PREJUÍZO DO ANO' : 'LUCRO DO ANO'}
               </p>
-              <p className="text-2xl font-bold text-teal-700 dark:text-teal-400">
+              <p
+                className={`text-2xl font-bold ${
+                  isNegativeProfitYear
+                    ? 'text-red-700 dark:text-red-400'
+                    : 'text-teal-700 dark:text-teal-400'
+                }`}
+              >
                 {formatCurrency(lucroAno)}
               </p>
             </CardBody>
@@ -1637,8 +1724,20 @@ export function FinanceiroPorEmpresa({
         }}
         title="Lixeira por Empresa"
         onRestored={async () => {
-          await refresh();
+          await refreshFinancialData();
         }}
+      />
+
+      <StatementImportModal
+        isOpen={isImportModalOpen}
+        onOpenChange={setIsImportModalOpen}
+        bankAccounts={bankAccounts}
+        scopeLabel={
+          isAdminOrFunc
+            ? selectedClientLabel || 'Importe o extrato da empresa selecionada'
+            : 'Importe o extrato da sua empresa'
+        }
+        onImported={refreshFinancialData}
       />
 
       <ConfirmBaixaLancamentoDialog

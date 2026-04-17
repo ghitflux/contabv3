@@ -12,6 +12,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.db.models.bank_account import BankAccount
 from app.db.models.client import ClientStatus
 from app.db.models.finance import (
     FinancialRecurringTemplate,
@@ -86,6 +87,29 @@ class TransactionService:
     def _is_honorarios_transaction(transaction: FinancialTransaction) -> bool:
         """Automatic honorários entries use their own paired flow."""
         return is_auto_fee_transaction(transaction, settings.OFFICE_CLIENT_ID)
+
+    async def _validate_bank_account(
+        self,
+        bank_account_id: UUID | None,
+        client_id: UUID,
+    ) -> UUID | None:
+        """Ensure bank account belongs to the transaction owner context."""
+        if bank_account_id is None:
+            return None
+
+        bank_account = await self.db.scalar(
+            select(BankAccount).where(BankAccount.id == bank_account_id).limit(1)
+        )
+        if bank_account is None:
+            raise ValueError(f"Bank account with ID {bank_account_id} not found")
+
+        if bank_account.client_id is None:
+            if settings.OFFICE_CLIENT_ID is None or client_id != settings.OFFICE_CLIENT_ID:
+                raise ValueError("Office bank account can only be used in office transactions")
+        elif bank_account.client_id != client_id:
+            raise ValueError("Bank account does not belong to the selected client")
+
+        return bank_account_id
 
     async def _create_missing_occurrence_from_template(
         self,
@@ -194,6 +218,7 @@ class TransactionService:
         client = await self.client_repo.get(data.client_id)
         if not client:
             raise ValueError(f"Client with ID {data.client_id} not found")
+        bank_account_id = await self._validate_bank_account(data.bank_account_id, data.client_id)
 
         if data.is_recurring:
             recurring_day = data.recurring_day or data.due_date.day or 1
@@ -220,10 +245,14 @@ class TransactionService:
             )
             if transaction is None:
                 raise ValueError("Could not create the first recurring occurrence")
+            transaction.bank_account_id = bank_account_id
+            await self.db.flush()
+            await self.db.refresh(transaction)
             return transaction
 
         transaction = FinancialTransaction(
             client_id=data.client_id,
+            bank_account_id=bank_account_id,
             obligation_id=data.obligation_id,
             transaction_type=data.transaction_type,
             amount=self._normalize_amount(data.amount),
@@ -264,6 +293,11 @@ class TransactionService:
 
         if "amount" in fields_set and data.amount is not None:
             transaction.amount = self._normalize_amount(data.amount)
+        if "bank_account_id" in fields_set:
+            transaction.bank_account_id = await self._validate_bank_account(
+                data.bank_account_id,
+                transaction.client_id,
+            )
         if "payment_method" in fields_set:
             transaction.payment_method = data.payment_method
         if "payment_status" in fields_set and data.payment_status is not None:

@@ -36,6 +36,7 @@ import {
   Trash2,
   TrendingDown,
   TrendingUp,
+  Upload,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FinanceiroKPIs, type FinanceiroKpi } from './FinanceiroKPIs';
@@ -69,6 +70,7 @@ import type { BankAccount } from '@/types/bank-account';
 import { TransactionTrashModal } from './TransactionTrashModal';
 import { ConfirmBaixaLancamentoDialog } from './ConfirmBaixaLancamentoDialog';
 import { ConfirmDeleteLancamentoDialog } from './ConfirmDeleteLancamentoDialog';
+import { StatementImportModal } from './StatementImportModal';
 import { normalizeAmountForRequest } from '@/lib/finance/amount';
 import { formatLocalDate } from '@/lib/finance/date';
 import {
@@ -202,6 +204,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   const [standardHistories, setStandardHistories] = useState<StandardHistory[]>(initialHistories);
   const [hasLoadedStoredHistories, setHasLoadedStoredHistories] = useState(false);
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingBank, setEditingBank] = useState<BankAccount | null>(null);
   const [isSavingBank, setIsSavingBank] = useState(false);
   const [successModal, setSuccessModal] = useState<{
@@ -458,7 +461,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     });
 
   const currentYear = useMemo(() => new Date().getFullYear(), []);
-  const { transactions: paidBalanceTransactions } = useTransactions({
+  const { transactions: paidBalanceTransactions, refresh: refreshPaidBalanceTransactions } = useTransactions({
     filters: {
       client_id: OFFICE_CLIENT_ID || undefined,
       status: PaymentStatus.PAGO,
@@ -468,7 +471,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     autoFetch: Boolean(OFFICE_CLIENT_ID),
     fetchAllPages: true,
   });
-  const { transactions: yearTransactions } = useTransactions({
+  const { transactions: yearTransactions, refresh: refreshYearTransactions } = useTransactions({
     filters: {
       client_id: OFFICE_CLIENT_ID || undefined,
       reference_month_from: `${currentYear}-01-01`,
@@ -502,6 +505,26 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   );
   const lucroAno = receitaAno - despesaAno;
 
+  const resolveTransactionBankName = useCallback(
+    (transaction: Transaction) => {
+      if (transaction.bank_account_id) {
+        const matchedBank = bankAccounts.find((bank) => bank.id === transaction.bank_account_id);
+        if (matchedBank) return matchedBank.name;
+      }
+      return extractBankNameFromNotes(transaction.notes);
+    },
+    [bankAccounts]
+  );
+
+  const refreshFinancialData = useCallback(async () => {
+    await Promise.all([
+      refresh(),
+      refreshPaidBalanceTransactions(),
+      refreshYearTransactions(),
+    ]);
+    await loadBankAccounts();
+  }, [loadBankAccounts, refresh, refreshPaidBalanceTransactions, refreshYearTransactions]);
+
   const displayTransactions = useMemo<DisplayTransaction[]>(() => {
     return transactions.map((transaction) => ({
       id: transaction.id,
@@ -512,7 +535,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
           ? 'Entrada'
           : 'Saída',
       bank:
-        extractBankNameFromNotes(transaction.notes) ||
+        resolveTransactionBankName(transaction) ||
         (transaction.payment_method
           ? getPaymentMethodLabel(transaction.payment_method) || transaction.payment_method
           : '-'),
@@ -523,7 +546,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       raw: transaction,
       isRecurring: Boolean(transaction.recurring_template_id),
     }));
-  }, [transactions]);
+  }, [resolveTransactionBankName, transactions]);
 
   useEffect(() => {
     setTransactionsPage(1);
@@ -657,7 +680,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     const totalsByBank = new Map<string, number>();
 
     paidBalanceTransactions.forEach((transaction) => {
-      const bankName = extractBankNameFromNotes(transaction.notes);
+      const bankName = resolveTransactionBankName(transaction);
       if (!bankName) return;
       const signedAmount =
         transaction.transaction_type === TransactionType.RECEITA
@@ -673,7 +696,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         synced_balance: currentBalance,
       };
     });
-  }, [bankAccounts, paidBalanceTransactions]);
+  }, [bankAccounts, paidBalanceTransactions, resolveTransactionBankName]);
 
   const panelTransactions = useMemo<DisplayTransaction[]>(() => {
     if (activePendingPanel === 'receber') {
@@ -830,7 +853,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const handleRefresh = () => {
-      refresh().catch((error) => {
+      refreshFinancialData().catch((error) => {
         console.error('Erro ao atualizar lançamentos do escritório', error);
       });
     };
@@ -838,7 +861,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     return () => {
       window.removeEventListener('finance:transactions-updated', handleRefresh);
     };
-  }, [refresh]);
+  }, [refreshFinancialData]);
 
   useEffect(() => {
     const referenceMonth = `${feesReferenceMonth || getCurrentMonthValue()}-01`;
@@ -1161,7 +1184,8 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       return;
     }
 
-    const bankName = bankAccounts.find((bank) => bank.id === newTransaction.bank)?.name;
+    const selectedBank = bankAccounts.find((bank) => bank.id === newTransaction.bank);
+    const bankName = selectedBank?.name;
     const notesParts = [];
     if (bankName) notesParts.push(`Banco: ${bankName}`);
     if (newTransaction.observation) notesParts.push(`Obs: ${newTransaction.observation}`);
@@ -1174,6 +1198,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     try {
       await createTransaction({
         client_id: OFFICE_CLIENT_ID,
+        bank_account_id: selectedBank?.id ?? null,
         transaction_type:
           newTransaction.type === 'Entrada' ? TransactionType.RECEITA : TransactionType.DESPESA,
         amount,
@@ -1445,6 +1470,15 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
           />
         </div>
         <div className="md:ml-auto flex flex-wrap gap-2">
+          <Button
+            variant="flat"
+            color="primary"
+            startContent={<Upload className="h-4 w-4" />}
+            onPress={() => setIsImportModalOpen(true)}
+            isDisabled={bankAccounts.length === 0}
+          >
+            Importar Extrato
+          </Button>
           <Button variant="bordered" onPress={setCurrentMonthRange}>
             Mês atual
           </Button>
@@ -2626,8 +2660,16 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         }}
         title="Lixeira do Escritório"
         onRestored={async () => {
-          await refresh();
+          await refreshFinancialData();
         }}
+      />
+
+      <StatementImportModal
+        isOpen={isImportModalOpen}
+        onOpenChange={setIsImportModalOpen}
+        bankAccounts={bankAccounts}
+        scopeLabel="Importe o extrato bancário do escritório"
+        onImported={refreshFinancialData}
       />
 
       <ConfirmBaixaLancamentoDialog

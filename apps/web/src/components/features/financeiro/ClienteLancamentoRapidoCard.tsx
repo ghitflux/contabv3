@@ -124,7 +124,8 @@ export function ClienteLancamentoRapidoCard({
       return;
     }
 
-    const bankName = bankAccounts.find((bank) => bank.id === form.bank)?.name;
+    const selectedBank = bankAccounts.find((bank) => bank.id === form.bank);
+    const bankName = selectedBank?.name;
     const notesParts = [];
     if (bankName) notesParts.push(`Banco: ${bankName}`);
     if (form.observation.trim()) notesParts.push(`Obs: ${form.observation.trim()}`);
@@ -137,6 +138,7 @@ export function ClienteLancamentoRapidoCard({
       setIsSubmitting(true);
       const transaction = await createTransaction({
         client_id: clientId,
+        bank_account_id: selectedBank?.id ?? null,
         transaction_type:
           form.movement === 'Entrada' ? TransactionType.RECEITA : TransactionType.DESPESA,
         amount,

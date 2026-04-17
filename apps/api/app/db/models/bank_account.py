@@ -30,6 +30,7 @@ class BankAccount(Base, UUIDMixin, TimestampMixin):
     accounting_account: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
     client = relationship("Client", back_populates="bank_accounts")
+    transactions = relationship("FinancialTransaction", back_populates="bank_account")
 
     def __repr__(self) -> str:
         return f"<BankAccount {self.name} ({self.account_number})>"

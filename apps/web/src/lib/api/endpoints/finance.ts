@@ -26,6 +26,9 @@ import type {
   ReceivablesAgingReport,
   RevenueByPeriodReport,
   ClientFinancialSummary,
+  StatementImportPreviewResponse,
+  StatementImportCommitRequest,
+  StatementImportCommitResponse,
 } from '@/types/finance';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -59,6 +62,11 @@ const normalizePositiveInt = (value: number | undefined, fallback: number, max: 
 const normalizeCurrencyNumber = (value: number): number => {
   if (!Number.isFinite(value)) return value;
   return Math.round((value + Number.EPSILON) * 100) / 100;
+};
+
+const normalizeOptionalCurrency = (value: number | string | null | undefined) => {
+  if (value === null || value === undefined || value === '') return value ?? null;
+  return normalizeCurrencyNumber(Number(value));
 };
 
 const resolveDownloadFileName = (contentDisposition: string | null, fallback: string) => {
@@ -234,6 +242,58 @@ export const financeApi = {
     const formData = new FormData();
     formData.append('file', file);
     return apiClient.upload<Transaction>(`/finance/${transactionId}/attachment`, formData);
+  },
+
+  async previewStatementImport(
+    bankAccountId: string,
+    file: File
+  ): Promise<StatementImportPreviewResponse> {
+    const formData = new FormData();
+    formData.append('bank_account_id', bankAccountId);
+    formData.append('file', file);
+    const response = await apiClient.upload<StatementImportPreviewResponse>(
+      '/finance/imports/preview',
+      formData
+    );
+    return {
+      ...response,
+      opening_balance: normalizeOptionalCurrency(response.opening_balance),
+      closing_balance: normalizeOptionalCurrency(response.closing_balance),
+      total_income: normalizeCurrencyNumber(Number(response.total_income ?? 0)),
+      total_expense: normalizeCurrencyNumber(Number(response.total_expense ?? 0)),
+      rows: response.rows.map((row) => ({
+        ...row,
+        amount_signed: normalizeCurrencyNumber(Number(row.amount_signed ?? 0)),
+        balance_after: normalizeOptionalCurrency(row.balance_after),
+        confidence:
+          typeof row.confidence === 'number' ? row.confidence : Number(row.confidence ?? 0),
+      })),
+    };
+  },
+
+  async getStatementImport(importId: string): Promise<StatementImportPreviewResponse> {
+    const response = await apiClient.get<StatementImportPreviewResponse>(`/finance/imports/${importId}`);
+    return {
+      ...response,
+      opening_balance: normalizeOptionalCurrency(response.opening_balance),
+      closing_balance: normalizeOptionalCurrency(response.closing_balance),
+      total_income: normalizeCurrencyNumber(Number(response.total_income ?? 0)),
+      total_expense: normalizeCurrencyNumber(Number(response.total_expense ?? 0)),
+      rows: response.rows.map((row) => ({
+        ...row,
+        amount_signed: normalizeCurrencyNumber(Number(row.amount_signed ?? 0)),
+        balance_after: normalizeOptionalCurrency(row.balance_after),
+        confidence:
+          typeof row.confidence === 'number' ? row.confidence : Number(row.confidence ?? 0),
+      })),
+    };
+  },
+
+  async commitStatementImport(
+    importId: string,
+    data: StatementImportCommitRequest
+  ): Promise<StatementImportCommitResponse> {
+    return apiClient.post<StatementImportCommitResponse>(`/finance/imports/${importId}/commit`, data);
   },
 
   async downloadTransactionAttachment(

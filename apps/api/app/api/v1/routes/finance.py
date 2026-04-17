@@ -71,6 +71,7 @@ def _format_amount(value) -> str | None:
 def _transaction_snapshot(transaction) -> dict:
     return {
         "client_id": str(transaction.client_id) if transaction.client_id else None,
+        "bank_account_id": str(transaction.bank_account_id) if getattr(transaction, "bank_account_id", None) else None,
         "description": transaction.description,
         "amount": _format_amount(transaction.amount),
         "transaction_type": _enum_value(transaction.transaction_type),
@@ -106,6 +107,7 @@ def _serialize_transaction_response(transaction) -> TransactionResponse:
         client_id=transaction.client_id,
         client_name=transaction.client.razao_social if getattr(transaction, "client", None) else None,
         client_cnpj=transaction.client.cnpj if getattr(transaction, "client", None) else None,
+        bank_account_id=transaction.bank_account_id,
         obligation_id=transaction.obligation_id,
         transaction_type=transaction.transaction_type,
         amount=transaction.amount,
@@ -230,6 +232,7 @@ async def list_transactions(
             "client_id": transaction.client_id,
             "client_name": transaction.client.razao_social if transaction.client else None,
             "client_cnpj": transaction.client.cnpj if transaction.client else None,
+            "bank_account_id": transaction.bank_account_id,
             "obligation_id": transaction.obligation_id,
             "transaction_type": transaction.transaction_type,
             "amount": transaction.amount,

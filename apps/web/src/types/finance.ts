@@ -26,6 +26,12 @@ export enum PaymentStatus {
   PARCIAL = 'parcial',
 }
 
+export enum StatementImportFormat {
+  CSV = 'csv',
+  OFX = 'ofx',
+  PDF = 'pdf',
+}
+
 export const DISTRIBUTION_PROFITS_CATEGORY = 'distribuicao_lucros';
 
 export const DUE_PAYMENT_STATUSES: PaymentStatus[] = [
@@ -56,6 +62,7 @@ export interface Transaction {
   client_id: string;
   client_name?: string;
   client_cnpj?: string;
+  bank_account_id?: string | null;
   obligation_id?: string | null;
   transaction_type: TransactionType;
   amount: number;
@@ -80,6 +87,7 @@ export interface Transaction {
 // Create/Update interfaces
 export interface TransactionCreate {
   client_id: string;
+  bank_account_id?: string | null;
   obligation_id?: string | null;
   transaction_type?: TransactionType;
   amount: number;
@@ -98,6 +106,7 @@ export interface TransactionCreate {
 
 export interface TransactionUpdate {
   amount?: number;
+  bank_account_id?: string | null;
   payment_method?: PaymentMethod | null;
   payment_status?: PaymentStatus;
   due_date?: string;
@@ -116,6 +125,65 @@ export interface TransactionMarkAsPaid {
 
 export interface TransactionCancel {
   reason: string;
+}
+
+export interface StatementImportRow {
+  id: string;
+  line_number: number;
+  transaction_date: string;
+  description: string;
+  raw_description?: string | null;
+  amount_signed: number;
+  balance_after?: number | null;
+  transaction_type: TransactionType;
+  confidence?: number | null;
+  is_selected: boolean;
+  duplicate_suspected: boolean;
+  duplicate_reason?: string | null;
+  category?: string | null;
+  notes?: string | null;
+  committed_transaction_id?: string | null;
+  committed_at?: string | null;
+}
+
+export interface StatementImportPreviewResponse {
+  import_id: string;
+  client_id: string;
+  bank_account_id: string;
+  source_format: StatementImportFormat;
+  status: string;
+  original_filename: string;
+  detected_bank_name?: string | null;
+  detected_account_number?: string | null;
+  period_start?: string | null;
+  period_end?: string | null;
+  opening_balance?: number | null;
+  closing_balance?: number | null;
+  total_rows: number;
+  duplicate_rows: number;
+  imported_rows: number;
+  total_income: number;
+  total_expense: number;
+  rows: StatementImportRow[];
+}
+
+export interface StatementImportCommitRow {
+  row_id: string;
+  is_selected: boolean;
+  category?: string | null;
+  notes?: string | null;
+}
+
+export interface StatementImportCommitRequest {
+  rows: StatementImportCommitRow[];
+}
+
+export interface StatementImportCommitResponse {
+  import_id: string;
+  imported_count: number;
+  skipped_count: number;
+  duplicate_skipped_count: number;
+  transaction_ids: string[];
 }
 
 // List response
