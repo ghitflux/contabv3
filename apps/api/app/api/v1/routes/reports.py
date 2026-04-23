@@ -38,6 +38,7 @@ from app.services.report.dre_report import DREReportService
 from app.services.report.expenses_by_category_report import ExpensesByCategoryReportService
 from app.services.report.exporters.csv_exporter import CSVExporter
 from app.services.report.exporters.pdf_exporter import PDFExporter
+from app.services.report.geral_report import GeralReportService
 from app.services.report.kpi_report import KPIReportService
 from app.services.report.license_report import LicenseReportService
 from app.services.report.obligation_report import ObligationReportService
@@ -46,6 +47,7 @@ from app.services.report.revenue_by_client_report import RevenueByClientReportSe
 router = APIRouter()
 
 REPORT_DISPLAY_NAMES = {
+    ReportType.GERAL: "Relatório Geral",
     ReportType.DRE: "DRE Simplificada",
     ReportType.FLUXO_CAIXA: "Fluxo de Caixa",
     ReportType.LIVRO_CAIXA: "Livro Caixa",
@@ -74,6 +76,11 @@ async def _enforce_report_access(
         )
 
     if current_user.role == UserRole.CLIENTE:
+        if report_type_value == ReportType.CLIENTES.value:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Client users cannot access client portfolio reports",
+            )
         client_repo = ClientRepository(db)
         client = await client_repo.get_by_user_id(current_user.id, current_user.email)
         if not client:
@@ -88,6 +95,7 @@ async def _enforce_report_access(
 def get_report_service(report_type: ReportType, db: AsyncSession):
     """Factory to get the appropriate report service."""
     services = {
+        ReportType.GERAL: GeralReportService,
         ReportType.DRE: DREReportService,
         ReportType.FLUXO_CAIXA: CashFlowReportService,
         ReportType.LIVRO_CAIXA: CashBookReportService,
@@ -112,6 +120,15 @@ def get_report_service(report_type: ReportType, db: AsyncSession):
 async def list_report_types():
     """List all available report types with metadata."""
     types = [
+        {
+            "type": "geral",
+            "name": "Relatório Geral",
+            "description": "Visão gerencial com empresa, resumo financeiro, DRE, KPIs, evolução, análises e projeções",
+            "category": "financeiro",
+            "supports_customization": True,
+            "supported_charts": ["line", "bar", "table"],
+            "required_permissions": None,
+        },
         {
             "type": "dre",
             "name": "Demonstrativo de Resultados",
@@ -640,6 +657,9 @@ def _extract_summary_from_report_data(report_data: dict) -> dict[str, Any]:
         "crescimento_yoy",
         "roi",
         "total_clientes",
+        "total_clientes_ativos",
+        "total_obligations",
+        "compliance_rate",
         "total_transacoes",
         "total_transacoes_atrasadas",
         "total_receber",
@@ -654,6 +674,10 @@ def _extract_summary_from_report_data(report_data: dict) -> dict[str, Any]:
         if field in report_data:
             summary[field] = report_data[field]
 
+    if "resumo_financeiro" in report_data:
+        summary.update(report_data.get("resumo_financeiro") or {})
+    if "kpis" in report_data and "margem_operacional" in report_data["kpis"]:
+        summary["margem_operacional"] = report_data["kpis"]["margem_operacional"]
     if "entries" in report_data and "total_lancamentos" not in summary:
         summary["total_lancamentos"] = len(report_data.get("entries", []))
     if "periods" in report_data and "total_periodos" not in summary:
@@ -664,6 +688,76 @@ def _extract_summary_from_report_data(report_data: dict) -> dict[str, Any]:
 
 def _prepare_table_data(report_type: ReportType, report_data: dict) -> list[list[str]]:
     """Convert report data to table format for PDF/CSV."""
+    cash_book_type_labels = {
+        "entrada": "Entrada",
+        "saida": "Saída",
+        "aplicacao": "Aplicação",
+        "resgate": "Resgate",
+    }
+
+    if report_type == ReportType.GERAL:
+        table_data = [["Seção", "Indicador", "Valor"]]
+        empresa = report_data.get("empresa", {}) or {}
+        for key in ["escopo", "nome", "razao_social", "cnpj", "email", "telefone", "endereco"]:
+            if empresa.get(key):
+                table_data.append(["Empresa", _format_column_name(key), str(empresa.get(key))])
+
+        resumo = report_data.get("resumo_financeiro", {}) or {}
+        financial_metrics = [
+            ("receita_total", "Receita Total", "currency"),
+            ("despesa_total", "Despesa Total", "currency"),
+            ("resultado_liquido", "Resultado Líquido", "currency"),
+            ("margem_lucro", "Margem de Lucro", "percent"),
+        ]
+        for key, label, metric_type in financial_metrics:
+            if key not in resumo:
+                continue
+            value = _format_percent(resumo[key]) if metric_type == "percent" else _format_currency(resumo[key])
+            table_data.append(["Resumo Financeiro", label, value])
+
+        kpis = report_data.get("kpis", {}) or {}
+        if "margem_operacional" in kpis:
+            table_data.append(["KPIs", "Margem Operacional", _format_percent(kpis["margem_operacional"])])
+        if "resultado_liquido" in kpis:
+            table_data.append(["KPIs", "Resultado Líquido", _format_currency(kpis["resultado_liquido"])])
+
+        for item in report_data.get("evolucao_mensal", []):
+            table_data.append([
+                "Evolução Mensal",
+                str(item.get("competencia") or "-"),
+                (
+                    f"Receita {_format_currency(item.get('receita_total', 0))} | "
+                    f"Despesa {_format_currency(item.get('despesa_total', 0))} | "
+                    f"Resultado {_format_currency(item.get('resultado_liquido', 0))}"
+                ),
+            ])
+
+        analises = report_data.get("analises", {}) or {}
+        for item in analises.get("principais_receitas", []):
+            table_data.append([
+                "Principais Receitas",
+                str(item.get("categoria") or "-"),
+                _format_currency(item.get("valor", 0)),
+            ])
+        for item in analises.get("principais_despesas", []):
+            table_data.append([
+                "Principais Despesas",
+                str(item.get("categoria") or "-"),
+                _format_currency(item.get("valor", 0)),
+            ])
+
+        for item in (report_data.get("projecoes", {}) or {}).get("periodos", []):
+            table_data.append([
+                "Projeções",
+                str(item.get("competencia") or "-"),
+                (
+                    f"Receita {_format_currency(item.get('previsao_receita', 0))} | "
+                    f"Despesa {_format_currency(item.get('previsao_despesa', 0))} | "
+                    f"Resultado {_format_currency(item.get('previsao_resultado', 0))}"
+                ),
+            ])
+        return table_data
+
     if report_type == ReportType.KPIS:
         table_data = [["Indicador", "Valor"]]
         metrics: list[tuple[str, str, str]] = [
@@ -701,6 +795,50 @@ def _prepare_table_data(report_type: ReportType, report_data: dict) -> list[list
 
         return table_data
 
+    if report_type == ReportType.CLIENTES and "clients" in report_data:
+        table_data = [[
+            "Cliente",
+            "CNPJ",
+            "Status",
+            "Regime Tributário",
+            "Honorários",
+            "Pendente",
+            "Atrasado",
+        ]]
+        for item in report_data.get("clients", []):
+            table_data.append([
+                str(item.get("nome_fantasia") or item.get("razao_social") or "-"),
+                str(item.get("cnpj") or "-"),
+                _format_status_label(item.get("status")),
+                _format_regime_label(item.get("regime_tributario")),
+                _format_currency(item.get("honorarios", 0)),
+                _format_currency(item.get("total_pendente", 0)),
+                _format_currency(item.get("total_atrasado", 0)),
+            ])
+        return table_data
+
+    if report_type == ReportType.OBRIGACOES and "obligations" in report_data:
+        table_data = [[
+            "Cliente",
+            "CNPJ",
+            "Obrigação",
+            "Status",
+            "Competência",
+            "Vencimento",
+            "Prioridade",
+        ]]
+        for item in report_data.get("obligations", []):
+            table_data.append([
+                str(item.get("client_name") or "-"),
+                str(item.get("client_cnpj") or "-"),
+                str(item.get("obligation_name") or "-"),
+                _format_status_label(item.get("status")),
+                str(item.get("competencia") or "-"),
+                _format_date(item.get("due_date")),
+                _format_status_label(item.get("priority")),
+            ])
+        return table_data
+
     if report_type == ReportType.LIVRO_CAIXA and "entries" in report_data:
         table_data = [[
             "Data",
@@ -717,7 +855,7 @@ def _prepare_table_data(report_type: ReportType, report_data: dict) -> list[list
         for item in report_data.get("entries", []):
             table_data.append([
                 _format_date(item.get("data")),
-                "Entrada" if item.get("tipo") == "entrada" else "Saída",
+                cash_book_type_labels.get(str(item.get("tipo") or ""), "Saída"),
                 str(item.get("descricao") or "-"),
                 str(item.get("cliente") or "-"),
                 str(item.get("cnpj") or "-"),
@@ -890,6 +1028,40 @@ def _format_payment_status(value: Any) -> str:
         "atrasado": "Atrasado",
         "cancelado": "Cancelado",
         "parcial": "Parcial",
+    }
+    if not value:
+        return "-"
+    key = str(value).lower()
+    return labels.get(key, str(value))
+
+
+def _format_status_label(value: Any) -> str:
+    labels = {
+        "ativo": "Ativo",
+        "inativo": "Inativo",
+        "inadimplente": "Inadimplente",
+        "pendente": "Pendente",
+        "em_andamento": "Em andamento",
+        "concluida": "Concluída",
+        "atrasada": "Em atraso",
+        "cancelada": "Cancelada",
+        "baixa": "Baixa",
+        "media": "Média",
+        "alta": "Alta",
+        "urgente": "Urgente",
+    }
+    if not value:
+        return "-"
+    key = str(value).lower()
+    return labels.get(key, str(value))
+
+
+def _format_regime_label(value: Any) -> str:
+    labels = {
+        "simples_nacional": "Simples Nacional",
+        "lucro_presumido": "Lucro Presumido",
+        "lucro_real": "Lucro Real",
+        "mei": "MEI",
     }
     if not value:
         return "-"

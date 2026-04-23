@@ -18,7 +18,7 @@ import {
 import { RotateCcw, Trash2 } from 'lucide-react';
 import { financeApi } from '@/lib/api/endpoints/finance';
 import type { Transaction, TransactionFilters } from '@/types/finance';
-import { TransactionType } from '@/types/finance';
+import { getTransactionTypeLabel } from '@/types/finance';
 import { toast } from '@/lib/toast';
 
 interface TransactionTrashModalProps {
@@ -177,9 +177,7 @@ export function TransactionTrashModal({
                       <TableCell>{formatDateTime(transaction.deleted_at)}</TableCell>
                       <TableCell>{formatDate(transaction.due_date)}</TableCell>
                       <TableCell>
-                        {transaction.transaction_type === TransactionType.RECEITA
-                          ? 'Contas a Receber'
-                          : 'Contas a Pagar'}
+                        {getTransactionTypeLabel(transaction)}
                       </TableCell>
                       <TableCell>{transaction.description}</TableCell>
                       <TableCell className="text-right font-semibold">

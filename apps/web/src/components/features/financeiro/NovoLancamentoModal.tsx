@@ -19,7 +19,7 @@ import { DatePickerField } from "@/components/ui/DatePickerField";
 import { PlanoDeContasAutocomplete } from "@/components/ui/PlanoDeContasAutocomplete";
 import { TransactionType, PaymentStatus, PaymentMethod } from "@/types/finance";
 import { isPlanoContaCodigo } from "@/constants/planoDeContas";
-import { getFinancePresetDescriptions } from "@/constants/financePresets";
+import { getFinancePresetDescriptions, type FinanceHistoryType } from "@/constants/financePresets";
 import { formatISO } from "date-fns";
 import { toast } from "@/lib/toast";
 import { normalizeAmountForRequest } from "@/lib/finance/amount";
@@ -69,6 +69,15 @@ type CategoryMode = "plano" | "custom";
 
 const MAX_CUSTOM_CATEGORY_LENGTH = 20;
 
+const getPresetTypeForTransactionType = (
+  transactionType?: TransactionType
+): FinanceHistoryType => {
+  if (transactionType === TransactionType.DESPESA) return "expense";
+  if (transactionType === TransactionType.APLICACAO) return "financial_application";
+  if (transactionType === TransactionType.RESGATE) return "financial_redemption";
+  return "income";
+};
+
 export function NovoLancamentoModal({
   isOpen,
   onOpenChange,
@@ -112,10 +121,7 @@ export function NovoLancamentoModal({
   }, [defaultClientId, isOpen]);
 
   const descriptionSuggestions = useMemo(
-    () =>
-      getFinancePresetDescriptions(
-        formData.transaction_type === TransactionType.DESPESA ? "expense" : "income"
-      ),
+    () => getFinancePresetDescriptions(getPresetTypeForTransactionType(formData.transaction_type)),
     [formData.transaction_type]
   );
 
@@ -231,6 +237,8 @@ export function NovoLancamentoModal({
                 >
                   <SelectItem key={TransactionType.RECEITA}>💰 Receita</SelectItem>
                   <SelectItem key={TransactionType.DESPESA}>📊 Despesa</SelectItem>
+                  <SelectItem key={TransactionType.APLICACAO}>Aplicação financeira</SelectItem>
+                  <SelectItem key={TransactionType.RESGATE}>Resgate de aplicação</SelectItem>
                 </Select>
 
                 {/* Cliente */}

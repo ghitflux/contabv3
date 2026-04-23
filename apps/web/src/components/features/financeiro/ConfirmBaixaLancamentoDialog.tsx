@@ -9,7 +9,7 @@ import {
   ModalHeader,
 } from '@/heroui';
 import { BadgeCheck, CalendarDays, CircleDollarSign, ReceiptText } from 'lucide-react';
-import { Transaction, TransactionType } from '@/types/finance';
+import { Transaction, getTransactionTypeLabel } from '@/types/finance';
 import { formatLocalDate } from '@/lib/finance/date';
 
 interface ConfirmBaixaLancamentoDialogProps {
@@ -27,9 +27,6 @@ const formatCurrency = (value: number) =>
   }).format(value);
 
 const formatDate = formatLocalDate;
-
-const getTypeLabel = (type: TransactionType) =>
-  type === TransactionType.RECEITA ? 'Contas a Receber' : 'Contas a Pagar';
 
 export function ConfirmBaixaLancamentoDialog({
   isOpen,
@@ -90,7 +87,10 @@ export function ConfirmBaixaLancamentoDialog({
                 </div>
               </div>
               <p className="text-xs text-default-500">
-                Tipo: <span className="font-medium text-default-700">{getTypeLabel(transaction.transaction_type)}</span>
+                Tipo:{' '}
+                <span className="font-medium text-default-700">
+                  {getTransactionTypeLabel(transaction)}
+                </span>
               </p>
             </div>
           ) : null}

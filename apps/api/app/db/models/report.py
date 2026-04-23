@@ -14,6 +14,9 @@ from app.db.models.base import Base, TimestampMixin, UUIDMixin
 class ReportType(str, enum.Enum):
     """Type of report to generate."""
 
+    # Strategic reports
+    GERAL = "geral"
+
     # Financial reports
     DRE = "dre"
     FLUXO_CAIXA = "fluxo_caixa"

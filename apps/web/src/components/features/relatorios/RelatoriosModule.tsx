@@ -29,6 +29,9 @@ import {
   DollarSignIcon,
   PieChartIcon,
   CalendarIcon,
+  Building2Icon,
+  UsersIcon,
+  ObligationIcon,
 } from '@/lib/icons';
 import { Activity, Target } from 'lucide-react';
 import { ReportBuilder } from './ReportBuilder';
@@ -41,6 +44,47 @@ import { DatePickerField } from '@/components/ui/DatePickerField';
 import { useAuth } from '@/hooks/auth/AuthContext';
 import { clientsApi } from '@/lib/api/endpoints/clients';
 import type { ClientListItem } from '@/types/client';
+
+const strategicReports = [
+  {
+    type: ReportType.GERAL,
+    title: 'Relatório Geral',
+    description: 'Visão gerencial com dados da empresa, resumo financeiro, DRE, KPIs, evolução e projeções',
+    icon: Building2Icon,
+    color: 'primary',
+    highlight: true,
+    features: [
+      'Receita, despesa e margem',
+      'DRE simplificada e KPIs',
+      'Evolução mensal e projeções',
+    ],
+  },
+  {
+    type: ReportType.CLIENTES,
+    title: 'Relatório de Clientes',
+    description: 'Carteira de clientes com total de ativos e classificação por regime e status',
+    icon: UsersIcon,
+    color: 'green',
+    features: [
+      'Total de clientes ativos',
+      'Agrupamento por regime tributário',
+      'Agrupamento por status',
+    ],
+    officeOnly: true,
+  },
+  {
+    type: ReportType.OBRIGACOES,
+    title: 'Obrigações Mensais',
+    description: 'Controle consolidado de obrigações por cliente, status e competência',
+    icon: ObligationIcon,
+    color: 'amber',
+    features: [
+      'Pendentes, entregues e atrasadas',
+      'Competência e vencimento',
+      'Totais por status',
+    ],
+  },
+];
 
 const financialReports = [
   {
@@ -131,7 +175,7 @@ export function RelatoriosModule() {
   // Exibir controles avançados para todos exceto cliente; por padrão (user indefinido) mostrar.
   const isAdminOrFunc = user?.role !== 'cliente';
   const OFFICE_CLIENT_ID = process.env.NEXT_PUBLIC_OFFICE_CLIENT_ID ?? '';
-  const [activeTab, setActiveTab] = useState('essenciais');
+  const [activeTab, setActiveTab] = useState('estrategicos');
   const [showBuilder, setShowBuilder] = useState(false);
   const [selectedReport, setSelectedReport] = useState<ReportType | null>(null);
   const [isGeneratingId, setIsGeneratingId] = useState<string | null>(null);
@@ -181,7 +225,7 @@ export function RelatoriosModule() {
     setSelectedReport(reportType);
     setSelectedClientId(null);
     setClientSearch('');
-    setIsOfficeReport(Boolean(OFFICE_CLIENT_ID));
+    setIsOfficeReport(reportType === ReportType.GERAL && Boolean(OFFICE_CLIENT_ID));
     setRangeModalOpen(true);
   };
 
@@ -303,6 +347,10 @@ export function RelatoriosModule() {
     return colorMap[color] || colorMap.slate;
   };
 
+  const visibleStrategicReports = strategicReports.filter(
+    (report) => !report.officeOnly || isAdminOrFunc
+  );
+
   return (
     <motion.div
       initial="hidden"
@@ -340,6 +388,95 @@ export function RelatoriosModule() {
             tab: 'whitespace-nowrap',
           }}
         >
+          <Tab
+            key="estrategicos"
+            title={
+              <div className="flex items-center gap-2">
+                <BarChartIcon className="h-4 w-4" />
+                Relatórios Estratégicos
+              </div>
+            }
+          >
+            <motion.div
+              key="estrategicos"
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              variants={fadeIn}
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-6"
+            >
+              {visibleStrategicReports.map((report) => {
+                const Icon = report.icon;
+                const bgClasses = getColorClasses(report.color);
+                const textClasses = getTextColorClasses(report.color);
+                const iconBgClasses = getIconBgClasses(report.color);
+                const isHighlight = Boolean(report.highlight);
+
+                return (
+                  <Card
+                    key={report.type}
+                    className={`${bgClasses} border relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:scale-[1.02]`}
+                  >
+                    <div className="absolute top-0 right-0 w-32 h-32 opacity-10 dark:opacity-5 pointer-events-none">
+                      <div className={`w-full h-full rounded-full blur-3xl ${iconBgClasses}`} />
+                    </div>
+
+                    {isHighlight && (
+                      <div className="absolute top-2 right-2 z-10">
+                        <Chip size="sm" variant="flat" color="primary" className="font-semibold">
+                          Estratégico
+                        </Chip>
+                      </div>
+                    )}
+
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start gap-3 w-full">
+                        <div className={`p-2.5 rounded-lg ${iconBgClasses}`}>
+                          <Icon className={`h-5 w-5 ${textClasses}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className={`text-lg font-semibold ${textClasses} line-clamp-2`}>
+                            {report.title}
+                          </h3>
+                        </div>
+                      </div>
+                    </CardHeader>
+
+                    <CardBody className="pt-0">
+                      <p className={`text-sm mb-4 ${textClasses} opacity-80 line-clamp-2`}>
+                        {report.description}
+                      </p>
+
+                      <div className="mb-4 space-y-1.5">
+                        {report.features.map((feature) => (
+                          <div
+                            key={feature}
+                            className="flex items-start gap-2 text-xs text-default-600 dark:text-default-400"
+                          >
+                            <span
+                              className={`mt-1.5 h-1.5 w-1.5 rounded-full flex-shrink-0 ${textClasses}`}
+                            />
+                            <span className="flex-1">{feature}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <Button
+                        onPress={() => handleOpenRangeModal(report.type)}
+                        size="sm"
+                        className="w-full font-medium bg-black dark:bg-white text-white dark:text-black"
+                        isLoading={isGeneratingId === report.type}
+                        isDisabled={Boolean(isGeneratingId)}
+                      >
+                        {isGeneratingId === report.type ? 'Gerando...' : 'Gerar Relatório'}
+                      </Button>
+                    </CardBody>
+                  </Card>
+                );
+              })}
+            </motion.div>
+          </Tab>
+
           <Tab
             key="essenciais"
             title={
@@ -604,16 +741,18 @@ export function RelatoriosModule() {
             </Select>
             {isAdminOrFunc && (
               <div className="space-y-3">
-                <Switch
-                  isSelected={isOfficeReport}
-                  onValueChange={(v) => {
-                    setIsOfficeReport(v);
-                    if (v) setSelectedClientId(null);
-                  }}
-                >
-                  Relatório do escritório
-                </Switch>
-                {!isOfficeReport && (
+                {selectedReport !== ReportType.CLIENTES && (
+                  <Switch
+                    isSelected={isOfficeReport}
+                    onValueChange={(v) => {
+                      setIsOfficeReport(v);
+                      if (v) setSelectedClientId(null);
+                    }}
+                  >
+                    Relatório do escritório
+                  </Switch>
+                )}
+                {(!isOfficeReport || selectedReport === ReportType.CLIENTES) && (
                   <div className="space-y-2">
                     <Input
                       label="Cliente (opcional)"

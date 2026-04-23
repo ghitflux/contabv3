@@ -29,6 +29,8 @@ class TransactionType(str, enum.Enum):
 
     RECEITA = "receita"
     DESPESA = "despesa"
+    APLICACAO = "aplicacao"
+    RESGATE = "resgate"
 
 
 class PaymentMethod(str, enum.Enum):

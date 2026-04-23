@@ -13,7 +13,7 @@ import {
   TableRow,
   TableCell,
 } from "@/heroui";
-import type { ReportPreviewResponse } from "@/types/report";
+import { ReportType, type ReportPreviewResponse } from "@/types/report";
 import { formatCurrency, formatDate } from "@/lib/masks";
 
 interface ReportPreviewRendererProps {
@@ -58,6 +58,8 @@ export function ReportPreviewRenderer({
     );
   }
 
+  const customPreview = renderSpecializedPreview(preview);
+
   return (
     <Card>
       <CardHeader>
@@ -94,7 +96,7 @@ export function ReportPreviewRenderer({
         {preview.data && (
           <div>
             <h4 className="font-semibold mb-3">Dados</h4>
-            {renderDataSection(preview.data)}
+            {customPreview ?? renderDataSection(preview.data)}
           </div>
         )}
 
@@ -116,6 +118,190 @@ export function ReportPreviewRenderer({
         )}
       </CardBody>
     </Card>
+  );
+}
+
+function renderSpecializedPreview(preview: ReportPreviewResponse) {
+  if (preview.report_type === ReportType.GERAL) {
+    return renderGeneralReport(preview.data);
+  }
+
+  if (preview.report_type === ReportType.CLIENTES) {
+    return renderClientsReport(preview.data);
+  }
+
+  if (preview.report_type === ReportType.OBRIGACOES) {
+    return renderObligationsReport(preview.data);
+  }
+
+  return null;
+}
+
+function renderGeneralReport(data: Record<string, any>) {
+  const empresa = data.empresa ?? {};
+  const resumo = data.resumo_financeiro ?? {};
+  const kpis = data.kpis ?? {};
+  const analises = data.analises ?? {};
+  const projecoes = data.projecoes ?? {};
+
+  return (
+    <div className="space-y-6">
+      <section>
+        <h5 className="text-sm font-medium mb-2">Dados da Empresa</h5>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[
+            ["Escopo", formatStatusLabel(empresa.escopo)],
+            ["Nome", empresa.nome],
+            ["CNPJ", empresa.cnpj],
+            ["E-mail", empresa.email],
+            ["Telefone", empresa.telefone],
+            ["Endereço", empresa.endereco],
+          ]
+            .filter(([, value]) => Boolean(value))
+            .map(([label, value]) => (
+              <div key={label} className="flex justify-between gap-3 p-2 bg-default-50 rounded">
+                <span className="text-sm text-default-600">{label}</span>
+                <span className="text-sm font-medium text-right">{value}</span>
+              </div>
+            ))}
+        </div>
+      </section>
+
+      <section>
+        <h5 className="text-sm font-medium mb-2">Resumo Financeiro</h5>
+        {renderMetricGrid([
+          ["Receita Total", formatCurrency(resumo.receita_total ?? 0)],
+          ["Despesa Total", formatCurrency(resumo.despesa_total ?? 0)],
+          ["Resultado Líquido", formatCurrency(resumo.resultado_liquido ?? 0)],
+          ["Margem de Lucro", formatPercent(resumo.margem_lucro ?? 0)],
+          ["Margem Operacional", formatPercent(kpis.margem_operacional ?? 0)],
+        ])}
+      </section>
+
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <h5 className="text-sm font-medium mb-2">Principais Receitas</h5>
+          {renderDataTable(analises.principais_receitas ?? [])}
+        </div>
+        <div>
+          <h5 className="text-sm font-medium mb-2">Principais Despesas</h5>
+          {renderDataTable(analises.principais_despesas ?? [])}
+        </div>
+      </section>
+
+      <section>
+        <h5 className="text-sm font-medium mb-2">Evolução Mensal</h5>
+        {renderDataTable(data.evolucao_mensal ?? [])}
+      </section>
+
+      <section>
+        <h5 className="text-sm font-medium mb-2">Projeções</h5>
+        <p className="text-xs text-default-500 mb-2">
+          {projecoes.metodo_projecao}
+        </p>
+        {renderDataTable(projecoes.periodos ?? [])}
+      </section>
+    </div>
+  );
+}
+
+function renderClientsReport(data: Record<string, any>) {
+  return (
+    <div className="space-y-6">
+      {renderMetricGrid([
+        ["Total de Clientes", formatValue(data.total_clientes)],
+        ["Clientes Ativos", formatValue(data.total_clientes_ativos)],
+        ["Honorários Mensais", formatCurrency(data.total_honorarios ?? 0)],
+      ])}
+
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <h5 className="text-sm font-medium mb-2">Classificação por Regime</h5>
+          {renderDataTable(
+            (data.por_regime ?? []).map((item: any) => ({
+              regime: formatRegimeLabel(item.regime),
+              total: item.total,
+            }))
+          )}
+        </div>
+        <div>
+          <h5 className="text-sm font-medium mb-2">Classificação por Status</h5>
+          {renderDataTable(
+            (data.por_status ?? []).map((item: any) => ({
+              status: formatStatusLabel(item.status),
+              total: item.total,
+            }))
+          )}
+        </div>
+      </section>
+
+      <section>
+        <h5 className="text-sm font-medium mb-2">Clientes</h5>
+        {renderDataTable(
+          (data.clients ?? []).map((client: any) => ({
+            cliente: client.nome_fantasia || client.razao_social,
+            cnpj: client.cnpj,
+            status: formatStatusLabel(client.status),
+            regime: formatRegimeLabel(client.regime_tributario),
+            honorarios: client.honorarios,
+            pendente: client.total_pendente,
+            atrasado: client.total_atrasado,
+          }))
+        )}
+      </section>
+    </div>
+  );
+}
+
+function renderObligationsReport(data: Record<string, any>) {
+  return (
+    <div className="space-y-6">
+      {renderMetricGrid([
+        ["Total", formatValue(data.total_obligations)],
+        ["Pendentes", formatValue(data.pending)],
+        ["Entregues", formatValue(data.completed)],
+        ["Em Atraso", formatValue(data.overdue)],
+        ["Compliance", formatPercent(data.compliance_rate ?? 0)],
+      ])}
+
+      <section>
+        <h5 className="text-sm font-medium mb-2">Totais por Status</h5>
+        {renderDataTable(
+          (data.totais_por_status ?? []).map((item: any) => ({
+            status: formatStatusLabel(item.status),
+            total: item.total,
+          }))
+        )}
+      </section>
+
+      <section>
+        <h5 className="text-sm font-medium mb-2">Obrigações por Cliente</h5>
+        {renderDataTable(
+          (data.obligations ?? []).map((obligation: any) => ({
+            cliente: obligation.client_name,
+            cnpj: obligation.client_cnpj,
+            obrigacao: obligation.obligation_name,
+            status: formatStatusLabel(obligation.status),
+            competencia: obligation.competencia,
+            vencimento: obligation.due_date,
+            prioridade: formatStatusLabel(obligation.priority),
+          }))
+        )}
+      </section>
+    </div>
+  );
+}
+
+function renderMetricGrid(items: Array<[string, string]>) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {items.map(([label, value]) => (
+        <div key={label} className="p-3 bg-default-100 rounded-lg">
+          <p className="text-xs text-default-500 mb-1">{label}</p>
+          <p className="text-lg font-semibold">{value}</p>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -243,4 +429,47 @@ function formatValue(value: any): string {
   }
 
   return String(value);
+}
+
+function formatPercent(value: any): string {
+  const numeric = Number(value || 0);
+  return `${numeric.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}%`;
+}
+
+function formatStatusLabel(value: any): string {
+  const labels: Record<string, string> = {
+    escritorio: "Escritório",
+    cliente: "Cliente",
+    consolidado: "Consolidado",
+    ativo: "Ativo",
+    inativo: "Inativo",
+    inadimplente: "Inadimplente",
+    pendente: "Pendente",
+    em_andamento: "Em andamento",
+    concluida: "Entregue",
+    atrasada: "Em atraso",
+    cancelada: "Cancelada",
+    baixa: "Baixa",
+    media: "Média",
+    alta: "Alta",
+    urgente: "Urgente",
+  };
+  if (!value) return "N/A";
+  const key = String(value).toLowerCase();
+  return labels[key] ?? String(value);
+}
+
+function formatRegimeLabel(value: any): string {
+  const labels: Record<string, string> = {
+    simples_nacional: "Simples Nacional",
+    lucro_presumido: "Lucro Presumido",
+    lucro_real: "Lucro Real",
+    mei: "MEI",
+  };
+  if (!value) return "N/A";
+  const key = String(value).toLowerCase();
+  return labels[key] ?? String(value);
 }

@@ -9,7 +9,7 @@ import {
   ModalHeader,
 } from '@/heroui';
 import { AlertTriangle, CalendarDays, CircleDollarSign, ReceiptText, Trash2 } from 'lucide-react';
-import { Transaction, TransactionType } from '@/types/finance';
+import { Transaction, getTransactionTypeLabel } from '@/types/finance';
 
 interface ConfirmDeleteLancamentoDialogProps {
   isOpen: boolean;
@@ -31,9 +31,6 @@ const formatDate = (value?: string | null) => {
   if (Number.isNaN(parsed.getTime())) return '-';
   return parsed.toLocaleDateString('pt-BR');
 };
-
-const getTypeLabel = (type: TransactionType) =>
-  type === TransactionType.RECEITA ? 'Contas a Receber' : 'Contas a Pagar';
 
 export function ConfirmDeleteLancamentoDialog({
   isOpen,
@@ -94,7 +91,10 @@ export function ConfirmDeleteLancamentoDialog({
                 </div>
               </div>
               <p className="text-xs text-default-500">
-                Tipo: <span className="font-medium text-default-700">{getTypeLabel(transaction.transaction_type)}</span>
+                Tipo:{' '}
+                <span className="font-medium text-default-700">
+                  {getTransactionTypeLabel(transaction)}
+                </span>
               </p>
             </div>
           ) : null}

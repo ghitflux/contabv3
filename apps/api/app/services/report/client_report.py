@@ -3,9 +3,8 @@
 from decimal import Decimal
 
 from sqlalchemy import and_, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models.client import Client
+from app.db.models.client import Client, ClientStatus
 from app.db.models.finance import FinancialTransaction, PaymentStatus
 from app.services.report.base import BaseReportService
 
@@ -39,9 +38,11 @@ class ClientReportService(BaseReportService):
         result = await self.db.execute(stmt)
         clients_list = result.scalars().all()
 
-        # For each client, calculate financial summaries
         clients_data = []
         total_honorarios = Decimal("0.00")
+        total_clientes_ativos = 0
+        por_regime_map: dict[str, int] = {}
+        por_status_map: dict[str, int] = {}
 
         for client in clients_list:
             # Get pending transactions
@@ -70,12 +71,21 @@ class ClientReportService(BaseReportService):
             )
             total_atrasado = await self.db.scalar(overdue_stmt) or Decimal("0.00")
 
+            status = self._enum_value(client.status)
+            regime = self._enum_value(client.regime_tributario)
+            if status == ClientStatus.ATIVO.value:
+                total_clientes_ativos += 1
+            por_regime_map[regime] = por_regime_map.get(regime, 0) + 1
+            por_status_map[status] = por_status_map.get(status, 0) + 1
+
             clients_data.append({
                 "id": str(client.id),
                 "razao_social": client.razao_social,
+                "nome_fantasia": client.nome_fantasia,
                 "cnpj": client.cnpj,
                 "email": client.email,
-                "status": client.status,
+                "status": status,
+                "regime_tributario": regime,
                 "honorarios": float(client.honorarios_mensais),
                 "total_pendente": float(total_pendente),
                 "total_atrasado": float(total_atrasado),
@@ -86,7 +96,16 @@ class ClientReportService(BaseReportService):
         return {
             "clients": clients_data,
             "total_clientes": len(clients_data),
+            "total_clientes_ativos": total_clientes_ativos,
             "total_honorarios": float(total_honorarios),
+            "por_regime": [
+                {"regime": regime, "total": total}
+                for regime, total in sorted(por_regime_map.items())
+            ],
+            "por_status": [
+                {"status": status, "total": total}
+                for status, total in sorted(por_status_map.items())
+            ],
         }
 
     def _get_charts_config(self) -> list[dict]:
@@ -95,7 +114,23 @@ class ClientReportService(BaseReportService):
             {
                 "type": "table",
                 "title": "Lista de Clientes",
-                "columns": ["razao_social", "status", "honorarios", "total_pendente"],
+                "columns": [
+                    "razao_social",
+                    "status",
+                    "regime_tributario",
+                    "honorarios",
+                    "total_pendente",
+                ],
+            },
+            {
+                "type": "pie",
+                "title": "Clientes por Status",
+                "data_key": "por_status",
+            },
+            {
+                "type": "bar",
+                "title": "Clientes por Regime Tributário",
+                "data_key": "por_regime",
             }
         ]
 
@@ -103,6 +138,7 @@ class ClientReportService(BaseReportService):
         """Generate summary for Client report."""
         return {
             "total_clients": data["total_clientes"],
+            "total_active_clients": data["total_clientes_ativos"],
             "total_monthly_fees": data["total_honorarios"],
         }
 
@@ -110,3 +146,6 @@ class ClientReportService(BaseReportService):
         """Count total records in Client report."""
         return len(data.get("clients", []))
 
+    @staticmethod
+    def _enum_value(value) -> str:
+        return value.value if hasattr(value, "value") else str(value)

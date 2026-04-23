@@ -7,6 +7,7 @@ from app.services.report.cash_flow_report import CashFlowReportService
 from app.services.report.client_report import ClientReportService
 from app.services.report.dre_report import DREReportService
 from app.services.report.expenses_by_category_report import ExpensesByCategoryReportService
+from app.services.report.geral_report import GeralReportService
 from app.services.report.kpi_report import KPIReportService
 from app.services.report.license_report import LicenseReportService
 from app.services.report.obligation_report import ObligationReportService
@@ -19,6 +20,7 @@ __all__ = [
     "RevenueByClientReportService",
     "ExpensesByCategoryReportService",
     "CashFlowProjectionReportService",
+    "GeralReportService",
     "KPIReportService",
     "ClientReportService",
     "ObligationReportService",

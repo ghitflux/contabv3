@@ -5,12 +5,13 @@ Pytest configuration and fixtures for integration tests.
 import asyncio
 from typing import AsyncGenerator, Generator
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import NullPool
 
 from app.main import app
-from app.core.database import Base, get_session
+from app.core.database import get_session
 from app.core.config import settings
 from app.db.models.user import User
 from app.core.security import hash_password
@@ -31,21 +32,19 @@ def event_loop() -> Generator:
 
 @pytest.fixture(scope="session")
 async def test_engine():
-    """Create test database engine."""
+    """Create test database engine.
+
+    The test database schema is prepared with Alembic before pytest runs. Using
+    metadata.create_all is not enough here because some PostgreSQL enums are
+    intentionally owned by migrations.
+    """
     engine = create_async_engine(
         TEST_DATABASE_URL,
         echo=False,
         poolclass=NullPool,
     )
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
-
     yield engine
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
 
     await engine.dispose()
 
@@ -60,8 +59,31 @@ async def session(test_engine) -> AsyncGenerator[AsyncSession, None]:
     )
 
     async with TestSessionLocal() as session:
+        await _truncate_public_tables(session)
         yield session
         await session.rollback()
+
+
+async def _truncate_public_tables(session: AsyncSession) -> None:
+    """Reset test data while preserving the migrated schema and enum types."""
+    result = await session.execute(
+        text(
+            """
+            SELECT tablename
+            FROM pg_tables
+            WHERE schemaname = 'public'
+              AND tablename <> 'alembic_version'
+            ORDER BY tablename
+            """
+        )
+    )
+    table_names = [row[0] for row in result.fetchall()]
+    if not table_names:
+        return
+
+    quoted_tables = ", ".join(f'"{table_name}"' for table_name in table_names)
+    await session.execute(text(f"TRUNCATE TABLE {quoted_tables} RESTART IDENTITY CASCADE"))
+    await session.commit()
 
 
 @pytest.fixture(scope="function")
@@ -72,7 +94,8 @@ async def client(session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
     app.dependency_overrides[get_session] = override_get_session
 
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
 
     app.dependency_overrides.clear()

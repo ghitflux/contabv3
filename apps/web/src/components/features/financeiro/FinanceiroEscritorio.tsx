@@ -53,7 +53,9 @@ import {
   extractBankNameFromNotes,
   isAutomaticOfficeMonthlyFeeTransaction,
   isDuePaymentStatus,
+  isFinancialApplicationTransaction,
   isProfitDistributionTransaction,
+  getTransactionSignedAmount,
   getPaymentStatusLabel,
   getPaymentMethodLabel,
 } from '@/types/finance';
@@ -81,7 +83,12 @@ import {
   normalizeMonthFilterFromRange,
 } from '@/lib/finance/month-filter';
 
-type DisplayTransactionType = 'Entrada' | 'Saída' | 'Distribuição de Lucros';
+type DisplayTransactionType =
+  | 'Entrada'
+  | 'Saída'
+  | 'Distribuição de Lucros'
+  | 'Aplicação'
+  | 'Resgate';
 
 type DisplayTransaction = {
   id: string;
@@ -154,6 +161,50 @@ const normalizeDateInput = (value?: string | null): string => {
 
 const HONORARIOS_DESCRIPTION_PATTERN = /^Honorários - (.+?) \(([^)]+)\) - (\d{2}\/\d{4})$/;
 const PROFIT_DISTRIBUTION_LABEL = 'Distribuição de Lucros';
+const FINANCIAL_APPLICATION_LABEL = 'Aplicação';
+const FINANCIAL_REDEMPTION_LABEL = 'Resgate';
+
+const HISTORY_TYPE_LABELS: Record<FinanceHistoryType, string> = {
+  income: 'Receita',
+  expense: 'Despesa',
+  profit_distribution: 'Distribuição de lucros',
+  financial_application: 'Aplicação',
+  financial_redemption: 'Resgate',
+};
+
+const getDisplayTypeFromTransaction = (transaction: Transaction): DisplayTransactionType => {
+  if (isProfitDistributionTransaction(transaction)) return PROFIT_DISTRIBUTION_LABEL;
+  if (transaction.transaction_type === TransactionType.APLICACAO) return FINANCIAL_APPLICATION_LABEL;
+  if (transaction.transaction_type === TransactionType.RESGATE) return FINANCIAL_REDEMPTION_LABEL;
+  return transaction.transaction_type === TransactionType.RECEITA ? 'Entrada' : 'Saída';
+};
+
+const getTransactionTypeFromDisplayType = (
+  type: DisplayTransactionType
+): TransactionType => {
+  if (type === 'Entrada') return TransactionType.RECEITA;
+  if (type === FINANCIAL_APPLICATION_LABEL) return TransactionType.APLICACAO;
+  if (type === FINANCIAL_REDEMPTION_LABEL) return TransactionType.RESGATE;
+  return TransactionType.DESPESA;
+};
+
+const getHistoryTypeForDisplayType = (type: DisplayTransactionType): FinanceHistoryType => {
+  if (type === 'Entrada') return 'income';
+  if (type === PROFIT_DISTRIBUTION_LABEL) return 'profit_distribution';
+  if (type === FINANCIAL_APPLICATION_LABEL) return 'financial_application';
+  if (type === FINANCIAL_REDEMPTION_LABEL) return 'financial_redemption';
+  return 'expense';
+};
+
+const isIncomingDisplayType = (type: DisplayTransactionType) =>
+  type === 'Entrada' || type === FINANCIAL_REDEMPTION_LABEL;
+
+const getSettlementLabel = (type: DisplayTransactionType) => {
+  if (type === 'Entrada') return 'Já recebido';
+  if (type === FINANCIAL_REDEMPTION_LABEL) return 'Já resgatado';
+  if (type === FINANCIAL_APPLICATION_LABEL) return 'Já aplicado';
+  return 'Já pago';
+};
 
 const mergeStandardHistories = (
   baseHistories: StandardHistory[],
@@ -189,7 +240,14 @@ const formatMonthYear = (value: string) => {
   return `${String(parsed.getMonth() + 1).padStart(2, '0')}/${parsed.getFullYear()}`;
 };
 
-type ActiveTransactionPanel = 'all' | 'receber' | 'pagar' | 'receita' | 'despesa' | 'distribuicao';
+type ActiveTransactionPanel =
+  | 'all'
+  | 'receber'
+  | 'pagar'
+  | 'receita'
+  | 'despesa'
+  | 'distribuicao'
+  | 'financeiro';
 
 export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => void }) {
   const initialMonthFilterState = getCurrentMonthFilterState();
@@ -225,7 +283,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   });
   const [newHistory, setNewHistory] = useState({
     description: '',
-    type: 'income' as 'income' | 'expense' | 'profit_distribution',
+    type: 'income' as FinanceHistoryType,
   });
   const [newTransaction, setNewTransaction] = useState<NewTransactionState>(() =>
     buildDefaultTransaction()
@@ -350,8 +408,8 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                 : String(Date.now());
           const description = typeof item.description === 'string' ? item.description.trim() : '';
           const type =
-            item.type === 'income' || item.type === 'expense' || item.type === 'profit_distribution'
-              ? item.type
+            typeof item.type === 'string' && item.type in HISTORY_TYPE_LABELS
+              ? (item.type as FinanceHistoryType)
               : null;
           if (!description || !type) {
             return null;
@@ -529,11 +587,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     return transactions.map((transaction) => ({
       id: transaction.id,
       date: transaction.paid_date || transaction.due_date,
-      type: isProfitDistributionTransaction(transaction)
-        ? PROFIT_DISTRIBUTION_LABEL
-        : transaction.transaction_type === TransactionType.RECEITA
-          ? 'Entrada'
-          : 'Saída',
+      type: getDisplayTypeFromTransaction(transaction),
       bank:
         resolveTransactionBankName(transaction) ||
         (transaction.payment_method
@@ -624,6 +678,13 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       paidYearDistributionTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
     [paidYearDistributionTransactions]
   );
+  const aplicacoesFinanceirasAno = useMemo(
+    () =>
+      paidYearTransactions
+        .filter((transaction) => isFinancialApplicationTransaction(transaction))
+        .reduce((sum, transaction) => sum + getTransactionSignedAmount(transaction), 0),
+    [paidYearTransactions]
+  );
 
   const receita = useMemo(
     () =>
@@ -641,6 +702,13 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
             !isProfitDistributionTransaction(transaction)
         )
         .reduce((sum, transaction) => sum + transaction.amount, 0),
+    [paidTransactions]
+  );
+  const aplicacoesFinanceiras = useMemo(
+    () =>
+      paidTransactions
+        .filter((transaction) => isFinancialApplicationTransaction(transaction))
+        .reduce((sum, transaction) => sum + getTransactionSignedAmount(transaction), 0),
     [paidTransactions]
   );
   const lucro = receita - despesa;
@@ -682,10 +750,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     paidBalanceTransactions.forEach((transaction) => {
       const bankName = resolveTransactionBankName(transaction);
       if (!bankName) return;
-      const signedAmount =
-        transaction.transaction_type === TransactionType.RECEITA
-          ? transaction.amount
-          : -transaction.amount;
+      const signedAmount = getTransactionSignedAmount(transaction);
       totalsByBank.set(bankName, (totalsByBank.get(bankName) ?? 0) + signedAmount);
     });
 
@@ -733,6 +798,13 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       return filteredDisplayTransactions.filter(
         (transaction) =>
           isProfitDistributionTransaction(transaction.raw) &&
+          transaction.status === PaymentStatus.PAGO
+      );
+    }
+    if (activePendingPanel === 'financeiro') {
+      return filteredDisplayTransactions.filter(
+        (transaction) =>
+          isFinancialApplicationTransaction(transaction.raw) &&
           transaction.status === PaymentStatus.PAGO
       );
     }
@@ -1149,6 +1221,22 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         : 'bg-teal-50 dark:bg-teal-900/20',
     },
     {
+      id: 'financeiro',
+      title: 'Aplicações Financeiras',
+      value: formatCurrency(aplicacoesFinanceiras),
+      change:
+        aplicacoesFinanceiras !== 0
+          ? 'Aplicações e resgates liquidados'
+          : 'Sem aplicações ou resgates no período',
+      trend: 'neutral',
+      icon: DollarSign,
+      colorClass: 'text-cyan-600',
+      backgroundClass: 'bg-cyan-50 dark:bg-cyan-900/20',
+      isPressable: true,
+      onPress: () =>
+        setActivePendingPanel((prev) => (prev === 'financeiro' ? 'all' : 'financeiro')),
+    },
+    {
       id: 'distribuicao',
       title: 'Distribuição de Lucros',
       value: formatCurrency(distribuicaoLucrosMes),
@@ -1199,8 +1287,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       await createTransaction({
         client_id: OFFICE_CLIENT_ID,
         bank_account_id: selectedBank?.id ?? null,
-        transaction_type:
-          newTransaction.type === 'Entrada' ? TransactionType.RECEITA : TransactionType.DESPESA,
+        transaction_type: getTransactionTypeFromDisplayType(newTransaction.type),
         amount,
         payment_method: !isSettled
           ? undefined
@@ -1391,7 +1478,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     }
   };
 
-  const settlementLabel = newTransaction.type === 'Entrada' ? 'Já recebido' : 'Já pago';
+  const settlementLabel = getSettlementLabel(newTransaction.type);
 
   const handleAddHistory = () => {
     const normalizedDescription = newHistory.description.trim();
@@ -1505,7 +1592,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
           Acumulado {currentYear}
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
           <Card className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900">
             <CardBody>
               <p className="text-sm text-green-700 dark:text-green-400 font-medium mb-1">
@@ -1543,6 +1630,16 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
               </p>
               <p className="text-2xl font-bold text-sky-700 dark:text-sky-400">
                 {formatCurrency(distribuicaoLucrosAno)}
+              </p>
+            </CardBody>
+          </Card>
+          <Card className="bg-cyan-50 dark:bg-cyan-900/20 border border-cyan-200 dark:border-cyan-900">
+            <CardBody>
+              <p className="text-sm text-cyan-700 dark:text-cyan-400 font-medium mb-1">
+                APLICAÇÕES NO ANO
+              </p>
+              <p className="text-2xl font-bold text-cyan-700 dark:text-cyan-400">
+                {formatCurrency(aplicacoesFinanceirasAno)}
               </p>
             </CardBody>
           </Card>
@@ -1621,7 +1718,9 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                     ? 'Lançamentos que compõem a Receita do Período'
                     : activePendingPanel === 'despesa'
                       ? 'Lançamentos que compõem as Despesas do Período'
-                      : 'Pagamentos de Distribuição de Lucros'}
+                      : activePendingPanel === 'financeiro'
+                        ? 'Aplicações financeiras do período'
+                        : 'Pagamentos de Distribuição de Lucros'}
             </h3>
             <Button
               variant="light"
@@ -2037,7 +2136,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                     ...prev,
                     type: value,
                     history: '',
-                    isSettled: prev.isRecurring ? false : value === 'Entrada',
+                    isSettled: prev.isRecurring ? false : isIncomingDisplayType(value),
                   }));
                 }
               }}
@@ -2045,6 +2144,8 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
               <SelectItem key="Entrada">Entrada</SelectItem>
               <SelectItem key="Saída">Saída</SelectItem>
               <SelectItem key={PROFIT_DISTRIBUTION_LABEL}>Distribuição de lucros</SelectItem>
+              <SelectItem key={FINANCIAL_APPLICATION_LABEL}>Aplicação</SelectItem>
+              <SelectItem key={FINANCIAL_REDEMPTION_LABEL}>Resgate</SelectItem>
             </Select>
             <Select
               label="Banco"
@@ -2072,11 +2173,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
             >
               {standardHistories
                 .filter((history) =>
-                  newTransaction.type === 'Entrada'
-                    ? history.type === 'income'
-                    : newTransaction.type === PROFIT_DISTRIBUTION_LABEL
-                      ? history.type === 'profit_distribution'
-                      : history.type === 'expense'
+                  history.type === getHistoryTypeForDisplayType(newTransaction.type)
                 )
                 .map((history) => (
                   <SelectItem key={history.description}>{history.description}</SelectItem>
@@ -2109,7 +2206,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                   setNewTransaction((prev) => ({
                     ...prev,
                     isRecurring: checked,
-                    isSettled: checked ? false : prev.type === 'Entrada',
+                    isSettled: checked ? false : isIncomingDisplayType(prev.type),
                     recurringDay: checked ? prev.recurringDay : 1,
                   }))
                 }
@@ -2438,13 +2535,15 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                   label="Tipo *"
                   selectedKeys={[newHistory.type]}
                   onSelectionChange={(keys) => {
-                    const value = Array.from(keys)[0] as 'income' | 'expense' | undefined;
+                    const value = Array.from(keys)[0] as FinanceHistoryType | undefined;
                     setNewHistory((prev) => ({ ...prev, type: value ?? 'income' }));
                   }}
                 >
                   <SelectItem key="income">Receita</SelectItem>
                   <SelectItem key="expense">Despesa</SelectItem>
                   <SelectItem key="profit_distribution">Distribuição de lucros</SelectItem>
+                  <SelectItem key="financial_application">Aplicação</SelectItem>
+                  <SelectItem key="financial_redemption">Resgate</SelectItem>
                 </Select>
                 <div className="space-y-2 rounded-lg border border-default-200/60 bg-default-50/60 p-3">
                   <p className="text-sm font-medium text-default-700">Históricos cadastrados</p>
@@ -2462,11 +2561,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                               {history.description}
                             </p>
                             <p className="text-xs text-default-500">
-                              {history.type === 'income'
-                                ? 'Receita'
-                                : history.type === 'expense'
-                                  ? 'Despesa'
-                                  : 'Distribuição de lucros'}
+                              {HISTORY_TYPE_LABELS[history.type]}
                             </p>
                           </div>
                           <Button

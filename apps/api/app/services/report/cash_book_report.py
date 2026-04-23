@@ -65,7 +65,14 @@ class CashBookReportService(BaseReportService):
         total_saidas = Decimal("0.00")
 
         for transaction, razao_social, nome_fantasia, cnpj in rows:
-            tipo = "entrada" if transaction.transaction_type == TransactionType.RECEITA else "saida"
+            if transaction.transaction_type == TransactionType.RECEITA:
+                tipo = "entrada"
+            elif transaction.transaction_type == TransactionType.RESGATE:
+                tipo = "resgate"
+            elif transaction.transaction_type == TransactionType.APLICACAO:
+                tipo = "aplicacao"
+            else:
+                tipo = "saida"
             valor = transaction.amount
             client_name = nome_fantasia or razao_social or "Sem cliente"
             movement_date = (
@@ -77,7 +84,7 @@ class CashBookReportService(BaseReportService):
             if client_name == "Sem cliente":
                 client_name = "Escritório"
 
-            if tipo == "entrada":
+            if tipo in {"entrada", "resgate"}:
                 saldo_acumulado += valor
                 total_entradas += valor
             else:

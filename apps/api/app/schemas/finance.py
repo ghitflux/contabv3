@@ -14,7 +14,9 @@ class TransactionType(str, Enum):
     """Type of financial transaction."""
 
     RECEITA = "receita"  # Revenue/Income
-    DESPESA = "despesa"  # Expense (for future use)
+    DESPESA = "despesa"  # Expense
+    APLICACAO = "aplicacao"  # Financial application/investment movement
+    RESGATE = "resgate"  # Financial redemption movement
 
 
 class PaymentMethod(str, Enum):

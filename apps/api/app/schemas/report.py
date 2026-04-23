@@ -15,6 +15,9 @@ from app.schemas.base import BaseSchema
 class ReportType(str, Enum):
     """Type of report to generate."""
 
+    # Strategic reports
+    GERAL = "geral"
+
     # Financial reports
     DRE = "dre"
     FLUXO_CAIXA = "fluxo_caixa"
@@ -65,6 +68,8 @@ class ReportFilterRequest(BaseSchema):
     period_start: date = Field(..., description="Start date of the period")
     period_end: date = Field(..., description="End date of the period")
     client_ids: Optional[list[UUID]] = Field(None, description="Filter by specific clients")
+    status: Optional[str] = Field(None, description="Optional status filter")
+    statuses: Optional[list[str]] = Field(None, description="Optional status filters")
     report_type: ReportType = Field(..., description="Type of report to generate")
 
     @field_validator("period_end")

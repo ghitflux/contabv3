@@ -6,6 +6,8 @@
 export enum TransactionType {
   RECEITA = 'receita',
   DESPESA = 'despesa',
+  APLICACAO = 'aplicacao',
+  RESGATE = 'resgate',
 }
 
 export enum PaymentMethod {
@@ -33,6 +35,10 @@ export enum StatementImportFormat {
 }
 
 export const DISTRIBUTION_PROFITS_CATEGORY = 'distribuicao_lucros';
+export const FINANCIAL_APPLICATION_TRANSACTION_TYPES: TransactionType[] = [
+  TransactionType.APLICACAO,
+  TransactionType.RESGATE,
+];
 
 export const DUE_PAYMENT_STATUSES: PaymentStatus[] = [
   PaymentStatus.PENDENTE,
@@ -48,6 +54,64 @@ export function isProfitDistributionTransaction(
   transaction: Pick<Transaction, 'category'>
 ): boolean {
   return (transaction.category ?? '').trim().toLowerCase() === DISTRIBUTION_PROFITS_CATEGORY;
+}
+
+export function isFinancialApplicationTransaction(
+  transaction: Pick<Transaction, 'transaction_type'>
+): boolean {
+  return FINANCIAL_APPLICATION_TRANSACTION_TYPES.includes(transaction.transaction_type);
+}
+
+export function isOperationalRevenueTransaction(
+  transaction: Pick<Transaction, 'transaction_type'>
+): boolean {
+  return transaction.transaction_type === TransactionType.RECEITA;
+}
+
+export function isOperationalExpenseTransaction(
+  transaction: Pick<Transaction, 'transaction_type' | 'category'>
+): boolean {
+  return (
+    transaction.transaction_type === TransactionType.DESPESA &&
+    !isProfitDistributionTransaction(transaction)
+  );
+}
+
+export function getTransactionCashDirection(
+  transaction: Pick<Transaction, 'transaction_type'>
+): 'entrada' | 'saida' {
+  return transaction.transaction_type === TransactionType.RECEITA ||
+    transaction.transaction_type === TransactionType.RESGATE
+    ? 'entrada'
+    : 'saida';
+}
+
+export function getTransactionSignedAmount(
+  transaction: Pick<Transaction, 'transaction_type' | 'amount'>
+): number {
+  return getTransactionCashDirection(transaction) === 'entrada'
+    ? transaction.amount
+    : -transaction.amount;
+}
+
+export function getTransactionTypeLabel(
+  transaction: Pick<Transaction, 'transaction_type' | 'category'> | TransactionType
+): string {
+  const transactionType =
+    typeof transaction === 'string' ? transaction : transaction.transaction_type;
+
+  if (typeof transaction !== 'string' && isProfitDistributionTransaction(transaction)) {
+    return 'Distribuição de lucros';
+  }
+
+  const labels: Record<TransactionType, string> = {
+    [TransactionType.RECEITA]: 'Receita',
+    [TransactionType.DESPESA]: 'Despesa',
+    [TransactionType.APLICACAO]: 'Aplicação',
+    [TransactionType.RESGATE]: 'Resgate',
+  };
+
+  return labels[transactionType] ?? transactionType;
 }
 
 export function extractBankNameFromNotes(notes?: string | null): string | null {

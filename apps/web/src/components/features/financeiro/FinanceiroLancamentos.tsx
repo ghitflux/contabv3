@@ -35,7 +35,11 @@ import {
   type TransactionUpdate,
   isAutomaticMonthlyFeeTransaction,
   isDuePaymentStatus,
+  isFinancialApplicationTransaction,
   isProfitDistributionTransaction,
+  getTransactionCashDirection,
+  getTransactionSignedAmount,
+  getTransactionTypeLabel,
   getPaymentStatusColor,
   getPaymentStatusLabel,
 } from '@/types/finance';
@@ -79,7 +83,6 @@ interface Lancamento {
 const LANCAMENTOS_PER_PAGE = 20;
 const MAX_CUSTOM_CATEGORY_LENGTH = 20;
 const OFFICE_CLIENT_ID = process.env.NEXT_PUBLIC_OFFICE_CLIENT_ID ?? '';
-const PROFIT_DISTRIBUTION_LABEL = 'Distribuição de lucros';
 
 export function FinanceiroLancamentos() {
   const initialMonthFilterState = getCurrentMonthFilterState();
@@ -92,7 +95,7 @@ export function FinanceiroLancamentos() {
   const [endDate, setEndDate] = useState(initialMonthFilterState.endDate);
   const [clients, setClients] = useState<ClientListItem[]>([]);
   const [activePendingPanel, setActivePendingPanel] = useState<
-    'all' | 'receber' | 'pagar' | 'distribuicao'
+    'all' | 'receber' | 'pagar' | 'financeiro' | 'distribuicao'
   >('all');
   const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -279,7 +282,9 @@ export function FinanceiroLancamentos() {
     () =>
       lancamentos.filter(
         (lancamento) =>
-          lancamento.tipo === TransactionType.DESPESA && isDuePaymentStatus(lancamento.status)
+          lancamento.tipo === TransactionType.DESPESA &&
+          !isProfitDistributionTransaction(lancamento.raw) &&
+          isDuePaymentStatus(lancamento.status)
       ),
     [lancamentos]
   );
@@ -288,6 +293,15 @@ export function FinanceiroLancamentos() {
       lancamentos.filter(
         (lancamento) =>
           isProfitDistributionTransaction(lancamento.raw) &&
+          lancamento.status === PaymentStatus.PAGO
+      ),
+    [lancamentos]
+  );
+  const paidFinancialApplicationLancamentos = useMemo(
+    () =>
+      lancamentos.filter(
+        (lancamento) =>
+          isFinancialApplicationTransaction(lancamento.raw) &&
           lancamento.status === PaymentStatus.PAGO
       ),
     [lancamentos]
@@ -304,6 +318,14 @@ export function FinanceiroLancamentos() {
     () => paidProfitDistributionLancamentos.reduce((sum, lancamento) => sum + lancamento.valor, 0),
     [paidProfitDistributionLancamentos]
   );
+  const totalAplicacoesFinanceiras = useMemo(
+    () =>
+      paidFinancialApplicationLancamentos.reduce(
+        (sum, lancamento) => sum + getTransactionSignedAmount(lancamento.raw),
+        0
+      ),
+    [paidFinancialApplicationLancamentos]
+  );
 
   const lancamentosFiltrados = useMemo(() => {
     const query = busca.trim().toLowerCase();
@@ -317,7 +339,11 @@ export function FinanceiroLancamentos() {
           isDuePaymentStatus(lancamento.status)) ||
         (activePendingPanel === 'pagar' &&
           lancamento.tipo === TransactionType.DESPESA &&
+          !isProfitDistributionTransaction(lancamento.raw) &&
           isDuePaymentStatus(lancamento.status)) ||
+        (activePendingPanel === 'financeiro' &&
+          isFinancialApplicationTransaction(lancamento.raw) &&
+          lancamento.status === PaymentStatus.PAGO) ||
         (activePendingPanel === 'distribuicao' &&
           isProfitDistributionTransaction(lancamento.raw) &&
           lancamento.status === PaymentStatus.PAGO);
@@ -646,6 +672,8 @@ export function FinanceiroLancamentos() {
               <SelectItem key="todos">Todos os tipos</SelectItem>
               <SelectItem key={TransactionType.RECEITA}>Receitas</SelectItem>
               <SelectItem key={TransactionType.DESPESA}>Despesas</SelectItem>
+              <SelectItem key={TransactionType.APLICACAO}>Aplicações</SelectItem>
+              <SelectItem key={TransactionType.RESGATE}>Resgates</SelectItem>
             </Select>
             <Select
               selectedKeys={[filtroStatus]}
@@ -667,7 +695,7 @@ export function FinanceiroLancamentos() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card
             isPressable
             onPress={() =>
@@ -709,6 +737,29 @@ export function FinanceiroLancamentos() {
               </p>
               <p className="text-xs text-slate-500 mt-2">
                 {payableLancamentos.length} lançamento(s) pendente(s)
+              </p>
+            </CardBody>
+          </Card>
+          <Card
+            isPressable
+            onPress={() =>
+              setActivePendingPanel((prev) => (prev === 'financeiro' ? 'all' : 'financeiro'))
+            }
+            className={`border ${
+              activePendingPanel === 'financeiro'
+                ? 'border-cyan-400 bg-cyan-50 dark:bg-cyan-900/20'
+                : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/20'
+            }`}
+          >
+            <CardBody>
+              <p className="text-sm text-slate-700 dark:text-slate-400 font-medium mb-1">
+                APLICAÇÕES FINANCEIRAS
+              </p>
+              <p className="text-2xl font-bold text-cyan-700 dark:text-cyan-400">
+                {formatCurrency(totalAplicacoesFinanceiras)}
+              </p>
+              <p className="text-xs text-slate-500 mt-2">
+                {paidFinancialApplicationLancamentos.length} movimento(s) liquidado(s)
               </p>
             </CardBody>
           </Card>
@@ -758,6 +809,8 @@ export function FinanceiroLancamentos() {
               <TableBody emptyContent="Nenhum lançamento encontrado">
                 {lancamentosPaginados.map((lancamento) => {
                   const categoriaInfo = resolveCategoriaLancamento(lancamento.categoria);
+                  const typeLabel = getTransactionTypeLabel(lancamento.raw);
+                  const cashDirection = getTransactionCashDirection(lancamento.raw);
                   return (
                     <TableRow key={lancamento.id}>
                       <TableCell className="font-medium">{formatDate(lancamento.data)}</TableCell>
@@ -794,17 +847,27 @@ export function FinanceiroLancamentos() {
                         <div className="flex items-center gap-1">
                           {isProfitDistributionTransaction(lancamento.raw) ? (
                             <span className="text-sm text-sky-600">
-                              {PROFIT_DISTRIBUTION_LABEL}
+                              {typeLabel}
                             </span>
                           ) : lancamento.tipo === TransactionType.RECEITA ? (
                             <>
                               <ArrowUpRight className="h-4 w-4 text-green-600" />
-                              <span className="text-sm text-green-600">Receita</span>
+                              <span className="text-sm text-green-600">{typeLabel}</span>
+                            </>
+                          ) : lancamento.tipo === TransactionType.RESGATE ? (
+                            <>
+                              <ArrowUpRight className="h-4 w-4 text-cyan-600" />
+                              <span className="text-sm text-cyan-600">{typeLabel}</span>
+                            </>
+                          ) : lancamento.tipo === TransactionType.APLICACAO ? (
+                            <>
+                              <ArrowDownRight className="h-4 w-4 text-cyan-600" />
+                              <span className="text-sm text-cyan-600">{typeLabel}</span>
                             </>
                           ) : (
                             <>
                               <ArrowDownRight className="h-4 w-4 text-red-600" />
-                              <span className="text-sm text-red-600">Despesa</span>
+                              <span className="text-sm text-red-600">{typeLabel}</span>
                             </>
                           )}
                         </div>
@@ -821,7 +884,7 @@ export function FinanceiroLancamentos() {
                       <TableCell className="text-right font-semibold">
                         <span
                           className={
-                            lancamento.tipo === TransactionType.RECEITA
+                            cashDirection === 'entrada'
                               ? 'text-green-600'
                               : 'text-red-600'
                           }

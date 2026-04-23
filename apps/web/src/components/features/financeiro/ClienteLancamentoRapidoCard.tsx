@@ -29,7 +29,7 @@ import {
 } from '@/types/finance';
 import { formatISO } from 'date-fns';
 
-type DisplayMovement = 'Entrada' | 'Saída';
+type DisplayMovement = 'Entrada' | 'Saída' | 'Aplicação' | 'Resgate';
 
 type QuickLaunchForm = {
   date: string;
@@ -60,6 +60,14 @@ const TYPE_PRESETS = {
     ['Honorários do mês', 'Imposto', 'Pró-labore', 'Pagamento de fornecedor'],
     getFinancePresetDescriptions('expense')
   ),
+  Aplicação: mergeFinancePresetDescriptions(
+    ['Aplicação financeira'],
+    getFinancePresetDescriptions('financial_application')
+  ),
+  Resgate: mergeFinancePresetDescriptions(
+    ['Resgate de aplicação financeira'],
+    getFinancePresetDescriptions('financial_redemption')
+  ),
 } satisfies Record<DisplayMovement, string[]>;
 
 const ATTACHMENT_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png';
@@ -76,6 +84,23 @@ const buildDefaultForm = (): QuickLaunchForm => ({
   recurringDay: 1,
 });
 
+const getTransactionTypeFromMovement = (movement: DisplayMovement): TransactionType => {
+  if (movement === 'Saída') return TransactionType.DESPESA;
+  if (movement === 'Aplicação') return TransactionType.APLICACAO;
+  if (movement === 'Resgate') return TransactionType.RESGATE;
+  return TransactionType.RECEITA;
+};
+
+const isIncomingMovement = (movement: DisplayMovement) =>
+  movement === 'Entrada' || movement === 'Resgate';
+
+const getSettlementLabel = (movement: DisplayMovement) => {
+  if (movement === 'Entrada') return 'Já recebido';
+  if (movement === 'Resgate') return 'Já resgatado';
+  if (movement === 'Aplicação') return 'Já aplicado';
+  return 'Já pago';
+};
+
 export function ClienteLancamentoRapidoCard({
   clientId,
   bankAccounts,
@@ -89,8 +114,7 @@ export function ClienteLancamentoRapidoCard({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const typeSuggestions = useMemo(() => {
-    const transactionType =
-      form.movement === 'Entrada' ? TransactionType.RECEITA : TransactionType.DESPESA;
+    const transactionType = getTransactionTypeFromMovement(form.movement);
 
     const seen = new Set<string>();
     const suggestions: string[] = [];
@@ -140,7 +164,7 @@ export function ClienteLancamentoRapidoCard({
         client_id: clientId,
         bank_account_id: selectedBank?.id ?? null,
         transaction_type:
-          form.movement === 'Entrada' ? TransactionType.RECEITA : TransactionType.DESPESA,
+          getTransactionTypeFromMovement(form.movement),
         amount,
         payment_method: !isSettled
           ? undefined
@@ -215,8 +239,8 @@ export function ClienteLancamentoRapidoCard({
             Novo lançamento
           </h3>
           <p className="text-sm text-default-500">
-            Registre rapidamente uma entrada ou saída. Se marcar recorrente, a competência atual
-            nasce pendente para baixa manual.
+            Registre rapidamente entradas, saídas, aplicações ou resgates. Se marcar recorrente, a
+            competência atual nasce pendente para baixa manual.
           </p>
         </div>
       </CardHeader>
@@ -243,12 +267,14 @@ export function ClienteLancamentoRapidoCard({
                 ...prev,
                 movement: value,
                 entryType: '',
-                isSettled: prev.isRecurring ? false : value === 'Entrada',
+                isSettled: prev.isRecurring ? false : isIncomingMovement(value),
               }));
             }}
           >
             <SelectItem key="Entrada">Entrada</SelectItem>
             <SelectItem key="Saída">Saída</SelectItem>
+            <SelectItem key="Aplicação">Aplicação</SelectItem>
+            <SelectItem key="Resgate">Resgate</SelectItem>
           </Select>
           <Select
             label="Banco"
@@ -292,7 +318,7 @@ export function ClienteLancamentoRapidoCard({
               onValueChange={(checked) => setForm((prev) => ({ ...prev, isSettled: checked }))}
               isDisabled={form.isRecurring}
             >
-              {form.movement === 'Entrada' ? 'Já recebido' : 'Já pago'}
+              {getSettlementLabel(form.movement)}
             </Checkbox>
           </div>
           <div className="flex flex-col justify-center">
@@ -302,7 +328,7 @@ export function ClienteLancamentoRapidoCard({
                 setForm((prev) => ({
                   ...prev,
                   isRecurring: checked,
-                  isSettled: checked ? false : prev.movement === 'Entrada',
+                  isSettled: checked ? false : isIncomingMovement(prev.movement),
                   recurringDay: checked ? prev.recurringDay : 1,
                 }))
               }

@@ -27,7 +27,7 @@ import {
 import { CheckCircleIcon, DownloadIcon, RefreshIcon, SearchIcon } from '@/lib/icons';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { Suspense, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ObligationCompletionModal } from './ObligationCompletionModal';
 import { ObligationTrashModal } from './ObligationTrashModal';
 import {
@@ -145,7 +145,8 @@ export function ObrigacoesModule() {
 
 function ObrigacoesModuleContent() {
   const searchParams = useSearchParams();
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user, isLoading } = useAuth();
   const isCliente = user?.role === UserRole.CLIENTE;
   const canManageObligations =
     user?.role === UserRole.ADMIN ||
@@ -185,6 +186,19 @@ function ObrigacoesModuleContent() {
   const normalizedSearch = search.trim();
   const invalidPeriod = Boolean(dueDateFrom && dueDateTo && dueDateFrom > dueDateTo);
   const obligationIdFromQuery = searchParams.get('id');
+
+  useEffect(() => {
+    if (isLoading || !isCliente) return;
+    router.replace('/financeiro');
+  }, [isCliente, isLoading, router]);
+
+  if (isLoading) {
+    return null;
+  }
+
+  if (isCliente) {
+    return null;
+  }
 
   // Parse competency to get month and year
   const [yearStr, monthStr] = competency.split('-');

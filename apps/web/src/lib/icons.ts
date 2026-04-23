@@ -110,6 +110,8 @@ export {
   ShieldCheck as LicenseIcon,
   Receipt as TransactionIcon,
   FileBarChart as ReportIcon,
+  Sparkles as SparklesIcon,
+  Tag as TagIcon,
 } from 'lucide-react';
 
 /**

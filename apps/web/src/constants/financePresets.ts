@@ -1,4 +1,9 @@
-export type FinanceHistoryType = 'income' | 'expense' | 'profit_distribution';
+export type FinanceHistoryType =
+  | 'income'
+  | 'expense'
+  | 'profit_distribution'
+  | 'financial_application'
+  | 'financial_redemption';
 
 export type FinanceHistoryPreset = {
   id: string;
@@ -52,11 +57,6 @@ const FINANCE_PRESET_DEFINITIONS: Array<{
   { description: 'Reembolso', type: 'income', group: 'Movimentações Financeiras' },
   {
     description: 'Transferência recebida',
-    type: 'income',
-    group: 'Movimentações Financeiras',
-  },
-  {
-    description: 'Resgate de aplicação financeira',
     type: 'income',
     group: 'Movimentações Financeiras',
   },
@@ -158,7 +158,6 @@ const FINANCE_PRESET_DEFINITIONS: Array<{
     type: 'expense',
     group: 'Movimentações Financeiras',
   },
-  { description: 'Aplicação financeira', type: 'expense', group: 'Movimentações Financeiras' },
   { description: 'Aporte de sócios', type: 'expense', group: 'Movimentações Financeiras' },
   { description: 'Pagamento de empréstimo', type: 'expense', group: 'Movimentações Financeiras' },
   {
@@ -175,6 +174,31 @@ const FINANCE_PRESET_DEFINITIONS: Array<{
     description: 'Retirada de lucros/dividendos',
     type: 'profit_distribution',
     group: 'Distribuição de Lucros',
+  },
+  {
+    description: 'Aplicação financeira',
+    type: 'financial_application',
+    group: 'Aplicações Financeiras',
+  },
+  {
+    description: 'Aplicação em CDB/fundo',
+    type: 'financial_application',
+    group: 'Aplicações Financeiras',
+  },
+  {
+    description: 'Aplicação automática',
+    type: 'financial_application',
+    group: 'Aplicações Financeiras',
+  },
+  {
+    description: 'Resgate de aplicação financeira',
+    type: 'financial_redemption',
+    group: 'Aplicações Financeiras',
+  },
+  {
+    description: 'Resgate parcial de investimento',
+    type: 'financial_redemption',
+    group: 'Aplicações Financeiras',
   },
 ];
 

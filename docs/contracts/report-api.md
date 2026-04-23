@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Report API provides endpoints for generating, previewing, and exporting various financial and operational reports. All reports support advanced customization, real-time preview, and export in multiple formats (PDF and CSV).
+The Report API provides endpoints for generating, previewing, and exporting various financial and operational reports. All reports support advanced customization, real-time preview, and export in multiple formats (PDF, CSV and XLS).
 
 ## Base URL
 
@@ -17,7 +17,7 @@ All endpoints require JWT authentication via Bearer token in the Authorization h
 ## RBAC
 
 - **Admin/Func**: Full access to all reports
-- **Cliente**: Access only to their own data
+- **Cliente**: Access only to their own data; client portal should expose only `geral` and `obrigacoes`
 
 ---
 
@@ -33,6 +33,15 @@ Returns a list of all available report types with metadata.
 ```json
 {
   "types": [
+    {
+      "type": "geral",
+      "name": "Relatório Geral",
+      "description": "Visão gerencial com empresa, resumo financeiro, DRE, KPIs, evolução, análises e projeções",
+      "category": "financeiro",
+      "supports_customization": true,
+      "supported_charts": ["line", "bar", "table"],
+      "required_permissions": null
+    },
     {
       "type": "dre",
       "name": "Demonstrativo de Resultados",
@@ -152,6 +161,8 @@ Generates a preview of the report with data and chart configurations.
     "period_start": "2025-01-01",
     "period_end": "2025-12-31",
     "client_ids": null,
+    "status": null,
+    "statuses": null,
     "report_type": "dre"
   },
   "customizations": {
@@ -219,6 +230,123 @@ Generates a preview of the report with data and chart configurations.
 }
 ```
 
+### Strategic Report Payloads
+
+#### `geral`
+
+`geral` is the strategic management report. It returns:
+
+```json
+{
+  "empresa": {
+    "escopo": "escritorio",
+    "id": "client-or-office-id",
+    "nome": "Contabilidade Exemplo",
+    "razao_social": "Contabilidade Exemplo LTDA",
+    "cnpj": "00.000.000/0001-00",
+    "email": "contato@example.com",
+    "telefone": "(00) 0000-0000",
+    "endereco": "Rua Exemplo, 100"
+  },
+  "resumo_financeiro": {
+    "receita_total": 60000.0,
+    "despesa_total": 25000.0,
+    "resultado_liquido": 35000.0,
+    "margem_lucro": 58.33
+  },
+  "dre_simplificada": {
+    "receitas": [{"categoria": "Honorários", "valor": 50000.0, "percentual": 83.33}],
+    "despesas": [{"categoria": "Folha", "valor": 20000.0, "percentual": 80.0}],
+    "receita_total": 60000.0,
+    "despesa_total": 25000.0,
+    "resultado_liquido": 35000.0,
+    "margem_lucro": 58.33
+  },
+  "kpis": {
+    "margem_operacional": 58.33,
+    "resultado_liquido": 35000.0,
+    "receita_total": 60000.0,
+    "despesa_total": 25000.0
+  },
+  "evolucao_mensal": [
+    {
+      "competencia": "2025-01",
+      "receita_total": 60000.0,
+      "despesa_total": 25000.0,
+      "resultado_liquido": 35000.0,
+      "margem_lucro": 58.33
+    }
+  ],
+  "analises": {
+    "principais_receitas": [{"categoria": "Honorários", "valor": 50000.0, "percentual": 83.33}],
+    "principais_despesas": [{"categoria": "Folha", "valor": 20000.0, "percentual": 80.0}]
+  },
+  "projecoes": {
+    "metodo_projecao": "Média mensal dos últimos 6 meses",
+    "base_historico_meses": 6,
+    "periodos": [
+      {
+        "competencia": "2025-02",
+        "previsao_receita": 60000.0,
+        "previsao_despesa": 25000.0,
+        "previsao_resultado": 35000.0
+      }
+    ]
+  }
+}
+```
+
+Financial calculations in `geral` use only paid, non-deleted transactions in the selected competence range. `aplicacao` and `resgate` are financial movements and are excluded from revenue, expense, DRE and KPI totals.
+
+For office users, `/relatorios` defaults `geral` to the technical office client configured by `OFFICE_CLIENT_ID`. The same endpoint still accepts a specific client through `client_ids` or consolidated scope with `client_ids = null`. For client users, the API overrides `client_ids` to the authenticated client's record.
+
+#### `clientes`
+
+The clients report keeps the `clients` list and adds:
+
+```json
+{
+  "total_clientes": 25,
+  "total_clientes_ativos": 21,
+  "total_honorarios": 32000.0,
+  "por_regime": [{"regime": "simples_nacional", "total": 14}],
+  "por_status": [{"status": "ativo", "total": 21}]
+}
+```
+
+Each `clients[]` item includes `status`, `regime_tributario`, `honorarios`, `total_pendente` and `total_atrasado`.
+
+#### `obrigacoes`
+
+The obligations report now applies `period_start`, `period_end`, `client_ids`, `status` and `statuses` filters. It returns totals and a detailed list:
+
+```json
+{
+  "compliance_rate": 82.5,
+  "total_obligations": 40,
+  "pending": 5,
+  "completed": 33,
+  "overdue": 2,
+  "cancelled": 0,
+  "totais_por_status": [{"status": "pendente", "total": 5}],
+  "obligations": [
+    {
+      "id": "obligation-id",
+      "client_id": "client-id",
+      "client_name": "Cliente Exemplo",
+      "client_cnpj": "00.000.000/0001-00",
+      "obligation_name": "DAS Mensal",
+      "obligation_code": "DAS",
+      "status": "pendente",
+      "competencia": "2025-01",
+      "due_date": "2025-01-20",
+      "priority": "media",
+      "completed_at": null
+    }
+  ]
+}
+```
+
 ---
 
 ### Export Report
@@ -247,7 +375,7 @@ Generates and exports the report in the specified format.
 }
 ```
 
-**Response:** `202 Accepted` (async generation)
+**Response:** `200 OK`
 ```json
 {
   "report_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -494,6 +622,24 @@ Generates audit and activity report.
 
 ---
 
+## Export Table Preparation
+
+`reports.py` prepares dedicated export tables for:
+
+- `geral`: empresa, resumo financeiro, KPIs, evolução mensal, principais receitas/despesas and projeções.
+- `clientes`: cliente, CNPJ, status, regime tributário, honorários, pendente and atrasado.
+- `obrigacoes`: cliente, CNPJ, obrigação, status, competência, vencimento and prioridade.
+
+---
+
+## Deploy Notes
+
+Deploy requires `alembic upgrade head` because PostgreSQL enum `report_type` receives the new value `geral`.
+
+Production Docker configuration remains unchanged. Do not alter `docker-compose.prod.yml` or `.env.prod`; production continues using `postgres:5432` through the Docker network.
+
+---
+
 ## Error Responses
 
 ### 400 Bad Request
@@ -561,4 +707,3 @@ Generates audit and activity report.
 3. **Customization**: Not all reports support all customization options. Check `supports_customization` and `supported_charts` in report type info.
 4. **RBAC**: Clients can only see their own data in all reports.
 5. **Data Retention**: Report history is retained indefinitely for audit purposes, but file downloads expire after 7 days.
-

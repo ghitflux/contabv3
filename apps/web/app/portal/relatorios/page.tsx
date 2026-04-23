@@ -32,9 +32,8 @@ export default function PortalRelatoriosPage() {
 
   // Available report types for clients (filtered)
   const availableTypes = [
-    ReportTypeEnum.DRE,
-    ReportTypeEnum.FLUXO_CAIXA,
-    ReportTypeEnum.KPIS,
+    ReportTypeEnum.GERAL,
+    ReportTypeEnum.OBRIGACOES,
   ];
 
   useEffect(() => {
@@ -97,7 +96,7 @@ export default function PortalRelatoriosPage() {
         <div>
           <h1 className="text-3xl font-bold">Meus Relatórios</h1>
           <p className="text-default-500 mt-1">
-            Visualize e baixe seus relatórios financeiros
+            Visualize e baixe seus relatórios gerenciais
           </p>
         </div>
       </div>
@@ -141,7 +140,7 @@ export default function PortalRelatoriosPage() {
               <Spinner size="lg" />
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filteredTypes.map((type) => (
                 <Card key={type.type} className="border border-divider">
                   <CardBody>

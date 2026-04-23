@@ -64,9 +64,10 @@ const normalizeCurrencyNumber = (value: number): number => {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 };
 
-const normalizeOptionalCurrency = (value: number | string | null | undefined) => {
-  if (value === null || value === undefined || value === '') return value ?? null;
-  return normalizeCurrencyNumber(Number(value));
+const normalizeOptionalCurrency = (value: number | string | null | undefined): number | null => {
+  if (value === null || value === undefined || value === '') return null;
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? normalizeCurrencyNumber(numericValue) : null;
 };
 
 const resolveDownloadFileName = (contentDisposition: string | null, fallback: string) => {

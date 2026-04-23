@@ -4,6 +4,9 @@
 
 // Enums
 export enum ReportType {
+  // Strategic reports
+  GERAL = 'geral',
+
   // Financial reports
   DRE = 'dre',
   FLUXO_CAIXA = 'fluxo_caixa',
@@ -46,6 +49,8 @@ export interface ReportFilterRequest {
   period_start: string; // ISO date string
   period_end: string; // ISO date string
   client_ids?: string[] | null;
+  status?: string | null;
+  statuses?: string[] | null;
   report_type: ReportType;
 }
 
@@ -274,13 +279,68 @@ export interface KPIReportData {
   roi?: number | null;
 }
 
+export interface GeneralReportCompany {
+  escopo: 'escritorio' | 'cliente' | 'consolidado';
+  id?: string | null;
+  nome: string;
+  razao_social?: string | null;
+  cnpj?: string | null;
+  email?: string | null;
+  telefone?: string | null;
+  endereco?: string | null;
+}
+
+export interface GeneralMonthlyEvolution {
+  competencia: string;
+  receita_total: number;
+  despesa_total: number;
+  resultado_liquido: number;
+  margem_lucro: number;
+}
+
+export interface GeneralProjectionPeriod {
+  competencia: string;
+  previsao_receita: number;
+  previsao_despesa: number;
+  previsao_resultado: number;
+}
+
+export interface GeneralReportData {
+  empresa: GeneralReportCompany;
+  resumo_financeiro: {
+    receita_total: number;
+    despesa_total: number;
+    resultado_liquido: number;
+    margem_lucro: number;
+  };
+  dre_simplificada: DREReportData;
+  kpis: {
+    margem_operacional: number;
+    resultado_liquido: number;
+    receita_total: number;
+    despesa_total: number;
+  };
+  evolucao_mensal: GeneralMonthlyEvolution[];
+  analises: {
+    principais_receitas: DRERow[];
+    principais_despesas: DRERow[];
+  };
+  projecoes: {
+    metodo_projecao: string;
+    base_historico_meses: number;
+    periodos: GeneralProjectionPeriod[];
+  };
+}
+
 // Operational report data structures
 export interface ClientInfo {
   id: string;
   razao_social: string;
+  nome_fantasia?: string | null;
   cnpj: string;
   email?: string | null;
   status: string;
+  regime_tributario: string;
   honorarios: number;
   total_pendente: number;
   total_atrasado: number;
@@ -289,7 +349,25 @@ export interface ClientInfo {
 export interface ClientsReportData {
   clients: ClientInfo[];
   total_clientes: number;
+  total_clientes_ativos: number;
   total_honorarios: number;
+  por_regime: Array<{ regime: string; total: number }>;
+  por_status: Array<{ status: string; total: number }>;
+}
+
+export interface ObligationReportItem {
+  id: string;
+  client_id: string;
+  client_name: string;
+  client_razao_social: string;
+  client_cnpj: string;
+  obligation_name: string;
+  obligation_code: string;
+  status: string;
+  competencia: string;
+  due_date: string;
+  priority: string;
+  completed_at?: string | null;
 }
 
 export interface ObligationsReportData {
@@ -299,6 +377,8 @@ export interface ObligationsReportData {
   completed: number;
   overdue: number;
   cancelled: number;
+  totais_por_status: Array<{ status: string; total: number }>;
+  obligations: ObligationReportItem[];
 }
 
 export interface LicensesReportData {
@@ -319,6 +399,7 @@ export interface AuditReportData {
 // Helper functions
 export function getReportTypeLabel(type: ReportType): string {
   const labels: Record<ReportType, string> = {
+    [ReportType.GERAL]: 'Relatório Geral',
     [ReportType.DRE]: 'Demonstrativo de Resultados (DRE)',
     [ReportType.FLUXO_CAIXA]: 'Fluxo de Caixa',
     [ReportType.LIVRO_CAIXA]: 'Livro Caixa',
@@ -336,6 +417,7 @@ export function getReportTypeLabel(type: ReportType): string {
 
 export function getReportTypeCategory(type: ReportType): 'financeiro' | 'operacional' {
   const financialTypes = [
+    ReportType.GERAL,
     ReportType.DRE,
     ReportType.FLUXO_CAIXA,
     ReportType.LIVRO_CAIXA,

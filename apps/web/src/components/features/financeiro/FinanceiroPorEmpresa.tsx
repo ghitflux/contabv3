@@ -39,7 +39,10 @@ import {
   extractBankNameFromNotes,
   isAutomaticClientMonthlyFeeTransaction,
   isDuePaymentStatus,
+  isFinancialApplicationTransaction,
   isProfitDistributionTransaction,
+  getTransactionSignedAmount,
+  getTransactionTypeLabel,
   getPaymentMethodLabel,
 } from '@/types/finance';
 import { toast } from '@/lib/toast';
@@ -74,7 +77,13 @@ interface ClientTransaction {
 }
 
 const LANCAMENTOS_PER_PAGE = 20;
-type ActiveTransactionPanel = 'all' | 'receber' | 'pagar' | 'receita' | 'despesa';
+type ActiveTransactionPanel =
+  | 'all'
+  | 'receber'
+  | 'pagar'
+  | 'receita'
+  | 'despesa'
+  | 'financeiro';
 
 export function FinanceiroPorEmpresa({
   onExportLivro,
@@ -441,6 +450,13 @@ export function FinanceiroPorEmpresa({
         .reduce((sum, t) => sum + t.amount, 0),
     [yearTransactions]
   );
+  const aplicacoesFinanceirasAno = useMemo(
+    () =>
+      paidYearTransactions
+        .filter((t) => isFinancialApplicationTransaction(t))
+        .reduce((sum, t) => sum + getTransactionSignedAmount(t), 0),
+    [paidYearTransactions]
+  );
 
   const resolveTransactionBankName = useCallback(
     (transaction: Transaction) => {
@@ -613,6 +629,13 @@ export function FinanceiroPorEmpresa({
         .reduce((sum, t) => sum + t.value, 0),
     [paidDisplayTransactions]
   );
+  const aplicacoesFinanceiras = useMemo(
+    () =>
+      paidDisplayTransactions
+        .filter((t) => isFinancialApplicationTransaction(t.raw))
+        .reduce((sum, t) => sum + getTransactionSignedAmount(t.raw), 0),
+    [paidDisplayTransactions]
+  );
   const lucro = receita - despesa;
   const isNegativeProfit = lucro < 0;
   const isNegativeProfitYear = lucroAno < 0;
@@ -636,6 +659,15 @@ export function FinanceiroPorEmpresa({
       ),
     [transactions]
   );
+  const financialApplicationTransactions = useMemo(
+    () =>
+      transactions.filter(
+        (transaction) =>
+          isFinancialApplicationTransaction(transaction) &&
+          transaction.payment_status === PaymentStatus.PAGO
+      ),
+    [transactions]
+  );
   const aReceber = useMemo(
     () => receivableTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
     [receivableTransactions]
@@ -650,10 +682,7 @@ export function FinanceiroPorEmpresa({
     paidBalanceTransactions.forEach((transaction) => {
       const bankName = resolveTransactionBankName(transaction);
       if (!bankName) return;
-      const signedAmount =
-        transaction.transaction_type === TransactionType.RECEITA
-          ? transaction.amount
-          : -transaction.amount;
+      const signedAmount = getTransactionSignedAmount(transaction);
       totalsByBank.set(bankName, (totalsByBank.get(bankName) ?? 0) + signedAmount);
     });
 
@@ -680,8 +709,15 @@ export function FinanceiroPorEmpresa({
           transaction.payment_status === PaymentStatus.PAGO
       );
     }
+    if (activePendingPanel === 'financeiro') return financialApplicationTransactions;
     return [];
-  }, [activePendingPanel, payableTransactions, receivableTransactions, transactions]);
+  }, [
+    activePendingPanel,
+    financialApplicationTransactions,
+    payableTransactions,
+    receivableTransactions,
+    transactions,
+  ]);
 
   const selectedClientListItem = clients.find((client) => client.id === selectedClient) ?? null;
   const selectedClientData = clientDetails ?? selectedClientListItem;
@@ -1051,7 +1087,7 @@ export function FinanceiroPorEmpresa({
         </CardBody>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
         <Card
           isPressable
           onPress={() => setActivePendingPanel((prev) => (prev === 'receita' ? 'all' : 'receita'))}
@@ -1114,6 +1150,26 @@ export function FinanceiroPorEmpresa({
         </Card>
         <Card
           isPressable
+          onPress={() =>
+            setActivePendingPanel((prev) => (prev === 'financeiro' ? 'all' : 'financeiro'))
+          }
+          className={`border ${
+            activePendingPanel === 'financeiro'
+              ? 'border-cyan-400 bg-cyan-50 dark:bg-cyan-900/20'
+              : 'bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-900'
+          }`}
+        >
+          <CardBody>
+            <p className="text-sm text-cyan-700 dark:text-cyan-400 font-medium mb-1">
+              APLICAÇÕES
+            </p>
+            <p className="text-2xl font-bold text-cyan-700 dark:text-cyan-400">
+              {formatCurrency(aplicacoesFinanceiras)}
+            </p>
+          </CardBody>
+        </Card>
+        <Card
+          isPressable
           onPress={() => setActivePendingPanel((prev) => (prev === 'receber' ? 'all' : 'receber'))}
           className={`border ${
             activePendingPanel === 'receber'
@@ -1156,7 +1212,7 @@ export function FinanceiroPorEmpresa({
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
           Acumulado {currentYear}
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
           <Card className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900">
             <CardBody>
               <p className="text-sm text-green-700 dark:text-green-400 font-medium mb-1">
@@ -1215,6 +1271,16 @@ export function FinanceiroPorEmpresa({
               </p>
             </CardBody>
           </Card>
+          <Card className="bg-cyan-50 dark:bg-cyan-900/20 border border-cyan-200 dark:border-cyan-900">
+            <CardBody>
+              <p className="text-sm text-cyan-700 dark:text-cyan-400 font-medium mb-1">
+                APLICAÇÕES NO ANO
+              </p>
+              <p className="text-2xl font-bold text-cyan-700 dark:text-cyan-400">
+                {formatCurrency(aplicacoesFinanceirasAno)}
+              </p>
+            </CardBody>
+          </Card>
         </div>
       </div>
 
@@ -1228,7 +1294,9 @@ export function FinanceiroPorEmpresa({
                   ? 'Lançamentos de Contas a Pagar'
                   : activePendingPanel === 'receita'
                     ? 'Lançamentos que compõem a Receita do Período'
-                    : 'Lançamentos que compõem as Despesas do Período'}
+                    : activePendingPanel === 'despesa'
+                      ? 'Lançamentos que compõem as Despesas do Período'
+                      : 'Aplicações financeiras do período'}
             </h3>
             <Button
               variant="light"
@@ -1439,7 +1507,7 @@ export function FinanceiroPorEmpresa({
                   <TableRow key={transaction.id}>
                     <TableCell>{formatLocalDate(transaction.date)}</TableCell>
                     <TableCell>
-                      {transaction.type === TransactionType.RECEITA ? 'Entrada' : 'Saída'}
+                      {getTransactionTypeLabel(transaction.raw)}
                     </TableCell>
                     <TableCell>{transaction.history}</TableCell>
                     <TableCell className="text-right font-semibold">
