@@ -504,7 +504,7 @@ class StatementImportService:
             f"Importação de extrato {statement_import.source_format.value.upper()}",
         ]
         if statement_import.bank_account and statement_import.bank_account.name:
-            parts.append(f"Banco: {statement_import.bank_account.name}")
+            parts.append(f"Caixa: {statement_import.bank_account.name}")
         if row.raw_description:
             parts.append(f"Histórico bruto: {row.raw_description}")
         if row.balance_after is not None:

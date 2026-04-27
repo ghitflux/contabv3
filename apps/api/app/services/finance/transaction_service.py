@@ -12,7 +12,6 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.db.models.bank_account import BankAccount
 from app.db.models.client import ClientStatus
 from app.db.models.finance import (
     FinancialRecurringTemplate,
@@ -23,6 +22,7 @@ from app.db.models.finance import (
 from app.db.repositories.client import ClientRepository
 from app.db.repositories.transaction import TransactionRepository
 from app.schemas.finance import TransactionCreate, TransactionUpdate
+from app.services.finance.cash_account_service import CashAccountService
 from app.services.finance.honorarios_utils import is_auto_fee_transaction
 
 
@@ -33,6 +33,7 @@ class TransactionService:
         self.db = db
         self.transaction_repo = TransactionRepository(db)
         self.client_repo = ClientRepository(db)
+        self.cash_account_service = CashAccountService(db)
 
     @staticmethod
     def _normalize_amount(value: Decimal) -> Decimal:
@@ -88,28 +89,17 @@ class TransactionService:
         """Automatic honorários entries use their own paired flow."""
         return is_auto_fee_transaction(transaction, settings.OFFICE_CLIENT_ID)
 
-    async def _validate_bank_account(
+    async def _resolve_cash_account_id(
         self,
         bank_account_id: UUID | None,
         client_id: UUID,
-    ) -> UUID | None:
-        """Ensure bank account belongs to the transaction owner context."""
-        if bank_account_id is None:
-            return None
-
-        bank_account = await self.db.scalar(
-            select(BankAccount).where(BankAccount.id == bank_account_id).limit(1)
+    ) -> UUID:
+        """Resolve the single cash account for the transaction owner context."""
+        cash_account = await self.cash_account_service.resolve_for_transaction(
+            client_id=client_id,
+            requested_bank_account_id=bank_account_id,
         )
-        if bank_account is None:
-            raise ValueError(f"Bank account with ID {bank_account_id} not found")
-
-        if bank_account.client_id is None:
-            if settings.OFFICE_CLIENT_ID is None or client_id != settings.OFFICE_CLIENT_ID:
-                raise ValueError("Office bank account can only be used in office transactions")
-        elif bank_account.client_id != client_id:
-            raise ValueError("Bank account does not belong to the selected client")
-
-        return bank_account_id
+        return cash_account.id
 
     async def _create_missing_occurrence_from_template(
         self,
@@ -139,10 +129,14 @@ class TransactionService:
         if created_by_id is None:
             raise ValueError(f"No created_by_id available for recurring template {template.id}")
 
+        cash_account = await self.cash_account_service.get_or_create_for_finance_client(
+            template.client_id
+        )
         transaction = FinancialTransaction(
             client_id=template.client_id,
             obligation_id=None,
             created_by_id=created_by_id,
+            bank_account_id=cash_account.id,
             recurring_template_id=template.id,
             transaction_type=template.transaction_type,
             amount=self._normalize_amount(template.amount),
@@ -218,7 +212,10 @@ class TransactionService:
         client = await self.client_repo.get(data.client_id)
         if not client:
             raise ValueError(f"Client with ID {data.client_id} not found")
-        bank_account_id = await self._validate_bank_account(data.bank_account_id, data.client_id)
+        bank_account_id = await self._resolve_cash_account_id(
+            data.bank_account_id,
+            data.client_id,
+        )
 
         if data.is_recurring:
             recurring_day = data.recurring_day or data.due_date.day or 1
@@ -294,7 +291,7 @@ class TransactionService:
         if "amount" in fields_set and data.amount is not None:
             transaction.amount = self._normalize_amount(data.amount)
         if "bank_account_id" in fields_set:
-            transaction.bank_account_id = await self._validate_bank_account(
+            transaction.bank_account_id = await self._resolve_cash_account_id(
                 data.bank_account_id,
                 transaction.client_id,
             )

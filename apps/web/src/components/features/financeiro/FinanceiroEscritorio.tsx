@@ -50,7 +50,6 @@ import {
   TransactionType,
   type Transaction,
   type TransactionUpdate,
-  extractBankNameFromNotes,
   isAutomaticOfficeMonthlyFeeTransaction,
   isDuePaymentStatus,
   isFinancialApplicationTransaction,
@@ -113,7 +112,6 @@ type StandardHistory = {
 type NewTransactionState = {
   date: string;
   type: DisplayTransactionType;
-  bank: string;
   history: string;
   observation: string;
   value: string;
@@ -136,7 +134,6 @@ const buildDefaultTransaction = (
 ): NewTransactionState => ({
   date: formatISO(baseDate, { representation: 'date' }),
   type,
-  bank: '1',
   history: '',
   observation: '',
   value: '',
@@ -331,7 +328,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     [editingTransaction, isAutomaticOfficeFee]
   );
 
-  // Funções para gerenciar bancos do escritório
+  // Funções para gerenciar o caixa do escritório
   const resetBankForm = useCallback(() => {
     setBankForm({
       name: '',
@@ -373,8 +370,8 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       }));
       setBankAccounts(normalized);
     } catch (error) {
-      console.error('Erro ao carregar bancos do escritório', error);
-      toast.error('Não foi possível carregar os bancos.');
+      console.error('Erro ao carregar caixa do escritório', error);
+      toast.error('Não foi possível carregar o caixa.');
     } finally {
       setIsLoadingBanks(false);
     }
@@ -437,8 +434,8 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   }, [monthFilter]);
 
   const handleSaveBank = async () => {
-    if (!bankForm.name.trim() || !bankForm.account_number.trim()) {
-      toast.error('Informe o nome e o número da conta.');
+    if (!bankForm.name.trim()) {
+      toast.error('Informe o nome do caixa.');
       return;
     }
 
@@ -454,17 +451,16 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       if (editingBank) {
         await bankAccountsApi.update(editingBank.id, {
           name: savedBankName,
-          account_number: bankForm.account_number.trim(),
           balance: balanceValue,
           accounting_account: bankForm.accounting_account.trim() || null,
         });
         setSuccessModal({
           isOpen: true,
-          message: 'Banco atualizado com sucesso!',
+          message: 'Caixa atualizado com sucesso!',
           bankName: savedBankName,
         });
       } else {
-        // Create office bank account (no client_id)
+        // Create office cash account (no client_id)
         await bankAccountsApi.create({
           name: savedBankName,
           account_number: bankForm.account_number.trim(),
@@ -473,7 +469,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         });
         setSuccessModal({
           isOpen: true,
-          message: 'Banco cadastrado com sucesso!',
+          message: 'Caixa cadastrado com sucesso!',
           bankName: savedBankName,
         });
       }
@@ -481,10 +477,10 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       resetBankForm();
       await loadBankAccounts();
     } catch (error) {
-      console.error('Erro ao salvar banco', error);
+      console.error('Erro ao salvar caixa', error);
       const errorDetail = (error as { data?: { detail?: string } })?.data?.detail;
       const message =
-        typeof errorDetail === 'string' ? errorDetail : 'Não foi possível salvar o banco.';
+        typeof errorDetail === 'string' ? errorDetail : 'Não foi possível salvar o caixa.';
       toast.error(message);
     } finally {
       setIsSavingBank(false);
@@ -492,15 +488,15 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
   };
 
   const handleDeleteBank = async (bankId: string) => {
-    const confirmed = window.confirm('Tem certeza que deseja excluir este banco?');
+    const confirmed = window.confirm('Tem certeza que deseja excluir este caixa?');
     if (!confirmed) return;
     try {
       await bankAccountsApi.delete(bankId);
-      toast.success('Banco removido com sucesso.');
+      toast.success('Caixa removido com sucesso.');
       await loadBankAccounts();
     } catch (error) {
-      console.error('Erro ao excluir banco', error);
-      toast.error('Não foi possível excluir o banco.');
+      console.error('Erro ao excluir caixa', error);
+      toast.error('Não foi possível excluir o caixa.');
     }
   };
 
@@ -569,7 +565,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         const matchedBank = bankAccounts.find((bank) => bank.id === transaction.bank_account_id);
         if (matchedBank) return matchedBank.name;
       }
-      return extractBankNameFromNotes(transaction.notes);
+      return bankAccounts[0]?.name ?? 'Caixa';
     },
     [bankAccounts]
   );
@@ -1272,10 +1268,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       return;
     }
 
-    const selectedBank = bankAccounts.find((bank) => bank.id === newTransaction.bank);
-    const bankName = selectedBank?.name;
     const notesParts = [];
-    if (bankName) notesParts.push(`Banco: ${bankName}`);
     if (newTransaction.observation) notesParts.push(`Obs: ${newTransaction.observation}`);
     const notes = notesParts.length ? notesParts.join(' | ') : undefined;
     const paidDate = new Date(`${newTransaction.date}T12:00:00`).toISOString();
@@ -1286,18 +1279,13 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
     try {
       await createTransaction({
         client_id: OFFICE_CLIENT_ID,
-        bank_account_id: selectedBank?.id ?? null,
         transaction_type: getTransactionTypeFromDisplayType(newTransaction.type),
         amount,
         payment_method: !isSettled
           ? undefined
           : newTransaction.isRecurring
             ? undefined
-            : bankName
-              ? bankName.toLowerCase().includes('pix')
-                ? PaymentMethod.PIX
-                : PaymentMethod.TRANSFERENCIA
-              : undefined,
+            : PaymentMethod.TRANSFERENCIA,
         payment_status: isSettled ? PaymentStatus.PAGO : PaymentStatus.PENDENTE,
         due_date: newTransaction.date,
         paid_date: isSettled ? paidDate : null,
@@ -2030,27 +2018,18 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-              Saldo de Bancos e Caixa
+              Caixa do Escritório
             </h3>
-            <p className="text-sm text-default-500">Gerencie as contas bancárias do escritório</p>
+            <p className="text-sm text-default-500">Saldo único dos lançamentos do escritório</p>
           </div>
-          <Button
-            color="primary"
-            variant="flat"
-            startContent={<Plus className="h-4 w-4" />}
-            onPress={() => openBankModal()}
-            className="w-full sm:w-auto"
-          >
-            Novo Banco
-          </Button>
         </CardHeader>
         <CardBody>
           {isLoadingBanks ? (
-            <p className="text-sm text-default-500">Carregando bancos...</p>
+            <p className="text-sm text-default-500">Carregando caixa...</p>
           ) : syncedBankBalances.length === 0 ? (
-            <p className="text-sm text-default-500">Nenhum banco cadastrado.</p>
+            <p className="text-sm text-default-500">Nenhum caixa configurado.</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {syncedBankBalances.map((bank) => (
                 <Card key={bank.id} className="bg-slate-50 dark:bg-slate-900/20">
                   <CardBody className="space-y-2">
@@ -2058,7 +2037,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                       <div>
                         <p className="text-sm text-slate-600 dark:text-slate-400">{bank.name}</p>
                         <p className="text-xs text-slate-500 dark:text-slate-500">
-                          Conta: {bank.account_number}
+                          Caixa único
                         </p>
                       </div>
                       <div className="flex items-center gap-1">
@@ -2066,20 +2045,10 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                           size="sm"
                           variant="light"
                           isIconOnly
-                          aria-label="Editar banco"
+                          aria-label="Editar caixa"
                           onPress={() => openBankModal(bank)}
                         >
                           <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="light"
-                          color="danger"
-                          isIconOnly
-                          aria-label="Excluir banco"
-                          onPress={() => handleDeleteBank(bank.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
@@ -2120,7 +2089,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
           </Button>
         </CardHeader>
         <CardBody className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
             <DatePickerField
               label="Data"
               value={newTransaction.date}
@@ -2146,21 +2115,6 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
               <SelectItem key={PROFIT_DISTRIBUTION_LABEL}>Distribuição de lucros</SelectItem>
               <SelectItem key={FINANCIAL_APPLICATION_LABEL}>Aplicação</SelectItem>
               <SelectItem key={FINANCIAL_REDEMPTION_LABEL}>Resgate</SelectItem>
-            </Select>
-            <Select
-              label="Banco"
-              selectedKeys={newTransaction.bank ? [newTransaction.bank] : []}
-              onSelectionChange={(keys) => {
-                const value = Array.from(keys)[0] as string | undefined;
-                if (value) {
-                  setNewTransaction((prev) => ({ ...prev, bank: value }));
-                }
-              }}
-              placeholder="Selecione..."
-            >
-              {bankAccounts.map((bank) => (
-                <SelectItem key={bank.id}>{bank.name}</SelectItem>
-              ))}
             </Select>
             <Select
               label="Histórico"
@@ -2322,7 +2276,7 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
                 </TableColumn>
                 <TableColumn>Data</TableColumn>
                 <TableColumn>Tipo</TableColumn>
-                <TableColumn>Banco</TableColumn>
+                <TableColumn>Caixa</TableColumn>
                 <TableColumn>Histórico</TableColumn>
                 <TableColumn>Status</TableColumn>
                 <TableColumn>Observação</TableColumn>
@@ -2436,21 +2390,13 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
         <ModalContent>
           {(onClose) => (
             <>
-              <ModalHeader>{editingBank ? 'Editar Banco' : 'Adicionar Banco'}</ModalHeader>
+              <ModalHeader>{editingBank ? 'Editar Caixa' : 'Adicionar Caixa'}</ModalHeader>
               <ModalBody className="space-y-3">
                 <Input
-                  label="Nome do Banco"
-                  placeholder="Ex: Banco do Brasil"
+                  label="Nome do Caixa"
+                  placeholder="Ex: Caixa do Escritório"
                   value={bankForm.name}
                   onValueChange={(value) => setBankForm((prev) => ({ ...prev, name: value }))}
-                />
-                <Input
-                  label="Número da Conta"
-                  placeholder="Ex: 12345-6"
-                  value={bankForm.account_number}
-                  onValueChange={(value) =>
-                    setBankForm((prev) => ({ ...prev, account_number: value }))
-                  }
                 />
                 <Input
                   label="Saldo"
@@ -2762,8 +2708,8 @@ export function FinanceiroEscritorio({ onExportLivro }: { onExportLivro?: () => 
       <StatementImportModal
         isOpen={isImportModalOpen}
         onOpenChange={setIsImportModalOpen}
-        bankAccounts={bankAccounts}
-        scopeLabel="Importe o extrato bancário do escritório"
+        scope={{ type: 'office' }}
+        scopeLabel="Importe o extrato do escritório"
         onImported={refreshFinancialData}
       />
 

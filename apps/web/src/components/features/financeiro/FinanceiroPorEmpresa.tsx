@@ -36,7 +36,6 @@ import {
   TransactionType,
   type Transaction,
   type TransactionUpdate,
-  extractBankNameFromNotes,
   isAutomaticClientMonthlyFeeTransaction,
   isDuePaymentStatus,
   isFinancialApplicationTransaction,
@@ -301,8 +300,8 @@ export function FinanceiroPorEmpresa({
         }));
         setBankAccounts(normalized);
       } catch (error) {
-        console.error('Erro ao carregar bancos', error);
-        toast.error('Não foi possível carregar os bancos.');
+        console.error('Erro ao carregar caixa', error);
+        toast.error('Não foi possível carregar o caixa.');
       } finally {
         setIsLoadingBanks(false);
       }
@@ -316,12 +315,12 @@ export function FinanceiroPorEmpresa({
   }, [loadBankAccounts, isAdminOrFunc, selectedClient, user]);
 
   const handleSaveBank = async () => {
-    if (!bankForm.name.trim() || !bankForm.account_number.trim()) {
-      toast.error('Informe o nome e o número da conta.');
+    if (!bankForm.name.trim()) {
+      toast.error('Informe o nome do caixa.');
       return;
     }
     if (isAdminOrFunc && !selectedClient) {
-      toast.error('Selecione uma empresa antes de cadastrar bancos.');
+      toast.error('Selecione uma empresa antes de cadastrar o caixa.');
       return;
     }
 
@@ -335,11 +334,10 @@ export function FinanceiroPorEmpresa({
       if (editingBank) {
         await bankAccountsApi.update(editingBank.id, {
           name: bankForm.name.trim(),
-          account_number: bankForm.account_number.trim(),
           balance: balanceValue,
           accounting_account: bankForm.accounting_account.trim() || null,
         });
-        toast.success('Banco atualizado com sucesso.');
+        toast.success('Caixa atualizado com sucesso.');
       } else {
         await bankAccountsApi.create({
           client_id: isAdminOrFunc ? selectedClient : undefined,
@@ -348,27 +346,27 @@ export function FinanceiroPorEmpresa({
           balance: balanceValue,
           accounting_account: bankForm.accounting_account.trim() || null,
         });
-        toast.success('Banco cadastrado com sucesso.');
+        toast.success('Caixa cadastrado com sucesso.');
       }
       setIsBankModalOpen(false);
       resetBankForm();
       await loadBankAccounts(isAdminOrFunc ? selectedClient || undefined : undefined);
     } catch (error) {
-      console.error('Erro ao salvar banco', error);
-      toast.error('Não foi possível salvar o banco.');
+      console.error('Erro ao salvar caixa', error);
+      toast.error('Não foi possível salvar o caixa.');
     }
   };
 
   const handleDeleteBank = async (bankId: string) => {
-    const confirmed = window.confirm('Tem certeza que deseja excluir este banco?');
+    const confirmed = window.confirm('Tem certeza que deseja excluir este caixa?');
     if (!confirmed) return;
     try {
       await bankAccountsApi.delete(bankId);
-      toast.success('Banco removido com sucesso.');
+      toast.success('Caixa removido com sucesso.');
       await loadBankAccounts(isAdminOrFunc ? selectedClient || undefined : undefined);
     } catch (error) {
-      console.error('Erro ao excluir banco', error);
-      toast.error('Não foi possível excluir o banco.');
+      console.error('Erro ao excluir caixa', error);
+      toast.error('Não foi possível excluir o caixa.');
     }
   };
 
@@ -464,7 +462,7 @@ export function FinanceiroPorEmpresa({
         const matchedBank = bankAccounts.find((bank) => bank.id === transaction.bank_account_id);
         if (matchedBank) return matchedBank.name;
       }
-      return extractBankNameFromNotes(transaction.notes);
+      return bankAccounts[0]?.name ?? 'Caixa';
     },
     [bankAccounts]
   );
@@ -1360,30 +1358,20 @@ export function FinanceiroPorEmpresa({
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-              Saldo por Banco
+              Caixa da Empresa
             </h3>
             <p className="text-sm text-default-500">
-              Acompanhe e gerencie os saldos das contas bancárias
+              Saldo único dos lançamentos desta empresa
             </p>
           </div>
-          <Button
-            color="primary"
-            variant="flat"
-            startContent={<Plus className="h-4 w-4" />}
-            onPress={() => openBankModal()}
-            isDisabled={isAdminOrFunc && !selectedClient}
-            className="w-full sm:w-auto"
-          >
-            Novo Banco
-          </Button>
         </CardHeader>
         <CardBody>
           {isLoadingBanks ? (
-            <p className="text-sm text-default-500">Carregando bancos...</p>
+            <p className="text-sm text-default-500">Carregando caixa...</p>
           ) : syncedBankBalances.length === 0 ? (
-            <p className="text-sm text-default-500">Nenhum banco cadastrado.</p>
+            <p className="text-sm text-default-500">Nenhum caixa configurado.</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {syncedBankBalances.map((bank) => (
                 <Card key={bank.id} className="bg-slate-50 dark:bg-slate-900/20">
                   <CardBody className="space-y-2">
@@ -1391,7 +1379,7 @@ export function FinanceiroPorEmpresa({
                       <div>
                         <p className="text-sm text-slate-600 dark:text-slate-400">{bank.name}</p>
                         <p className="text-xs text-slate-500 dark:text-slate-500">
-                          Conta: {bank.account_number}
+                          Caixa único
                         </p>
                       </div>
                       <div className="flex items-center gap-1">
@@ -1399,20 +1387,10 @@ export function FinanceiroPorEmpresa({
                           size="sm"
                           variant="light"
                           isIconOnly
-                          aria-label="Editar banco"
+                          aria-label="Editar caixa"
                           onPress={() => openBankModal(bank)}
                         >
                           <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="light"
-                          color="danger"
-                          isIconOnly
-                          aria-label="Excluir banco"
-                          onPress={() => handleDeleteBank(bank.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
@@ -1472,7 +1450,6 @@ export function FinanceiroPorEmpresa({
       {selectedClient && (
         <ClienteLancamentoRapidoCard
           clientId={selectedClient}
-          bankAccounts={bankAccounts}
           transactions={transactions}
           createTransaction={createTransaction}
           onCreated={refresh}
@@ -1605,21 +1582,13 @@ export function FinanceiroPorEmpresa({
         <ModalContent>
           {(onClose) => (
             <>
-              <ModalHeader>{editingBank ? 'Editar Banco' : 'Adicionar Banco'}</ModalHeader>
+              <ModalHeader>{editingBank ? 'Editar Caixa' : 'Adicionar Caixa'}</ModalHeader>
               <ModalBody className="space-y-3">
                 <Input
-                  label="Nome do Banco"
-                  placeholder="Ex: Banco do Brasil"
+                  label="Nome do Caixa"
+                  placeholder="Ex: Caixa da Empresa"
                   value={bankForm.name}
                   onValueChange={(value) => setBankForm((prev) => ({ ...prev, name: value }))}
-                />
-                <Input
-                  label="Número da Conta"
-                  placeholder="Ex: 12345-6"
-                  value={bankForm.account_number}
-                  onValueChange={(value) =>
-                    setBankForm((prev) => ({ ...prev, account_number: value }))
-                  }
                 />
                 <Input
                   label="Saldo"
@@ -1799,7 +1768,7 @@ export function FinanceiroPorEmpresa({
       <StatementImportModal
         isOpen={isImportModalOpen}
         onOpenChange={setIsImportModalOpen}
-        bankAccounts={bankAccounts}
+        scope={{ type: 'client', clientId: selectedClient || undefined }}
         scopeLabel={
           isAdminOrFunc
             ? selectedClientLabel || 'Importe o extrato da empresa selecionada'

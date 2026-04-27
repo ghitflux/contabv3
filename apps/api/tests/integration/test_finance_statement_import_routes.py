@@ -9,6 +9,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.models.bank_account import BankAccount
 from app.db.models.client import Client, ClientStatus, RegimeTributario, TipoEmpresa
 from app.db.models.finance import FinancialTransaction, PaymentStatus, TransactionType
@@ -51,21 +52,13 @@ async def test_admin_can_preview_and_commit_statement_import(
     admin_token: str,
 ):
     target_client = _build_client()
-    bank_account = BankAccount(
-        client_id=target_client.id,
-        name="Banco Teste",
-        account_number="12345-6",
-        balance=Decimal("0.00"),
-    )
     session.add(target_client)
-    session.add(bank_account)
     await session.commit()
-    await session.refresh(bank_account)
 
     preview_response = await client.post(
         "/api/v1/finance/imports/preview",
         headers={"Authorization": f"Bearer {admin_token}"},
-        data={"bank_account_id": str(bank_account.id)},
+        data={"client_id": str(target_client.id)},
         files={"file": ("extrato.csv", _statement_csv(), "text/csv")},
     )
 
@@ -111,12 +104,13 @@ async def test_admin_can_preview_and_commit_statement_import(
         TransactionType.RECEITA,
         TransactionType.DESPESA,
     }
-    assert all(transaction.bank_account_id == bank_account.id for transaction in transactions)
+    assert all(transaction.bank_account_id for transaction in transactions)
+    assert len({transaction.bank_account_id for transaction in transactions}) == 1
     assert {transaction.reference_month for transaction in transactions} == {date(2026, 3, 1)}
 
 
 @pytest.mark.asyncio
-async def test_cliente_can_import_only_to_own_bank_account(
+async def test_cliente_can_import_only_to_own_cash_account(
     client: AsyncClient,
     session: AsyncSession,
     cliente_user: User,
@@ -144,7 +138,7 @@ async def test_cliente_can_import_only_to_own_bank_account(
     own_preview = await client.post(
         "/api/v1/finance/imports/preview",
         headers={"Authorization": f"Bearer {cliente_token}"},
-        data={"bank_account_id": str(own_bank.id)},
+        data={},
         files={"file": ("extrato.csv", _statement_csv(), "text/csv")},
     )
     assert own_preview.status_code == 201, own_preview.text
@@ -156,3 +150,93 @@ async def test_cliente_can_import_only_to_own_bank_account(
         files={"file": ("extrato.csv", _statement_csv(), "text/csv")},
     )
     assert forbidden_preview.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_can_import_statement_to_office_cash(
+    client: AsyncClient,
+    session: AsyncSession,
+    admin_token: str,
+):
+    office_client = _build_client()
+    office_client.id = settings.OFFICE_CLIENT_ID
+    session.add(office_client)
+    await session.commit()
+
+    preview_response = await client.post(
+        "/api/v1/finance/imports/preview",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        data={"office_only": "true"},
+        files={"file": ("extrato.csv", _statement_csv(), "text/csv")},
+    )
+    assert preview_response.status_code == 201, preview_response.text
+    preview_data = preview_response.json()
+
+    commit_response = await client.post(
+        f"/api/v1/finance/imports/{preview_data['import_id']}/commit",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={
+            "rows": [
+                {
+                    "row_id": row["id"],
+                    "is_selected": True,
+                    "category": "2.1.09" if row["transaction_type"] == "despesa" else "1.1.02",
+                    "notes": "Importado no caixa do escritório",
+                }
+                for row in preview_data["rows"]
+            ]
+        },
+    )
+    assert commit_response.status_code == 200, commit_response.text
+
+    transactions = (
+        (
+            await session.execute(
+                select(FinancialTransaction).where(
+                    FinancialTransaction.client_id == settings.OFFICE_CLIENT_ID
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(transactions) == 2
+    bank_account = await session.get(BankAccount, transactions[0].bank_account_id)
+    assert bank_account is not None
+    assert bank_account.client_id is None
+
+
+@pytest.mark.asyncio
+async def test_cash_account_cannot_be_duplicated_or_deleted(
+    client: AsyncClient,
+    session: AsyncSession,
+    admin_token: str,
+):
+    target_client = _build_client()
+    cash_account = BankAccount(
+        client_id=target_client.id,
+        name="Caixa do Cliente",
+        account_number="CAIXA-TESTE",
+        balance=Decimal("0.00"),
+    )
+    session.add_all([target_client, cash_account])
+    await session.commit()
+    await session.refresh(cash_account)
+
+    duplicate_response = await client.post(
+        "/api/v1/bank-accounts",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={
+            "client_id": str(target_client.id),
+            "name": "Outro Caixa",
+            "account_number": "CAIXA-2",
+            "balance": 0,
+        },
+    )
+    assert duplicate_response.status_code == 400
+
+    delete_response = await client.delete(
+        f"/api/v1/bank-accounts/{cash_account.id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert delete_response.status_code == 400

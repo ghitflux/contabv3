@@ -25,7 +25,7 @@ class BankAccountRepository(BaseRepository[BankAccount]):
     ) -> tuple[list[BankAccount], int]:
         conditions = []
         if office_only:
-            # List only office bank accounts (client_id is null)
+            # List only the office cash account (client_id is null)
             conditions.append(BankAccount.client_id.is_(None))
         elif client_id:
             conditions.append(BankAccount.client_id == client_id)

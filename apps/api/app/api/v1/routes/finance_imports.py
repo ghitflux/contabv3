@@ -21,6 +21,7 @@ from app.schemas.finance import (
     StatementImportPreviewResponse,
     StatementImportRowResponse,
 )
+from app.services.finance.cash_account_service import CashAccountService
 from app.services.finance import StatementImportService
 
 router = APIRouter(prefix="/finance/imports", tags=["finance"])
@@ -66,6 +67,55 @@ async def _get_accessible_bank_account(
             )
 
     return bank_account
+
+
+async def _resolve_import_bank_account(
+    db: AsyncSession,
+    current_user: User,
+    *,
+    bank_account_id: UUID | None,
+    client_id: UUID | None,
+    office_only: bool,
+) -> BankAccount:
+    cash_service = CashAccountService(db)
+
+    if current_user.role == UserRole.CLIENTE:
+        client = await _get_client_profile(db, current_user)
+        if bank_account_id is not None:
+            bank_account = await _get_accessible_bank_account(db, current_user, bank_account_id)
+            return await cash_service.resolve_for_transaction(
+                client_id=client.id,
+                requested_bank_account_id=bank_account.id,
+            )
+        return await cash_service.get_or_create_client_cash(client.id)
+
+    if bank_account_id is not None:
+        bank_account = await _get_accessible_bank_account(db, current_user, bank_account_id)
+        if bank_account.client_id is None:
+            return await cash_service.get_or_create_office_cash()
+        return await cash_service.resolve_for_transaction(
+            client_id=bank_account.client_id,
+            requested_bank_account_id=bank_account.id,
+        )
+
+    if office_only:
+        return await cash_service.get_or_create_office_cash()
+
+    if client_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Informe o cliente ou marque a importação como caixa do escritório.",
+        )
+
+    client_repo = ClientRepository(db)
+    client = await client_repo.get(client_id)
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Client not found",
+        )
+
+    return await cash_service.get_or_create_for_finance_client(client.id)
 
 
 async def _get_accessible_import(
@@ -128,7 +178,9 @@ async def preview_statement_import(
     db: Annotated[AsyncSession, Depends(get_db)],
     request: Request,
     current_user: Annotated[User, Depends(get_current_active_user)],
-    bank_account_id: UUID = Form(...),
+    bank_account_id: UUID | None = Form(None),
+    client_id: UUID | None = Form(None),
+    office_only: bool = Form(False),
     file: UploadFile = File(...),
 ) -> StatementImportPreviewResponse:
     extension = (file.filename or "").lower().rsplit(".", 1)
@@ -143,7 +195,13 @@ async def preview_statement_import(
             detail="Formato não suportado. Use PDF, OFX ou CSV.",
         )
 
-    bank_account = await _get_accessible_bank_account(db, current_user, bank_account_id)
+    bank_account = await _resolve_import_bank_account(
+        db,
+        current_user,
+        bank_account_id=bank_account_id,
+        client_id=client_id,
+        office_only=office_only,
+    )
     payload = await file.read()
     if not payload:
         raise HTTPException(

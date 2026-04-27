@@ -245,13 +245,17 @@ export const financeApi = {
     return apiClient.upload<Transaction>(`/finance/${transactionId}/attachment`, formData);
   },
 
-  async previewStatementImport(
-    bankAccountId: string,
-    file: File
-  ): Promise<StatementImportPreviewResponse> {
+  async previewStatementImport(params: {
+    file: File;
+    bankAccountId?: string;
+    clientId?: string;
+    officeOnly?: boolean;
+  }): Promise<StatementImportPreviewResponse> {
     const formData = new FormData();
-    formData.append('bank_account_id', bankAccountId);
-    formData.append('file', file);
+    if (params.bankAccountId) formData.append('bank_account_id', params.bankAccountId);
+    if (params.clientId) formData.append('client_id', params.clientId);
+    if (params.officeOnly) formData.append('office_only', 'true');
+    formData.append('file', params.file);
     const response = await apiClient.upload<StatementImportPreviewResponse>(
       '/finance/imports/preview',
       formData

@@ -1,5 +1,6 @@
 """Financial services package."""
 
+from app.services.finance.cash_account_service import CashAccountService
 from app.services.finance.fee_generator_service import FeeGeneratorService
 from app.services.finance.honorarios_repair_service import HonorariosRepairService
 from app.services.finance.invoice_service import InvoiceService
@@ -8,6 +9,7 @@ from app.services.finance.statement_import_service import StatementImportService
 from app.services.finance.transaction_service import TransactionService
 
 __all__ = [
+    "CashAccountService",
     "TransactionService",
     "FeeGeneratorService",
     "HonorariosRepairService",

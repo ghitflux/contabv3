@@ -21,6 +21,7 @@ from app.db.models.finance import (
 )
 from app.db.repositories.client import ClientRepository
 from app.schemas.finance import MonthlyFeePairUpdate
+from app.services.finance.cash_account_service import CashAccountService
 from app.services.finance.honorarios_utils import (
     build_client_auto_fee_metadata,
     build_office_auto_fee_metadata,
@@ -42,6 +43,7 @@ class FeeGeneratorService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.client_repo = ClientRepository(db)
+        self.cash_account_service = CashAccountService(db)
 
     @staticmethod
     def _format_reference_label(reference_month: date) -> str:
@@ -1033,12 +1035,19 @@ class FeeGeneratorService:
             )
 
         created_transactions: list[FinancialTransaction] = []
+        client_cash = await self.cash_account_service.get_or_create_client_cash(client.id)
+        office_cash = (
+            await self.cash_account_service.get_or_create_office_cash()
+            if settings.OFFICE_CLIENT_ID
+            else None
+        )
 
         if state["would_create_client_entry"]:
             created_transactions.append(
                 FinancialTransaction(
                     client_id=client.id,
                     obligation_id=None,
+                    bank_account_id=client_cash.id,
                     transaction_type=TransactionType.DESPESA,
                     amount=client.honorarios_mensais,
                     payment_method=None,
@@ -1063,6 +1072,7 @@ class FeeGeneratorService:
                     FinancialTransaction(
                         client_id=settings.OFFICE_CLIENT_ID,
                         obligation_id=None,
+                        bank_account_id=office_cash.id,
                         transaction_type=TransactionType.RECEITA,
                         amount=client.honorarios_mensais,
                         payment_method=None,

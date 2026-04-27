@@ -162,9 +162,9 @@ class FinancialTransaction(Base):
     client_id: Mapped[UUID] = mapped_column(ForeignKey("clients.id"), nullable=False)
     obligation_id: Mapped[Optional[UUID]] = mapped_column(ForeignKey("obligations.id"), nullable=True)
     created_by_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
-    bank_account_id: Mapped[Optional[UUID]] = mapped_column(
+    bank_account_id: Mapped[UUID] = mapped_column(
         ForeignKey("bank_accounts.id"),
-        nullable=True,
+        nullable=False,
     )
     recurring_template_id: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("financial_recurring_templates.id"),

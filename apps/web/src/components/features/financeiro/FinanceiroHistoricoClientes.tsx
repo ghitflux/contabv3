@@ -31,14 +31,14 @@ const ACTION_LABELS: Record<string, string> = {
   "transaction.delete": "Lançamento excluído",
   "transaction.restore": "Lançamento restaurado",
   "transaction.cancel": "Lançamento cancelado",
-  "bank_account.create": "Banco criado",
-  "bank_account.update": "Banco atualizado",
-  "bank_account.delete": "Banco removido",
+  "bank_account.create": "Caixa criado",
+  "bank_account.update": "Caixa atualizado",
+  "bank_account.delete": "Caixa removido",
 };
 
 const ENTITY_LABELS: Record<string, string> = {
   financial_transaction: "Lançamentos",
-  bank_account: "Bancos",
+  bank_account: "Caixa",
 };
 
 export function FinanceiroHistoricoClientes() {
@@ -164,8 +164,8 @@ export function FinanceiroHistoricoClientes() {
     if (!before || !after) return "";
 
     const fields: Array<[string, string]> = [
-      ["name", "Banco"],
-      ["account_number", "Conta"],
+      ["name", "Caixa"],
+      ["account_number", "Identificador"],
       ["balance", "Saldo"],
     ];
 
@@ -192,7 +192,7 @@ export function FinanceiroHistoricoClientes() {
       const name = log.payload?.name ?? "";
       const account = log.payload?.account_number ?? "";
       const balance = log.payload?.balance ? `Saldo ${log.payload.balance}` : "";
-      return [name, account, balance].filter(Boolean).join(" - ") || "Banco";
+      return [name, account, balance].filter(Boolean).join(" - ") || "Caixa";
     }
     return log.action;
   };
@@ -262,7 +262,7 @@ export function FinanceiroHistoricoClientes() {
           >
             <SelectItem key="all">Todos</SelectItem>
             <SelectItem key="financial_transaction">Lançamentos</SelectItem>
-            <SelectItem key="bank_account">Bancos</SelectItem>
+            <SelectItem key="bank_account">Caixa</SelectItem>
           </Select>
           <Select
             label="Origem"

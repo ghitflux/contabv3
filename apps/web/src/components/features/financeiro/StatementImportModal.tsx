@@ -16,8 +16,6 @@ import {
   ModalFooter,
   ModalHeader,
   Pagination,
-  Select,
-  SelectItem,
   Table,
   TableBody,
   TableCell,
@@ -37,7 +35,6 @@ import {
 import { financeApi } from '@/lib/api/endpoints/finance';
 import { toast } from '@/lib/toast';
 import { PLANO_DE_CONTAS, formatConta } from '@/constants/planoDeContas';
-import type { BankAccount } from '@/types/bank-account';
 import type {
   StatementImportPreviewResponse,
   StatementImportRow,
@@ -47,7 +44,7 @@ import type {
 interface StatementImportModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  bankAccounts: BankAccount[];
+  scope: { type: 'office' } | { type: 'client'; clientId?: string };
   scopeLabel: string;
   onImported?: () => Promise<unknown> | void;
 }
@@ -146,11 +143,10 @@ function suggestCategory(description: string, txType: TransactionType): string |
 export function StatementImportModal({
   isOpen,
   onOpenChange,
-  bankAccounts,
+  scope,
   scopeLabel,
   onImported,
 }: StatementImportModalProps) {
-  const [selectedBankId, setSelectedBankId] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<StatementImportPreviewResponse | null>(null);
   const [rows, setRows] = useState<PreviewRowState[]>([]);
@@ -160,7 +156,6 @@ export function StatementImportModal({
 
   useEffect(() => {
     if (!isOpen) {
-      setSelectedBankId('');
       setFile(null);
       setPreview(null);
       setRows([]);
@@ -184,17 +179,21 @@ export function StatementImportModal({
   );
 
   const handlePreview = async () => {
-    if (!selectedBankId) {
-      toast.error('Selecione a conta bancária do extrato.');
-      return;
-    }
     if (!file) {
       toast.error('Selecione um arquivo PDF, OFX ou CSV.');
       return;
     }
+    if (scope.type === 'client' && !scope.clientId) {
+      toast.error('Selecione a empresa antes de importar o extrato.');
+      return;
+    }
     try {
       setIsLoadingPreview(true);
-      const response = await financeApi.previewStatementImport(selectedBankId, file);
+      const response = await financeApi.previewStatementImport({
+        file,
+        clientId: scope.type === 'client' ? scope.clientId : undefined,
+        officeOnly: scope.type === 'office',
+      });
       setPreview(response);
       setPage(1);
       setRows(
@@ -290,7 +289,7 @@ export function StatementImportModal({
         {(onClose) => (
           <>
             <ModalHeader className="flex flex-col gap-1 border-b border-divider pb-3">
-              <h3 className="text-lg font-semibold text-foreground">Importar Extrato Bancário</h3>
+              <h3 className="text-lg font-semibold text-foreground">Importar Extrato</h3>
               <p className="text-sm font-normal text-default-500">{scopeLabel}</p>
             </ModalHeader>
 
@@ -299,34 +298,6 @@ export function StatementImportModal({
                 /* ── Step 1: file selection ── */
                 <Card className="border border-divider">
                   <CardBody className="space-y-4 p-5">
-                    <Select
-                      label="Conta bancária do sistema"
-                      placeholder="Selecione a conta correspondente ao extrato"
-                      selectedKeys={
-                        selectedBankId ? new Set<string>([selectedBankId]) : new Set<string>()
-                      }
-                      onSelectionChange={(keys) => {
-                        if (typeof keys === 'string') return;
-                        const arr = [...keys] as string[];
-                        setSelectedBankId(arr[0] ?? '');
-                      }}
-                      isDisabled={bankAccounts.length === 0}
-                      variant="bordered"
-                      classNames={{
-                        trigger: 'bg-content1',
-                        popoverContent: 'bg-content1 border border-divider shadow-lg',
-                      }}
-                    >
-                      {bankAccounts.map((bank) => (
-                        <SelectItem
-                          key={bank.id}
-                          textValue={`${bank.name} — ${bank.account_number}`}
-                        >
-                          {bank.name} — {bank.account_number}
-                        </SelectItem>
-                      ))}
-                    </Select>
-
                     <div className="rounded-xl border border-dashed border-default-300 p-5 dark:border-default-200">
                       <div className="flex items-start gap-3">
                         <div className="rounded-full bg-primary/10 p-2">
@@ -362,12 +333,6 @@ export function StatementImportModal({
                         </div>
                       </div>
                     </div>
-
-                    {bankAccounts.length === 0 && (
-                      <p className="text-sm text-danger">
-                        Cadastre ao menos uma conta bancária antes de importar extratos.
-                      </p>
-                    )}
                   </CardBody>
                 </Card>
               ) : (
@@ -397,7 +362,7 @@ export function StatementImportModal({
                           {preview.detected_account_number || 'Não detectada'}
                         </p>
                         <p className="text-xs text-default-500">
-                          {preview.detected_bank_name || 'Banco não identificado'}
+                          {preview.detected_bank_name || 'Instituição não identificada'}
                         </p>
                       </CardBody>
                     </Card>
@@ -708,7 +673,6 @@ export function StatementImportModal({
                     startContent={<UploadIcon className="h-4 w-4" />}
                     onPress={handlePreview}
                     isLoading={isLoadingPreview}
-                    isDisabled={bankAccounts.length === 0}
                   >
                     Ler Extrato
                   </Button>

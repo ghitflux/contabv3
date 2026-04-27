@@ -21,6 +21,7 @@ from app.schemas.bank_account import (
     BankAccountResponse,
     BankAccountUpdate,
 )
+from app.services.finance.cash_account_service import CashAccountService
 
 router = APIRouter(prefix="/bank-accounts", tags=["bank-accounts"])
 
@@ -34,15 +35,15 @@ async def list_bank_accounts(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: User = Depends(get_current_active_user),
     client_id: Optional[UUID] = Query(None),
-    office_only: bool = Query(False, description="List only office bank accounts (client_id=null)"),
+    office_only: bool = Query(False, description="List only office cash account (client_id=null)"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
 ) -> BankAccountListResponse:
     """
-    List bank accounts.
+    List cash accounts.
 
-    - Admin/Func: Can see all, filter by client, or see office accounts (office_only=true)
-    - Client: Can only see their own
+    - Admin/Func: Can see all, filter by client, or see office cash (office_only=true)
+    - Client: Can only see their own cash
     """
     if current_user.role == UserRole.CLIENTE:
         client_repo = ClientRepository(db)
@@ -54,6 +55,11 @@ async def list_bank_accounts(
             )
         client_id = client.id
         office_only = False  # Clients cannot see office accounts
+
+    cash_service = CashAccountService(db)
+    if client_id and cash_service.is_office_client(client_id):
+        client_id = None
+        office_only = True
 
     repo = BankAccountRepository(db)
     items, total = await repo.list_with_filters(
@@ -79,7 +85,7 @@ async def create_bank_account(
     current_user: User = Depends(get_current_active_user),
 ) -> BankAccountResponse:
     """
-    Create bank account.
+    Create a cash account only when the owner still has none.
 
     - Admin/Func: Can create for any client or office (client_id=null)
     - Client: Can only create for own client
@@ -96,8 +102,6 @@ async def create_bank_account(
             )
         client_id = client.id
 
-    # Admin/Func can create office bank accounts (client_id=null)
-    # Client must always have a client_id
     if current_user.role == UserRole.CLIENTE and not client_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -114,8 +118,22 @@ async def create_bank_account(
                 detail="Client not found",
             )
 
+    cash_service = CashAccountService(db)
+    is_office_cash = client_id is None or cash_service.is_office_client(client_id)
+    existing_items, _ = await BankAccountRepository(db).list_with_filters(
+        client_id=None if is_office_cash else client_id,
+        office_only=is_office_cash,
+        skip=0,
+        limit=1,
+    )
+    if existing_items:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Já existe um caixa para este escopo.",
+        )
+
     bank = BankAccount(
-        client_id=client_id,
+        client_id=None if is_office_cash else client_id,
         name=data.name,
         account_number=data.account_number,
         balance=data.balance,
@@ -132,7 +150,7 @@ async def create_bank_account(
         entity_id=str(bank.id),
         payload={
             "client_id": str(bank.client_id) if bank.client_id else None,
-            "summary": f"Banco criado: {bank.name} ({bank.account_number}) - Saldo {_format_balance(bank.balance)}",
+            "summary": f"Caixa criado: {bank.name} - Saldo {_format_balance(bank.balance)}",
             "name": bank.name,
             "account_number": bank.account_number,
             "balance": _format_balance(bank.balance),
@@ -158,15 +176,13 @@ async def update_bank_account(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: User = Depends(get_current_active_user),
 ) -> BankAccountResponse:
-    """
-    Update bank account.
-    """
+    """Update editable cash account fields."""
     repo = BankAccountRepository(db)
     bank = await repo.get_by_id(bank_id)
     if not bank:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Bank account not found",
+            detail="Caixa não encontrado",
         )
 
     if current_user.role == UserRole.CLIENTE:
@@ -175,7 +191,7 @@ async def update_bank_account(
         if not client or bank.client_id != client.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to update this bank account",
+                detail="Not authorized to update this cash account",
             )
 
     before = {
@@ -187,6 +203,8 @@ async def update_bank_account(
 
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
+        if key == "account_number":
+            continue
         setattr(bank, key, value)
 
     bank = await repo.update(bank)
@@ -198,7 +216,7 @@ async def update_bank_account(
         entity_id=str(bank.id),
         payload={
             "client_id": str(bank.client_id) if bank.client_id else None,
-            "summary": f"Banco atualizado: {bank.name} ({bank.account_number}) - Saldo {_format_balance(bank.balance)}",
+            "summary": f"Caixa atualizado: {bank.name} - Saldo {_format_balance(bank.balance)}",
             "before": before,
             "after": {
                 "name": bank.name,
@@ -226,15 +244,13 @@ async def delete_bank_account(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: User = Depends(get_current_active_user),
 ) -> None:
-    """
-    Delete bank account.
-    """
+    """Cash accounts are mandatory and cannot be deleted."""
     repo = BankAccountRepository(db)
     bank = await repo.get_by_id(bank_id)
     if not bank:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Bank account not found",
+            detail="Caixa não encontrado",
         )
 
     if current_user.role == UserRole.CLIENTE:
@@ -243,34 +259,10 @@ async def delete_bank_account(
         if not client or bank.client_id != client.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to delete this bank account",
+                detail="Not authorized to delete this cash account",
             )
 
-    audit_log = AuditLog(
-        user_id=current_user.id,
-        action="bank_account.delete",
-        entity="bank_account",
-        entity_id=str(bank.id),
-        payload={
-            "client_id": str(bank.client_id) if bank.client_id else None,
-            "summary": f"Banco removido: {bank.name} ({bank.account_number}) - Saldo {_format_balance(bank.balance)}",
-            "name": bank.name,
-            "account_number": bank.account_number,
-            "balance": _format_balance(bank.balance),
-            "accounting_account": bank.accounting_account,
-            "is_office_account": bank.client_id is None,
-        },
-        ip_address=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="O caixa único não pode ser excluído.",
     )
-    db.add(audit_log)
-
-    deleted = await repo.delete(bank_id)
-    if not deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Bank account not found",
-        )
-
-    await db.commit()
-    return None

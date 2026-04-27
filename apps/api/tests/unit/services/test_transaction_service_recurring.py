@@ -51,7 +51,12 @@ async def test_create_transaction_with_recurrence_creates_pending_occurrence():
 
     service = TransactionService(db)
     client = _build_client()
+    cash_id = uuid4()
     service.client_repo = SimpleNamespace(get=AsyncMock(return_value=client))
+    service.cash_account_service = SimpleNamespace(
+        resolve_for_transaction=AsyncMock(return_value=SimpleNamespace(id=cash_id)),
+        get_or_create_for_finance_client=AsyncMock(return_value=SimpleNamespace(id=cash_id)),
+    )
 
     created_by_id = uuid4()
     transaction = await service.create_transaction(
@@ -75,6 +80,7 @@ async def test_create_transaction_with_recurrence_creates_pending_occurrence():
     assert transaction.reference_month == date(2026, 3, 1)
     assert transaction.due_date == date(2026, 3, 5)
     assert transaction.recurring_template_id is not None
+    assert transaction.bank_account_id == cash_id
 
 
 @pytest.mark.asyncio

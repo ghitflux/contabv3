@@ -13,6 +13,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.contracts.report.enums import ReportType, ReportFormat
+from app.db.models.bank_account import BankAccount
 from app.db.models.client import Client, ClientStatus, RegimeTributario, TipoEmpresa
 from app.db.models.finance import FinancialTransaction, PaymentStatus, TransactionType
 from app.db.models.obligation import Obligation
@@ -84,9 +85,13 @@ class TestReportRoutes:
         target_client = _build_client("Cliente Geral", "11.111.111/0001-11")
         session.add(target_client)
         await session.flush()
+        target_cash = _build_cash_account(target_client.id)
+        session.add(target_cash)
+        await session.flush()
         session.add_all([
             _build_transaction(
                 target_client.id,
+                target_cash.id,
                 admin_user.id,
                 TransactionType.RECEITA,
                 Decimal("1000.00"),
@@ -94,6 +99,7 @@ class TestReportRoutes:
             ),
             _build_transaction(
                 target_client.id,
+                target_cash.id,
                 admin_user.id,
                 TransactionType.DESPESA,
                 Decimal("400.00"),
@@ -101,6 +107,7 @@ class TestReportRoutes:
             ),
             _build_transaction(
                 target_client.id,
+                target_cash.id,
                 admin_user.id,
                 TransactionType.APLICACAO,
                 Decimal("999.00"),
@@ -108,6 +115,7 @@ class TestReportRoutes:
             ),
             _build_transaction(
                 target_client.id,
+                target_cash.id,
                 admin_user.id,
                 TransactionType.RESGATE,
                 Decimal("888.00"),
@@ -167,9 +175,14 @@ class TestReportRoutes:
         other_client = _build_client("Cliente Outro", "33.333.333/0001-33")
         session.add_all([owned_client, other_client])
         await session.flush()
+        owned_cash = _build_cash_account(owned_client.id)
+        other_cash = _build_cash_account(other_client.id)
+        session.add_all([owned_cash, other_cash])
+        await session.flush()
         session.add_all([
             _build_transaction(
                 owned_client.id,
+                owned_cash.id,
                 admin_user.id,
                 TransactionType.RECEITA,
                 Decimal("300.00"),
@@ -177,6 +190,7 @@ class TestReportRoutes:
             ),
             _build_transaction(
                 other_client.id,
+                other_cash.id,
                 admin_user.id,
                 TransactionType.RECEITA,
                 Decimal("700.00"),
@@ -602,6 +616,7 @@ def _build_client(
 
 def _build_transaction(
     client_id,
+    bank_account_id,
     created_by_id,
     transaction_type: TransactionType,
     amount: Decimal,
@@ -610,6 +625,7 @@ def _build_transaction(
     return FinancialTransaction(
         id=uuid4(),
         client_id=client_id,
+        bank_account_id=bank_account_id,
         created_by_id=created_by_id,
         transaction_type=transaction_type,
         amount=amount,
@@ -617,4 +633,14 @@ def _build_transaction(
         due_date=date(2025, 1, 10),
         reference_month=date(2025, 1, 1),
         description=description,
+    )
+
+
+def _build_cash_account(client_id) -> BankAccount:
+    return BankAccount(
+        id=uuid4(),
+        client_id=client_id,
+        name="Caixa do Cliente",
+        account_number=f"CAIXA-{str(client_id)[:8]}",
+        balance=Decimal("0.00"),
     )

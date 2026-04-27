@@ -247,6 +247,7 @@ class ClientService:
 
         from app.core.config import settings
         from app.db.models.finance import FinancialTransaction, PaymentStatus, TransactionType
+        from app.services.finance.cash_account_service import CashAccountService
 
         reference_month = date.today().replace(day=1)
         due_date = self._resolve_due_date_for_client(reference_month, client.dia_vencimento)
@@ -255,6 +256,14 @@ class ClientService:
 
         if not creator_id:
             raise RuntimeError("created_by_id not available for honorarios auto-launch")
+
+        cash_account_service = CashAccountService(self.session)
+        client_cash = await cash_account_service.get_or_create_client_cash(client.id)
+        office_cash = (
+            await cash_account_service.get_or_create_office_cash()
+            if settings.OFFICE_CLIENT_ID
+            else None
+        )
 
         # Client: accounts payable (expense)
         client_description = f"Honorários do escritório - {reference_label}"
@@ -274,6 +283,7 @@ class ClientService:
                 FinancialTransaction(
                     client_id=client.id,
                     obligation_id=None,
+                    bank_account_id=client_cash.id,
                     transaction_type=TransactionType.DESPESA,
                     amount=client.honorarios_mensais,
                     payment_method=None,
@@ -310,6 +320,7 @@ class ClientService:
                     FinancialTransaction(
                         client_id=settings.OFFICE_CLIENT_ID,
                         obligation_id=None,
+                        bank_account_id=office_cash.id,
                         transaction_type=TransactionType.RECEITA,
                         amount=client.honorarios_mensais,
                         payment_method=None,
@@ -383,6 +394,20 @@ class ClientService:
         client = await self.repo.create(client)
         await self.session.commit()
         await self.session.refresh(client)
+
+        try:
+            from app.core.config import settings
+            from app.services.finance.cash_account_service import CashAccountService
+
+            cash_account_service = CashAccountService(self.session)
+            if settings.OFFICE_CLIENT_ID and client.id == settings.OFFICE_CLIENT_ID:
+                await cash_account_service.get_or_create_office_cash()
+            else:
+                await cash_account_service.get_or_create_client_cash(client.id)
+            await self.session.commit()
+        except Exception as e:
+            print(f"Warning: Failed to create cash account for client {client.id}: {e}")
+            await self.session.rollback()
 
         # Generate obligations for current month
         try:

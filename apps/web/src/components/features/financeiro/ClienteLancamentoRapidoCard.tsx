@@ -19,7 +19,6 @@ import { financeApi } from '@/lib/api/endpoints/finance';
 import { normalizeAmountForRequest } from '@/lib/finance/amount';
 import { toast } from '@/lib/toast';
 import { getFinancePresetDescriptions, mergeFinancePresetDescriptions } from '@/constants/financePresets';
-import type { BankAccount } from '@/types/bank-account';
 import {
   PaymentMethod,
   PaymentStatus,
@@ -34,7 +33,6 @@ type DisplayMovement = 'Entrada' | 'Saída' | 'Aplicação' | 'Resgate';
 type QuickLaunchForm = {
   date: string;
   movement: DisplayMovement;
-  bank: string;
   entryType: string;
   observation: string;
   value: string;
@@ -45,7 +43,6 @@ type QuickLaunchForm = {
 
 interface ClienteLancamentoRapidoCardProps {
   clientId: string;
-  bankAccounts: BankAccount[];
   transactions: Transaction[];
   createTransaction: (data: TransactionCreate) => Promise<Transaction>;
   onCreated?: () => Promise<unknown> | void;
@@ -75,7 +72,6 @@ const ATTACHMENT_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png';
 const buildDefaultForm = (): QuickLaunchForm => ({
   date: formatISO(new Date(), { representation: 'date' }),
   movement: 'Entrada',
-  bank: '',
   entryType: '',
   observation: '',
   value: '',
@@ -103,7 +99,6 @@ const getSettlementLabel = (movement: DisplayMovement) => {
 
 export function ClienteLancamentoRapidoCard({
   clientId,
-  bankAccounts,
   transactions,
   createTransaction,
   onCreated,
@@ -148,10 +143,7 @@ export function ClienteLancamentoRapidoCard({
       return;
     }
 
-    const selectedBank = bankAccounts.find((bank) => bank.id === form.bank);
-    const bankName = selectedBank?.name;
     const notesParts = [];
-    if (bankName) notesParts.push(`Banco: ${bankName}`);
     if (form.observation.trim()) notesParts.push(`Obs: ${form.observation.trim()}`);
     const notes = notesParts.length ? notesParts.join(' | ') : undefined;
     const referenceMonth = `${form.date.slice(0, 7)}-01`;
@@ -162,7 +154,6 @@ export function ClienteLancamentoRapidoCard({
       setIsSubmitting(true);
       const transaction = await createTransaction({
         client_id: clientId,
-        bank_account_id: selectedBank?.id ?? null,
         transaction_type:
           getTransactionTypeFromMovement(form.movement),
         amount,
@@ -170,11 +161,7 @@ export function ClienteLancamentoRapidoCard({
           ? undefined
           : form.isRecurring
           ? undefined
-          : bankName
-            ? bankName.toLowerCase().includes('pix')
-              ? PaymentMethod.PIX
-              : PaymentMethod.TRANSFERENCIA
-            : undefined,
+          : PaymentMethod.TRANSFERENCIA,
         payment_status: isSettled ? PaymentStatus.PAGO : PaymentStatus.PENDENTE,
         due_date: form.date,
         paid_date: paidDate,
@@ -251,7 +238,7 @@ export function ClienteLancamentoRapidoCard({
             baixa manual.
           </p>
         )}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_180px_140px_140px]">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_180px_140px_140px]">
           <DatePickerField
             label="Data"
             value={form.date}
@@ -275,19 +262,6 @@ export function ClienteLancamentoRapidoCard({
             <SelectItem key="Saída">Saída</SelectItem>
             <SelectItem key="Aplicação">Aplicação</SelectItem>
             <SelectItem key="Resgate">Resgate</SelectItem>
-          </Select>
-          <Select
-            label="Banco"
-            selectedKeys={form.bank ? [form.bank] : []}
-            onSelectionChange={(keys) => {
-              const value = Array.from(keys)[0] as string | undefined;
-              setForm((prev) => ({ ...prev, bank: value ?? '' }));
-            }}
-            placeholder="Selecione..."
-          >
-            {bankAccounts.map((bank) => (
-              <SelectItem key={bank.id}>{bank.name}</SelectItem>
-            ))}
           </Select>
           <Autocomplete
             label="Tipo"
