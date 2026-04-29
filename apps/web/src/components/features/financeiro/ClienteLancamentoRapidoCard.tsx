@@ -1,25 +1,31 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  Autocomplete,
-  AutocompleteItem,
   Button,
   Card,
   CardBody,
   CardHeader,
   Checkbox,
   Input,
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
   Select,
   SelectItem,
   Textarea,
 } from '@/heroui';
 import { DatePickerField } from '@/components/ui/DatePickerField';
-import { financeApi } from '@/lib/api/endpoints/finance';
 import { normalizeAmountForRequest } from '@/lib/finance/amount';
 import { toast } from '@/lib/toast';
-import { getFinancePresetDescriptions, mergeFinancePresetDescriptions } from '@/constants/financePresets';
 import {
+  FINANCE_HISTORY_PRESETS,
+  type FinanceHistoryType,
+} from '@/constants/financePresets';
+import {
+  DISTRIBUTION_PROFITS_CATEGORY,
   PaymentMethod,
   PaymentStatus,
   TransactionType,
@@ -28,12 +34,23 @@ import {
 } from '@/types/finance';
 import { formatISO } from 'date-fns';
 
-type DisplayMovement = 'Entrada' | 'Saída' | 'Aplicação' | 'Resgate';
+type DisplayMovement =
+  | 'Entrada'
+  | 'Saída'
+  | 'Distribuição de Lucros'
+  | 'Aplicação'
+  | 'Resgate';
+
+type StandardHistory = {
+  id: string;
+  description: string;
+  type: FinanceHistoryType;
+};
 
 type QuickLaunchForm = {
   date: string;
   movement: DisplayMovement;
-  entryType: string;
+  history: string;
   observation: string;
   value: string;
   isSettled: boolean;
@@ -43,36 +60,30 @@ type QuickLaunchForm = {
 
 interface ClienteLancamentoRapidoCardProps {
   clientId: string;
-  transactions: Transaction[];
   createTransaction: (data: TransactionCreate) => Promise<Transaction>;
   onCreated?: () => Promise<unknown> | void;
 }
 
-const TYPE_PRESETS = {
-  Entrada: mergeFinancePresetDescriptions(
-    ['Recebimento de cliente', 'Serviço extra', 'Reembolso', 'Transferência recebida'],
-    getFinancePresetDescriptions('income')
-  ),
-  Saída: mergeFinancePresetDescriptions(
-    ['Honorários do mês', 'Imposto', 'Pró-labore', 'Pagamento de fornecedor'],
-    getFinancePresetDescriptions('expense')
-  ),
-  Aplicação: mergeFinancePresetDescriptions(
-    ['Aplicação financeira'],
-    getFinancePresetDescriptions('financial_application')
-  ),
-  Resgate: mergeFinancePresetDescriptions(
-    ['Resgate de aplicação financeira'],
-    getFinancePresetDescriptions('financial_redemption')
-  ),
-} satisfies Record<DisplayMovement, string[]>;
+const CLIENT_HISTORY_STORAGE_KEY = 'financeiro:clientes:historicos';
 
-const ATTACHMENT_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png';
+const initialHistories: StandardHistory[] = FINANCE_HISTORY_PRESETS.map((preset) => ({
+  id: preset.id,
+  description: preset.description,
+  type: preset.type,
+}));
+
+const HISTORY_TYPE_LABELS: Record<FinanceHistoryType, string> = {
+  income: 'Receita',
+  expense: 'Despesa',
+  profit_distribution: 'Distribuição de lucros',
+  financial_application: 'Aplicação',
+  financial_redemption: 'Resgate',
+};
 
 const buildDefaultForm = (): QuickLaunchForm => ({
   date: formatISO(new Date(), { representation: 'date' }),
   movement: 'Entrada',
-  entryType: '',
+  history: '',
   observation: '',
   value: '',
   isSettled: true,
@@ -82,9 +93,18 @@ const buildDefaultForm = (): QuickLaunchForm => ({
 
 const getTransactionTypeFromMovement = (movement: DisplayMovement): TransactionType => {
   if (movement === 'Saída') return TransactionType.DESPESA;
+  if (movement === 'Distribuição de Lucros') return TransactionType.DESPESA;
   if (movement === 'Aplicação') return TransactionType.APLICACAO;
   if (movement === 'Resgate') return TransactionType.RESGATE;
   return TransactionType.RECEITA;
+};
+
+const getHistoryTypeForMovement = (movement: DisplayMovement): FinanceHistoryType => {
+  if (movement === 'Entrada') return 'income';
+  if (movement === 'Distribuição de Lucros') return 'profit_distribution';
+  if (movement === 'Aplicação') return 'financial_application';
+  if (movement === 'Resgate') return 'financial_redemption';
+  return 'expense';
 };
 
 const isIncomingMovement = (movement: DisplayMovement) =>
@@ -97,43 +117,105 @@ const getSettlementLabel = (movement: DisplayMovement) => {
   return 'Já pago';
 };
 
+const mergeStandardHistories = (
+  baseHistories: StandardHistory[],
+  incomingHistories: StandardHistory[]
+): StandardHistory[] => {
+  const merged = [...baseHistories];
+  const seen = new Set(
+    baseHistories.map(
+      (history) => `${history.type}:${history.description.trim().toLocaleLowerCase('pt-BR')}`
+    )
+  );
+
+  incomingHistories.forEach((history) => {
+    const normalizedDescription = history.description.trim();
+    if (!normalizedDescription) return;
+    const key = `${history.type}:${normalizedDescription.toLocaleLowerCase('pt-BR')}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push({
+      ...history,
+      description: normalizedDescription,
+    });
+  });
+
+  return merged;
+};
+
 export function ClienteLancamentoRapidoCard({
   clientId,
-  transactions,
   createTransaction,
   onCreated,
 }: ClienteLancamentoRapidoCardProps) {
   const [form, setForm] = useState<QuickLaunchForm>(() => buildDefaultForm());
-  const [attachment, setAttachment] = useState<File | null>(null);
+  const [standardHistories, setStandardHistories] = useState<StandardHistory[]>(initialHistories);
+  const [hasLoadedStoredHistories, setHasLoadedStoredHistories] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [newHistory, setNewHistory] = useState({
+    description: '',
+    type: 'income' as FinanceHistoryType,
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const typeSuggestions = useMemo(() => {
-    const transactionType = getTransactionTypeFromMovement(form.movement);
-
-    const seen = new Set<string>();
-    const suggestions: string[] = [];
-
-    const appendValue = (value: string) => {
-      const normalized = value.trim();
-      if (!normalized || seen.has(normalized.toLowerCase())) {
+  useEffect(() => {
+    if (typeof window === 'undefined' || hasLoadedStoredHistories) return;
+    const storedValue = window.localStorage.getItem(CLIENT_HISTORY_STORAGE_KEY);
+    if (!storedValue) {
+      setHasLoadedStoredHistories(true);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(storedValue);
+      if (!Array.isArray(parsed)) {
+        setHasLoadedStoredHistories(true);
         return;
       }
-      seen.add(normalized.toLowerCase());
-      suggestions.push(normalized);
-    };
+      const normalized = parsed
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null;
+          const id =
+            typeof item.id === 'string'
+              ? item.id
+              : typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+                ? crypto.randomUUID()
+                : String(Date.now());
+          const description = typeof item.description === 'string' ? item.description.trim() : '';
+          const type =
+            typeof item.type === 'string' && item.type in HISTORY_TYPE_LABELS
+              ? (item.type as FinanceHistoryType)
+              : null;
+          if (!description || !type) return null;
+          return { id, description, type } satisfies StandardHistory;
+        })
+        .filter((item): item is StandardHistory => item !== null);
 
-    TYPE_PRESETS[form.movement].forEach(appendValue);
-    transactions
-      .filter((transaction) => transaction.transaction_type === transactionType)
-      .forEach((transaction) => appendValue(transaction.description));
+      setStandardHistories((prev) => mergeStandardHistories(prev, normalized));
+    } catch {
+      // Ignore invalid storage and keep defaults.
+    } finally {
+      setHasLoadedStoredHistories(true);
+    }
+  }, [hasLoadedStoredHistories]);
 
-    return suggestions;
-  }, [form.movement, transactions]);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !hasLoadedStoredHistories) return;
+    window.localStorage.setItem(CLIENT_HISTORY_STORAGE_KEY, JSON.stringify(standardHistories));
+  }, [hasLoadedStoredHistories, standardHistories]);
+
+  const historiesForMovement = useMemo(
+    () =>
+      standardHistories.filter(
+        (history) => history.type === getHistoryTypeForMovement(form.movement)
+      ),
+    [form.movement, standardHistories]
+  );
+
+  const settlementLabel = getSettlementLabel(form.movement);
 
   const handleSubmit = async () => {
-    if (!form.entryType.trim() || !form.value.trim()) {
-      toast.error('Preencha o tipo e o valor para lançar.');
+    if (!form.history || !form.value.trim()) {
+      toast.error('Preencha o histórico e o valor para lançar.');
       return;
     }
 
@@ -149,13 +231,13 @@ export function ClienteLancamentoRapidoCard({
     const referenceMonth = `${form.date.slice(0, 7)}-01`;
     const isSettled = !form.isRecurring && form.isSettled;
     const paidDate = isSettled ? new Date(`${form.date}T12:00:00`).toISOString() : null;
+    const isProfitDistribution = form.movement === 'Distribuição de Lucros';
 
     try {
       setIsSubmitting(true);
-      const transaction = await createTransaction({
+      await createTransaction({
         client_id: clientId,
-        transaction_type:
-          getTransactionTypeFromMovement(form.movement),
+        transaction_type: getTransactionTypeFromMovement(form.movement),
         amount,
         payment_method: !isSettled
           ? undefined
@@ -166,40 +248,18 @@ export function ClienteLancamentoRapidoCard({
         due_date: form.date,
         paid_date: paidDate,
         reference_month: referenceMonth,
-        description: form.entryType.trim(),
+        description: form.history,
+        category: isProfitDistribution ? DISTRIBUTION_PROFITS_CATEGORY : null,
         notes,
         is_recurring: form.isRecurring,
         recurring_day: form.isRecurring ? form.recurringDay : null,
       });
-
-      if (attachment) {
-        try {
-          await financeApi.uploadTransactionAttachment(transaction.id, attachment);
-        } catch (error) {
-          console.error('Erro ao enviar anexo do lançamento:', error);
-          toast.error('Lançamento salvo, mas não foi possível enviar o anexo.');
-          await onCreated?.();
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
-          }
-          setForm(buildDefaultForm());
-          setAttachment(null);
-          if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-          }
-          return;
-        }
-      }
 
       await onCreated?.();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('finance:transactions-updated'));
       }
       setForm(buildDefaultForm());
-      setAttachment(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
       toast.success(
         form.isRecurring
           ? 'Série recorrente criada; competência atual lançada como pendente.'
@@ -218,148 +278,200 @@ export function ClienteLancamentoRapidoCard({
     }
   };
 
+  const handleAddHistory = () => {
+    const normalizedDescription = newHistory.description.trim();
+    if (!normalizedDescription) return;
+    if (
+      standardHistories.some(
+        (history) =>
+          history.description.toLowerCase() === normalizedDescription.toLowerCase() &&
+          history.type === newHistory.type
+      )
+    ) {
+      toast.error('Já existe um histórico com esta descrição.');
+      return;
+    }
+
+    const history: StandardHistory = {
+      id:
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : String(Date.now()),
+      description: normalizedDescription,
+      type: newHistory.type,
+    };
+
+    setStandardHistories((prev) => [...prev, history]);
+    setIsHistoryModalOpen(false);
+    setNewHistory({ description: '', type: 'income' });
+  };
+
   return (
-    <Card className="border border-default-200/50 dark:border-default-100/20">
-      <CardHeader>
-        <div>
+    <>
+      <Card className="border border-default-200/50 dark:border-default-100/20">
+        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             Novo lançamento
           </h3>
-          <p className="text-sm text-default-500">
-            Registre rapidamente entradas, saídas, aplicações ou resgates. Se marcar recorrente, a
-            competência atual nasce pendente para baixa manual.
-          </p>
-        </div>
-      </CardHeader>
-      <CardBody className="space-y-4">
-        {form.isRecurring && (
-          <p className="text-xs text-default-500">
-            Lançamentos recorrentes nascem pendentes e entram em contas a receber/pagar até a
-            baixa manual.
-          </p>
-        )}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_180px_140px_140px]">
-          <DatePickerField
-            label="Data"
-            value={form.date}
-            onChange={(value) => setForm((prev) => ({ ...prev, date: value }))}
-          />
-          <Select
-            label="Movimento"
-            selectedKeys={[form.movement]}
-            onSelectionChange={(keys) => {
-              const value = Array.from(keys)[0] as DisplayMovement | undefined;
-              if (!value) return;
-              setForm((prev) => ({
-                ...prev,
-                movement: value,
-                entryType: '',
-                isSettled: prev.isRecurring ? false : isIncomingMovement(value),
-              }));
-            }}
+          <Button
+            variant="bordered"
+            size="sm"
+            onPress={() => setIsHistoryModalOpen(true)}
+            className="w-full sm:w-auto"
           >
-            <SelectItem key="Entrada">Entrada</SelectItem>
-            <SelectItem key="Saída">Saída</SelectItem>
-            <SelectItem key="Aplicação">Aplicação</SelectItem>
-            <SelectItem key="Resgate">Resgate</SelectItem>
-          </Select>
-          <Autocomplete
-            label="Tipo"
-            placeholder="Digite ou selecione..."
-            inputValue={form.entryType}
-            onInputChange={(value) => setForm((prev) => ({ ...prev, entryType: value }))}
-            onSelectionChange={(key) => {
-              if (!key) return;
-              setForm((prev) => ({ ...prev, entryType: String(key) }));
-            }}
-            allowsCustomValue
-          >
-            {typeSuggestions.map((value) => (
-              <AutocompleteItem key={value}>{value}</AutocompleteItem>
-            ))}
-          </Autocomplete>
-          <Input
-            type="text"
-            label="Valor"
-            placeholder="0,00"
-            inputMode="decimal"
-            value={form.value}
-            onValueChange={(value) => setForm((prev) => ({ ...prev, value }))}
-          />
-          <div className="flex flex-col justify-center">
-            <Checkbox
-              isSelected={form.isSettled}
-              onValueChange={(checked) => setForm((prev) => ({ ...prev, isSettled: checked }))}
-              isDisabled={form.isRecurring}
-            >
-              {getSettlementLabel(form.movement)}
-            </Checkbox>
-          </div>
-          <div className="flex flex-col justify-center">
-            <Checkbox
-              isSelected={form.isRecurring}
-              onValueChange={(checked) =>
+            + Novo Histórico
+          </Button>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <DatePickerField
+              label="Data"
+              value={form.date}
+              onChange={(value) => setForm((prev) => ({ ...prev, date: value }))}
+            />
+            <Select
+              label="Tipo"
+              selectedKeys={[form.movement]}
+              onSelectionChange={(keys) => {
+                const value = Array.from(keys)[0] as DisplayMovement | undefined;
+                if (!value) return;
                 setForm((prev) => ({
                   ...prev,
-                  isRecurring: checked,
-                  isSettled: checked ? false : isIncomingMovement(prev.movement),
-                  recurringDay: checked ? prev.recurringDay : 1,
-                }))
-              }
+                  movement: value,
+                  history: '',
+                  isSettled: prev.isRecurring ? false : isIncomingMovement(value),
+                }));
+              }}
             >
-              Recorrente
-            </Checkbox>
+              <SelectItem key="Entrada">Entrada</SelectItem>
+              <SelectItem key="Saída">Saída</SelectItem>
+              <SelectItem key="Distribuição de Lucros">Distribuição de lucros</SelectItem>
+              <SelectItem key="Aplicação">Aplicação</SelectItem>
+              <SelectItem key="Resgate">Resgate</SelectItem>
+            </Select>
+            <Select
+              label="Histórico"
+              selectedKeys={form.history ? [form.history] : []}
+              onSelectionChange={(keys) => {
+                const value = Array.from(keys)[0] as string | undefined;
+                setForm((prev) => ({ ...prev, history: value ?? '' }));
+              }}
+              placeholder="Selecione..."
+            >
+              {historiesForMovement.map((history) => (
+                <SelectItem key={history.description}>{history.description}</SelectItem>
+              ))}
+            </Select>
+            <Input
+              type="number"
+              label="Valor"
+              placeholder="0,00"
+              step="0.01"
+              min="0"
+              value={form.value}
+              onValueChange={(value) => setForm((prev) => ({ ...prev, value }))}
+            />
+            <div className="flex flex-col justify-center">
+              <Checkbox
+                isSelected={form.isSettled}
+                onValueChange={(checked) =>
+                  setForm((prev) => ({ ...prev, isSettled: checked }))
+                }
+                isDisabled={form.isRecurring}
+              >
+                {settlementLabel}
+              </Checkbox>
+            </div>
+            <div className="flex flex-col justify-center">
+              <Checkbox
+                isSelected={form.isRecurring}
+                onValueChange={(checked) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    isRecurring: checked,
+                    isSettled: checked ? false : isIncomingMovement(prev.movement),
+                    recurringDay: checked ? prev.recurringDay : 1,
+                  }))
+                }
+              >
+                Recorrente
+              </Checkbox>
+            </div>
           </div>
-        </div>
 
-        {form.isRecurring && (
-          <Input
-            type="number"
-            label="Dia de Recorrência"
-            min={1}
-            max={31}
-            value={String(form.recurringDay)}
-            onValueChange={(value) =>
-              setForm((prev) => ({
-                ...prev,
-                recurringDay: Number.parseInt(value || '1', 10),
-              }))
-            }
-            className="w-full md:w-40"
-          />
-        )}
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_280px]">
           <Textarea
             label="Observação (opcional)"
             placeholder="Adicione observações sobre este lançamento..."
             value={form.observation}
             onValueChange={(value) => setForm((prev) => ({ ...prev, observation: value }))}
-            minRows={3}
+            minRows={2}
           />
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Anexo (opcional)
-            </label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={ATTACHMENT_ACCEPT}
-              onChange={(event) => setAttachment(event.target.files?.[0] ?? null)}
-              className="block w-full rounded-medium border border-default-200 bg-transparent px-3 py-3 text-sm text-default-700 file:mr-3 file:rounded-medium file:border-0 file:bg-default-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-default-700"
-            />
-            <p className="text-xs text-default-500">
-              {attachment ? attachment.name : 'PDF, Office ou imagem.'}
-            </p>
-          </div>
-        </div>
 
-        <div className="flex justify-end">
-          <Button color="primary" onPress={handleSubmit} isLoading={isSubmitting}>
-            + Lançar
-          </Button>
-        </div>
-      </CardBody>
-    </Card>
+          {form.isRecurring && (
+            <Input
+              type="number"
+              label="Dia de Recorrência"
+              min={1}
+              max={31}
+              value={String(form.recurringDay)}
+              onValueChange={(value) =>
+                setForm((prev) => ({
+                  ...prev,
+                  recurringDay: Number.parseInt(value || '1', 10),
+                }))
+              }
+              className="w-32"
+            />
+          )}
+
+          <div className="flex justify-end">
+            <Button color="primary" onPress={handleSubmit} isLoading={isSubmitting}>
+              + Lançar
+            </Button>
+          </div>
+        </CardBody>
+      </Card>
+
+      <Modal isOpen={isHistoryModalOpen} onOpenChange={setIsHistoryModalOpen}>
+        <ModalContent>
+          {(onClose) => (
+            <>
+              <ModalHeader>Novo Histórico</ModalHeader>
+              <ModalBody className="space-y-3">
+                <Input
+                  label="Descrição"
+                  placeholder="Ex: Recebimento de honorários"
+                  value={newHistory.description}
+                  onValueChange={(value) =>
+                    setNewHistory((prev) => ({ ...prev, description: value }))
+                  }
+                />
+                <Select
+                  label="Tipo"
+                  selectedKeys={[newHistory.type]}
+                  onSelectionChange={(keys) => {
+                    const value = Array.from(keys)[0] as FinanceHistoryType | undefined;
+                    if (!value) return;
+                    setNewHistory((prev) => ({ ...prev, type: value }));
+                  }}
+                >
+                  {Object.entries(HISTORY_TYPE_LABELS).map(([value, label]) => (
+                    <SelectItem key={value}>{label}</SelectItem>
+                  ))}
+                </Select>
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="light" onPress={onClose}>
+                  Cancelar
+                </Button>
+                <Button color="primary" onPress={handleAddHistory}>
+                  Salvar
+                </Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
+    </>
   );
 }

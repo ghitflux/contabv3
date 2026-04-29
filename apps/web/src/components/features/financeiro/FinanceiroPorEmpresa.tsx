@@ -25,7 +25,17 @@ import {
   Textarea,
   useDisclosure,
 } from '@/heroui';
-import { Download, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
+import {
+  DollarSign,
+  Download,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+  Upload,
+} from 'lucide-react';
 import { clientsApi } from '@/lib/api/endpoints/clients';
 import { financeApi } from '@/lib/api/endpoints/finance';
 import { useTransactions } from '@/hooks/useTransactions';
@@ -55,6 +65,7 @@ import { TransactionTrashModal } from './TransactionTrashModal';
 import { ConfirmBaixaLancamentoDialog } from './ConfirmBaixaLancamentoDialog';
 import { ConfirmDeleteLancamentoDialog } from './ConfirmDeleteLancamentoDialog';
 import { ClienteLancamentoRapidoCard } from './ClienteLancamentoRapidoCard';
+import { FinanceiroKPIs, type FinanceiroKpi } from './FinanceiroKPIs';
 import { StatementImportModal } from './StatementImportModal';
 import { normalizeAmountForRequest } from '@/lib/finance/amount';
 import { formatLocalDate } from '@/lib/finance/date';
@@ -82,6 +93,7 @@ type ActiveTransactionPanel =
   | 'pagar'
   | 'receita'
   | 'despesa'
+  | 'distribuicao'
   | 'financeiro';
 
 export function FinanceiroPorEmpresa({
@@ -438,22 +450,20 @@ export function FinanceiroPorEmpresa({
     [paidYearTransactions]
   );
   const lucroAno = receitaAno - despesaAno;
-  const aReceberAno = useMemo(
-    () =>
-      yearTransactions
-        .filter(
-          (t) =>
-            t.transaction_type === TransactionType.RECEITA && isDuePaymentStatus(t.payment_status)
-        )
-        .reduce((sum, t) => sum + t.amount, 0),
-    [yearTransactions]
-  );
   const aplicacoesFinanceirasAno = useMemo(
     () =>
       paidYearTransactions
         .filter((t) => isFinancialApplicationTransaction(t))
         .reduce((sum, t) => sum + getTransactionSignedAmount(t), 0),
     [paidYearTransactions]
+  );
+  const paidYearDistributionTransactions = useMemo(
+    () => paidYearTransactions.filter((t) => isProfitDistributionTransaction(t)),
+    [paidYearTransactions]
+  );
+  const distribuicaoLucrosAno = useMemo(
+    () => paidYearDistributionTransactions.reduce((sum, t) => sum + t.amount, 0),
+    [paidYearDistributionTransactions]
   );
 
   const resolveTransactionBankName = useCallback(
@@ -634,9 +644,21 @@ export function FinanceiroPorEmpresa({
         .reduce((sum, t) => sum + getTransactionSignedAmount(t.raw), 0),
     [paidDisplayTransactions]
   );
+  const paidDistributionTransactions = useMemo(
+    () => paidDisplayTransactions.filter((t) => isProfitDistributionTransaction(t.raw)),
+    [paidDisplayTransactions]
+  );
+  const distribuicaoLucrosMes = useMemo(
+    () => paidDistributionTransactions.reduce((sum, t) => sum + t.value, 0),
+    [paidDistributionTransactions]
+  );
   const lucro = receita - despesa;
   const isNegativeProfit = lucro < 0;
   const isNegativeProfitYear = lucroAno < 0;
+  const margemLucroAtual = useMemo(() => {
+    if (receita === 0) return 0;
+    return (lucro / receita) * 100;
+  }, [lucro, receita]);
 
   const receivableTransactions = useMemo(
     () =>
@@ -704,6 +726,13 @@ export function FinanceiroPorEmpresa({
         (transaction) =>
           transaction.transaction_type === TransactionType.DESPESA &&
           !isProfitDistributionTransaction(transaction) &&
+          transaction.payment_status === PaymentStatus.PAGO
+      );
+    }
+    if (activePendingPanel === 'distribuicao') {
+      return transactions.filter(
+        (transaction) =>
+          isProfitDistributionTransaction(transaction) &&
           transaction.payment_status === PaymentStatus.PAGO
       );
     }
@@ -918,6 +947,77 @@ export function FinanceiroPorEmpresa({
     [isAdminOrFunc, isAutomaticClientFee, user?.id]
   );
 
+  const kpis: FinanceiroKpi[] = [
+    {
+      id: 'receita',
+      title: 'Receita do Período',
+      value: formatCurrency(receita),
+      change: '+4,2% vs mês anterior',
+      trend: 'up',
+      icon: DollarSign,
+      colorClass: 'text-green-600',
+      backgroundClass: 'bg-green-50 dark:bg-green-900/20',
+      isPressable: true,
+      onPress: () => setActivePendingPanel((prev) => (prev === 'receita' ? 'all' : 'receita')),
+    },
+    {
+      id: 'despesa',
+      title: 'Despesas',
+      value: formatCurrency(despesa),
+      change: '+1,8% vs mês anterior',
+      trend: 'up',
+      icon: TrendingDown,
+      colorClass: 'text-amber-600',
+      backgroundClass: 'bg-amber-50 dark:bg-amber-900/20',
+      isPressable: true,
+      onPress: () => setActivePendingPanel((prev) => (prev === 'despesa' ? 'all' : 'despesa')),
+    },
+    {
+      id: 'lucro',
+      title: isNegativeProfit ? 'Prejuízo' : 'Lucro Líquido',
+      value: formatCurrency(lucro),
+      change: isNegativeProfit ? 'Resultado negativo no período' : 'Resultado positivo no período',
+      trend: isNegativeProfit ? 'down' : 'up',
+      icon: isNegativeProfit ? TrendingDown : TrendingUp,
+      colorClass: isNegativeProfit ? 'text-red-600' : 'text-teal-600',
+      backgroundClass: isNegativeProfit
+        ? 'bg-red-50 dark:bg-red-900/20'
+        : 'bg-teal-50 dark:bg-teal-900/20',
+    },
+    {
+      id: 'financeiro',
+      title: 'Aplicações Financeiras',
+      value: formatCurrency(aplicacoesFinanceiras),
+      change:
+        aplicacoesFinanceiras !== 0
+          ? 'Aplicações e resgates liquidados'
+          : 'Sem aplicações ou resgates no período',
+      trend: 'neutral',
+      icon: DollarSign,
+      colorClass: 'text-cyan-600',
+      backgroundClass: 'bg-cyan-50 dark:bg-cyan-900/20',
+      isPressable: true,
+      onPress: () =>
+        setActivePendingPanel((prev) => (prev === 'financeiro' ? 'all' : 'financeiro')),
+    },
+    {
+      id: 'distribuicao',
+      title: 'Distribuição de Lucros',
+      value: formatCurrency(distribuicaoLucrosMes),
+      change:
+        distribuicaoLucrosMes > 0
+          ? 'Pagamentos realizados no período'
+          : 'Sem pagamentos no período',
+      trend: 'neutral',
+      icon: DollarSign,
+      colorClass: 'text-sky-600',
+      backgroundClass: 'bg-sky-50 dark:bg-sky-900/20',
+      isPressable: true,
+      onPress: () =>
+        setActivePendingPanel((prev) => (prev === 'distribuicao' ? 'all' : 'distribuicao')),
+    },
+  ];
+
   const handleDownloadAttachment = useCallback(async (transaction: Transaction) => {
     try {
       const { blob, filename } = await financeApi.downloadTransactionAttachment(transaction.id);
@@ -1085,126 +1185,7 @@ export function FinanceiroPorEmpresa({
         </CardBody>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
-        <Card
-          isPressable
-          onPress={() => setActivePendingPanel((prev) => (prev === 'receita' ? 'all' : 'receita'))}
-          className={`border ${
-            activePendingPanel === 'receita'
-              ? 'border-green-400 bg-green-50 dark:bg-green-900/20'
-              : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900'
-          }`}
-        >
-          <CardBody>
-            <p className="text-sm text-green-700 dark:text-green-400 font-medium mb-1">RECEITA</p>
-            <p className="text-2xl font-bold text-green-700 dark:text-green-400">
-              {formatCurrency(receita)}
-            </p>
-          </CardBody>
-        </Card>
-        <Card
-          isPressable
-          onPress={() => setActivePendingPanel((prev) => (prev === 'despesa' ? 'all' : 'despesa'))}
-          className={`border ${
-            activePendingPanel === 'despesa'
-              ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20'
-              : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-900'
-          }`}
-        >
-          <CardBody>
-            <p className="text-sm text-amber-700 dark:text-amber-400 font-medium mb-1">DESPESA</p>
-            <p className="text-2xl font-bold text-amber-700 dark:text-amber-400">
-              {formatCurrency(despesa)}
-            </p>
-          </CardBody>
-        </Card>
-        <Card
-          className={`border ${
-            isNegativeProfit
-              ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-900'
-              : 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-900'
-          }`}
-        >
-          <CardBody>
-            <p
-              className={`text-sm font-medium mb-1 ${
-                isNegativeProfit
-                  ? 'text-red-700 dark:text-red-400'
-                  : 'text-teal-700 dark:text-teal-400'
-              }`}
-            >
-              {isNegativeProfit ? 'PREJUÍZO' : 'LUCRO'}
-            </p>
-            <p
-              className={`text-2xl font-bold ${
-                isNegativeProfit
-                  ? 'text-red-700 dark:text-red-400'
-                  : 'text-teal-700 dark:text-teal-400'
-              }`}
-            >
-              {formatCurrency(lucro)}
-            </p>
-          </CardBody>
-        </Card>
-        <Card
-          isPressable
-          onPress={() =>
-            setActivePendingPanel((prev) => (prev === 'financeiro' ? 'all' : 'financeiro'))
-          }
-          className={`border ${
-            activePendingPanel === 'financeiro'
-              ? 'border-cyan-400 bg-cyan-50 dark:bg-cyan-900/20'
-              : 'bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-900'
-          }`}
-        >
-          <CardBody>
-            <p className="text-sm text-cyan-700 dark:text-cyan-400 font-medium mb-1">
-              APLICAÇÕES
-            </p>
-            <p className="text-2xl font-bold text-cyan-700 dark:text-cyan-400">
-              {formatCurrency(aplicacoesFinanceiras)}
-            </p>
-          </CardBody>
-        </Card>
-        <Card
-          isPressable
-          onPress={() => setActivePendingPanel((prev) => (prev === 'receber' ? 'all' : 'receber'))}
-          className={`border ${
-            activePendingPanel === 'receber'
-              ? 'border-green-400 bg-green-50 dark:bg-green-900/20'
-              : 'bg-slate-50 dark:bg-slate-900/20 border-slate-200 dark:border-slate-800'
-          }`}
-        >
-          <CardBody>
-            <p className="text-sm text-slate-700 dark:text-slate-400 font-medium mb-1">A RECEBER</p>
-            <p className="text-2xl font-bold text-slate-700 dark:text-slate-400">
-              {formatCurrency(aReceber)}
-            </p>
-            <p className="text-xs text-slate-500 mt-2">
-              {receivableTransactions.length} lançamento(s) pendente(s)
-            </p>
-          </CardBody>
-        </Card>
-        <Card
-          isPressable
-          onPress={() => setActivePendingPanel((prev) => (prev === 'pagar' ? 'all' : 'pagar'))}
-          className={`border ${
-            activePendingPanel === 'pagar'
-              ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20'
-              : 'bg-slate-50 dark:bg-slate-900/20 border-slate-200 dark:border-slate-800'
-          }`}
-        >
-          <CardBody>
-            <p className="text-sm text-slate-700 dark:text-slate-400 font-medium mb-1">A PAGAR</p>
-            <p className="text-2xl font-bold text-slate-700 dark:text-slate-400">
-              {formatCurrency(aPagar)}
-            </p>
-            <p className="text-xs text-slate-500 mt-2">
-              {payableTransactions.length} lançamento(s) pendente(s)
-            </p>
-          </CardBody>
-        </Card>
-      </div>
+      <FinanceiroKPIs kpis={kpis} />
 
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -1259,13 +1240,13 @@ export function FinanceiroPorEmpresa({
               </p>
             </CardBody>
           </Card>
-          <Card className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800">
+          <Card className="bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-900">
             <CardBody>
-              <p className="text-sm text-slate-700 dark:text-slate-400 font-medium mb-1">
-                A RECEBER NO ANO
+              <p className="text-sm text-sky-700 dark:text-sky-400 font-medium mb-1">
+                DISTRIBUIÇÃO NO ANO
               </p>
-              <p className="text-2xl font-bold text-slate-700 dark:text-slate-400">
-                {formatCurrency(aReceberAno)}
+              <p className="text-2xl font-bold text-sky-700 dark:text-sky-400">
+                {formatCurrency(distribuicaoLucrosAno)}
               </p>
             </CardBody>
           </Card>
@@ -1282,6 +1263,66 @@ export function FinanceiroPorEmpresa({
         </div>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card
+          isPressable
+          onPress={() => setActivePendingPanel((prev) => (prev === 'receber' ? 'all' : 'receber'))}
+          className={`border ${
+            activePendingPanel === 'receber'
+              ? 'border-green-400 bg-green-50 dark:bg-green-900/20'
+              : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/20'
+          }`}
+        >
+          <CardBody>
+            <p className="text-sm text-slate-700 dark:text-slate-400 font-medium mb-1">
+              CONTAS A RECEBER
+            </p>
+            <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+              {formatCurrency(aReceber)}
+            </p>
+            <p className="text-xs text-slate-500 mt-2">
+              {receivableTransactions.length} lançamento(s) pendente(s)
+            </p>
+          </CardBody>
+        </Card>
+        <Card
+          isPressable
+          onPress={() => setActivePendingPanel((prev) => (prev === 'pagar' ? 'all' : 'pagar'))}
+          className={`border ${
+            activePendingPanel === 'pagar'
+              ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20'
+              : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/20'
+          }`}
+        >
+          <CardBody>
+            <p className="text-sm text-slate-700 dark:text-slate-400 font-medium mb-1">
+              CONTAS A PAGAR
+            </p>
+            <p className="text-2xl font-bold text-amber-700 dark:text-amber-400">
+              {formatCurrency(aPagar)}
+            </p>
+            <p className="text-xs text-slate-500 mt-2">
+              {payableTransactions.length} lançamento(s) pendente(s)
+            </p>
+          </CardBody>
+        </Card>
+        <Card className="border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/20">
+          <CardBody>
+            <p className="text-sm text-slate-700 dark:text-slate-400 font-medium mb-1">
+              MARGEM DE LUCRO ATUAL
+            </p>
+            <p className="text-2xl font-bold text-teal-700 dark:text-teal-400">
+              {`${margemLucroAtual.toFixed(1).replace('.', ',')}%`}
+            </p>
+            <p className="text-xs text-slate-500 mt-2">
+              {receita > 0
+                ? 'Lucro liquido dividido pela receita do período'
+                : 'Sem receita paga no período'}
+            </p>
+          </CardBody>
+        </Card>
+      </div>
+
       {activePendingPanel !== 'all' && (
         <Card className="border border-default-200/50 dark:border-default-100/20">
           <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1294,7 +1335,9 @@ export function FinanceiroPorEmpresa({
                     ? 'Lançamentos que compõem a Receita do Período'
                     : activePendingPanel === 'despesa'
                       ? 'Lançamentos que compõem as Despesas do Período'
-                      : 'Aplicações financeiras do período'}
+                      : activePendingPanel === 'financeiro'
+                        ? 'Aplicações financeiras do período'
+                        : 'Pagamentos de Distribuição de Lucros'}
             </h3>
             <Button
               variant="light"
@@ -1450,7 +1493,6 @@ export function FinanceiroPorEmpresa({
       {selectedClient && (
         <ClienteLancamentoRapidoCard
           clientId={selectedClient}
-          transactions={transactions}
           createTransaction={createTransaction}
           onCreated={refresh}
         />
