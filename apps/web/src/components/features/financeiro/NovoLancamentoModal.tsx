@@ -17,9 +17,12 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { DatePickerField } from "@/components/ui/DatePickerField";
 import { PlanoDeContasAutocomplete } from "@/components/ui/PlanoDeContasAutocomplete";
-import { TransactionType, PaymentStatus, PaymentMethod } from "@/types/finance";
+import { DISTRIBUTION_PROFITS_CATEGORY, TransactionType, PaymentStatus, PaymentMethod } from "@/types/finance";
 import { isPlanoContaCodigo } from "@/constants/planoDeContas";
 import { getFinancePresetDescriptions, type FinanceHistoryType } from "@/constants/financePresets";
+
+const PROFIT_DISTRIBUTION_KEY = "profit_distribution" as const;
+type TransactionTypeOption = TransactionType | typeof PROFIT_DISTRIBUTION_KEY;
 import { formatISO } from "date-fns";
 import { toast } from "@/lib/toast";
 import { normalizeAmountForRequest } from "@/lib/finance/amount";
@@ -49,9 +52,10 @@ export interface NovoLancamentoData {
   invoice_number?: string | null;
 }
 
-type NovoLancamentoFormData = Omit<NovoLancamentoData, "amount" | "reference_month"> & {
+type NovoLancamentoFormData = Omit<NovoLancamentoData, "amount" | "reference_month" | "transaction_type"> & {
   amount: string;
   launch_date: string;
+  transaction_type_option?: TransactionTypeOption;
 };
 
 const toReferenceMonth = (dateValue: string) =>
@@ -70,12 +74,20 @@ type CategoryMode = "plano" | "custom";
 const MAX_CUSTOM_CATEGORY_LENGTH = 20;
 
 const getPresetTypeForTransactionType = (
-  transactionType?: TransactionType
+  transactionType?: TransactionTypeOption
 ): FinanceHistoryType => {
+  if (transactionType === PROFIT_DISTRIBUTION_KEY) return "profit_distribution";
   if (transactionType === TransactionType.DESPESA) return "expense";
   if (transactionType === TransactionType.APLICACAO) return "financial_application";
   if (transactionType === TransactionType.RESGATE) return "financial_redemption";
   return "income";
+};
+
+const resolveTransactionTypeFromOption = (
+  option?: TransactionTypeOption
+): TransactionType => {
+  if (option === PROFIT_DISTRIBUTION_KEY) return TransactionType.DESPESA;
+  return option ?? TransactionType.RECEITA;
 };
 
 export function NovoLancamentoModal({
@@ -91,7 +103,7 @@ export function NovoLancamentoModal({
   const [categoryMode, setCategoryMode] = useState<CategoryMode>("plano");
   const [customCategory, setCustomCategory] = useState("");
   const [formData, setFormData] = useState<Partial<NovoLancamentoFormData>>({
-    transaction_type: TransactionType.RECEITA,
+    transaction_type_option: TransactionType.RECEITA,
     payment_status: PaymentStatus.PENDENTE,
     launch_date: "",
     due_date: "",
@@ -107,7 +119,7 @@ export function NovoLancamentoModal({
     setFormData((prev) => ({
       ...prev,
       ...defaults,
-      transaction_type: prev.transaction_type ?? TransactionType.RECEITA,
+      transaction_type_option: prev.transaction_type_option ?? TransactionType.RECEITA,
       payment_status: prev.payment_status ?? PaymentStatus.PENDENTE,
     }));
   }, [isOpen]);
@@ -121,9 +133,15 @@ export function NovoLancamentoModal({
   }, [defaultClientId, isOpen]);
 
   const descriptionSuggestions = useMemo(
-    () => getFinancePresetDescriptions(getPresetTypeForTransactionType(formData.transaction_type)),
-    [formData.transaction_type]
+    () =>
+      getFinancePresetDescriptions(
+        getPresetTypeForTransactionType(formData.transaction_type_option)
+      ),
+    [formData.transaction_type_option]
   );
+
+  const isProfitDistributionSelected =
+    formData.transaction_type_option === PROFIT_DISTRIBUTION_KEY;
 
   const handleSubmit = async () => {
     try {
@@ -157,7 +175,9 @@ export function NovoLancamentoModal({
       }
 
       let normalizedCategory: string | null = null;
-      if (categoryMode === "custom") {
+      if (isProfitDistributionSelected) {
+        normalizedCategory = DISTRIBUTION_PROFITS_CATEGORY;
+      } else if (categoryMode === "custom") {
         const customValue = customCategory.trim();
         if (!customValue) {
           toast.error("Informe o nome da categoria personalizada.");
@@ -177,7 +197,7 @@ export function NovoLancamentoModal({
 
       await onSave({
         client_id: clientId,
-        transaction_type: formData.transaction_type ?? TransactionType.RECEITA,
+        transaction_type: resolveTransactionTypeFromOption(formData.transaction_type_option),
         amount: amountValue,
         payment_method: formData.payment_method ?? null,
         payment_status: formData.payment_status ?? PaymentStatus.PENDENTE,
@@ -196,7 +216,7 @@ export function NovoLancamentoModal({
       setCategoryMode("plano");
       setCustomCategory("");
       setFormData({
-        transaction_type: TransactionType.RECEITA,
+        transaction_type_option: TransactionType.RECEITA,
         payment_status: PaymentStatus.PENDENTE,
         launch_date: "",
         due_date: "",
@@ -227,16 +247,27 @@ export function NovoLancamentoModal({
                 <Select
                   label="Tipo de Transação"
                   placeholder="Selecione o tipo"
-                  selectedKeys={formData.transaction_type ? [formData.transaction_type] : []}
+                  selectedKeys={
+                    formData.transaction_type_option ? [formData.transaction_type_option] : []
+                  }
                   onSelectionChange={(keys) => {
-                    const value = Array.from(keys)[0] as TransactionType | undefined;
-                    setFormData((prev) => ({ ...prev, transaction_type: value }));
+                    const value = Array.from(keys)[0] as TransactionTypeOption | undefined;
+                    setFormData((prev) => ({
+                      ...prev,
+                      transaction_type_option: value,
+                      ...(value === PROFIT_DISTRIBUTION_KEY ? { category: null } : {}),
+                    }));
+                    if (value === PROFIT_DISTRIBUTION_KEY) {
+                      setCategoryMode("plano");
+                      setCustomCategory("");
+                    }
                   }}
                   isRequired
                   variant="bordered"
                 >
                   <SelectItem key={TransactionType.RECEITA}>💰 Receita</SelectItem>
                   <SelectItem key={TransactionType.DESPESA}>📊 Despesa</SelectItem>
+                  <SelectItem key={PROFIT_DISTRIBUTION_KEY}>Distribuição de lucros</SelectItem>
                   <SelectItem key={TransactionType.APLICACAO}>Aplicação financeira</SelectItem>
                   <SelectItem key={TransactionType.RESGATE}>Resgate de aplicação</SelectItem>
                 </Select>
@@ -259,6 +290,8 @@ export function NovoLancamentoModal({
                   {(client) => <SelectItem key={client.id}>{client.name}</SelectItem>}
                 </Select>
 
+                {!isProfitDistributionSelected && (
+                <>
                 <Select
                   label="Tipo de Categoria"
                   selectedKeys={[categoryMode]}
@@ -303,6 +336,8 @@ export function NovoLancamentoModal({
                     description={`Até ${MAX_CUSTOM_CATEGORY_LENGTH} caracteres.`}
                     isRequired
                   />
+                )}
+                </>
                 )}
 
                 {/* Descrição */}
